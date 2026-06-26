@@ -1,0 +1,31 @@
+{
+  "name": "@thomasfosterau/effect-forms",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Framework-neutral, Effect-native form validation and state — schema-driven validation, nested errors, posted-value retention, and native constraints, on Effect Schema.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./Errors": "./src/Errors.ts",
+    "./Issues": "./src/Issues.ts",
+    "./Coerce": "./src/Coerce.ts",
+    "./FormData": "./src/FormData.ts",
+    "./Constraints": "./src/Constraints.ts",
+    "./State": "./src/State.ts",
+    "./Result": "./src/Result.ts",
+    "./Form": "./src/Form.ts",
+    "./Validate": "./src/Validate.ts"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "test:unit": "vp test run tests",
+    "test:coverage": "vp test run tests --coverage"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/language-service": "catalog:",
+    "@types/node": "^25.9.4"
+  }
+}
