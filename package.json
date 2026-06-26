@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@effect/language-service": "catalog:",
+    "@thomasfosterau/test-config": "workspace:*",
     "@types/node": "^25.9.4"
   }
 }
