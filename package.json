@@ -24,7 +24,7 @@
   "devDependencies": {
     "@effect/language-service": "catalog:",
     "@thomasfosterau/test-config": "workspace:*",
-    "@types/node": "^25.9.4",
+    "@types/node": "^26.1.0",
     "svelte": "^5.56.3",
     "svelte-check": "^4.6.0"
   },
