@@ -41,16 +41,42 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's
 
 ## The store
 
-`createForm(initialState, options)` returns a [`FormStore`](src/FormStore.svelte.ts):
+`createForm(source, options)` returns a [`FormStore`](src/FormStore.svelte.ts).
+`source` is a server-produced `FormState`, a `{ schema, defaults }` seed, or a
+[`FormBuilder`](../effect-forms/src/FormBuilder.ts) — the builder derives its
+schema, blank defaults, and array-item defaults for you:
+
+```ts
+import { createForm } from "@thomasfosterau/effect-forms-svelte";
+import { signup } from "$lib/forms"; // a FormBuilder
+
+const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 } });
+```
 
 **Reactive state** — `data` (mutable, bind inputs to it), `errors`, `message`,
 `constraints`, `submitting`, `delayed`, `posted`, `valid`, `tainted`,
-`isTainted`.
+`isTainted`, and (against the last submission) `changedSinceSubmit` /
+`hasChangedSinceSubmit`.
 
 **Methods** — `enhance(node)` (the form action), `validate()` /
 `validateField(path)` (client-side, needs `schema`), `errorsAt(path)` /
-`taintedAt(path)`, `reset()`, `capture()` / `restore()` (SvelteKit snapshots),
-`toFormData()`.
+`taintedAt(path)`, `setValue(path, v)` / `valueAt(path)`, `handleBlur(path)` /
+`setTouched(path)` / `isTouchedAt(path)`, `shouldShowError(path)` /
+`visibleErrorsAt(path)` (mode-aware display gating), `revertToLastSubmit()`,
+`reset()`, `capture()` / `restore()` (SvelteKit snapshots), `toFormData()`.
+
+**Field arrays** — `append(path, value?)`, `removeItem(path, i)`,
+`swap(path, a, b)`, `move(path, from, to)` mutate the array at `path`
+immutably. `append` derives a blank item from the field's schema when the form
+was seeded from a `FormBuilder`.
+
+**Validation modes** — the `mode` option (see
+[`Mode`](../effect-forms/src/Mode.ts)) drives when the form validates:
+`onSubmit` (default), `onBlur` (call `handleBlur` from an input's blur), or
+`onChange` (debounced). `onBlur` / `onChange` may `autoSubmit`, turning the
+form into a live-saving surface. Errors are computed for the whole form; gate
+their display per field with `visibleErrorsAt(path)` (shown only once the field
+is tainted / touched, or after a submit).
 
 **Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`,
 `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`,

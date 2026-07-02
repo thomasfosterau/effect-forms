@@ -41,20 +41,25 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
+/** Whether two containers are the same kind (both arrays, or both plain objects). */
+const sameKind = (a: unknown, b: unknown): boolean => Array.isArray(a) === Array.isArray(b);
+
 /**
  * Compare `current` against `original`, returning the nested tainted tree.
- * A changed scalar (or array) leaf is `true`; an unchanged leaf is omitted;
- * nested objects recurse. Keys present in either side are considered.
+ * A changed scalar leaf is `true`; an unchanged leaf is omitted; nested objects
+ * **and arrays** recurse (array elements keyed by index), so a single changed
+ * row taints only that index — `taintedAt(["items", 2, "name"])` stays precise.
+ * Keys present in either side are considered.
  */
 export function computeTainted(original: unknown, current: unknown): TaintedFields {
-  const out: Record<string, boolean | TaintedFields> = {};
-  if (!isObject(original) || !isObject(current)) return out;
+  if (!isObject(original) || !isObject(current) || !sameKind(original, current)) return {};
 
+  const out: Record<string, boolean | TaintedFields> = {};
   const keys = new Set([...Object.keys(original), ...Object.keys(current)]);
   for (const key of keys) {
     const before = original[key];
     const after = current[key];
-    if (isObject(before) && isObject(after) && !Array.isArray(before) && !Array.isArray(after)) {
+    if (isObject(before) && isObject(after) && sameKind(before, after)) {
       const nested = computeTainted(before, after);
       if (Object.keys(nested).length > 0) out[key] = nested;
     } else if (!deepEqual(before, after)) {

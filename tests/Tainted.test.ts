@@ -23,8 +23,18 @@ describe("computeTainted", () => {
     });
   });
 
-  it("treats arrays as leaves", () => {
-    expect(computeTainted({ tags: ["a"] }, { tags: ["a", "b"] })).toEqual({ tags: true });
+  it("recurses into arrays by index, tainting only changed elements", () => {
+    expect(computeTainted({ tags: ["a"] }, { tags: ["a", "b"] })).toEqual({ tags: { 1: true } });
+    expect(
+      computeTainted(
+        { items: [{ name: "a" }, { name: "b" }] },
+        {
+          items: [{ name: "a" }, { name: "B" }],
+        },
+      ),
+    ).toEqual({ items: { 1: { name: true } } });
+    // a scalar-vs-array kind change is a whole-field taint
+    expect(computeTainted({ x: [] }, { x: "s" })).toEqual({ x: true });
   });
 
   it("is empty when nothing changed", () => {

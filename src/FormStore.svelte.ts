@@ -19,7 +19,18 @@
  * @module effect-forms-svelte/FormStore
  */
 
-import { Constraints, Errors, Form, Issues, Result, State } from "@thomasfosterau/effect-forms";
+import {
+  Constraints,
+  Errors,
+  Field,
+  Form,
+  FormBuilder,
+  Issues,
+  Mode,
+  Path,
+  Result,
+  State,
+} from "@thomasfosterau/effect-forms";
 import type * as Schema from "effect/Schema";
 import { createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
@@ -40,7 +51,10 @@ type FormState<A, Message = unknown> = State.FormState<A, Message>;
 type TypedFormErrors<A> = Errors.TypedFormErrors<A>;
 type InputConstraints = Constraints.InputConstraints;
 type LeafFormatter = Issues.LeafFormatter;
+/** How a form validates (and optionally auto-submits) as the user types. */
+export type FormMode = Mode.FormMode;
 const { getError, noErrors } = Errors;
+const { getAt, setAt } = Path;
 const makeForm = Form.make;
 
 /** Transport: turn a submission into a {@link FormActionResult}. Defaults to `fetch`. */
@@ -72,6 +86,19 @@ export interface Submission<A, Message> {
 export interface FormOptions<S extends Schema.Top, A, Message> {
   /** The schema to validate against in the browser (defaults to the bound schema). */
   readonly schema?: S;
+  /**
+   * When the form validates as the user types (and whether it auto-submits) —
+   * see {@link module:effect-forms/Mode}. Defaults to `onSubmit`. `onChange` /
+   * `onBlur` auto-validate the form; use {@link FormStore.shouldShowError} /
+   * {@link FormStore.visibleErrorsAt} to gate display per field.
+   */
+  readonly mode?: FormMode;
+  /**
+   * The builder's field record, set automatically when {@link createForm} is
+   * given a {@link FormBuilder}. Lets {@link FormStore.append} derive a blank
+   * item for a top-level array field from its item schema.
+   */
+  readonly fields?: Field.FieldsRecord;
   /** The action URL the form posts to (defaults to the current page's action). */
   readonly action?: string;
   /** Reset `data` back to the initial values after a successful submit. */
@@ -138,6 +165,9 @@ const defaultSubmit = async <A, Message>(
   return parseActionResult<A, Message>(parsed, response.status);
 };
 
+/** Whether `index` is a valid position in an array of `length`. */
+const inRange = (index: number, length: number): boolean => index >= 0 && index < length;
+
 /** A reactive form, returned by {@link createForm}. */
 export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   /** The reactive form data — bind inputs to its fields. */
@@ -157,20 +187,35 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   /** Whether the last validation/submit was valid. */
   valid = $state(false);
 
+  /** The values sent by the last submission (for revert / changed-since-submit). */
+  #lastSubmitted: A | undefined = $state();
+  /** Per-field touched flags, keyed by {@link Path.toString}. Drives `onBlur` display. */
+  #touched: Record<string, boolean> = $state({});
+
   readonly id: string;
   readonly #initial: A;
   readonly #options: FormOptions<S, A, Message>;
+  readonly #mode: Mode.ParsedMode;
   readonly #attachmentKey = createAttachmentKey();
+  #autoSubmitNode: HTMLFormElement | undefined;
+  #validateTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** The tainted-field tree, re-derived as `data` changes. */
   readonly tainted: TaintedFields = $derived.by(() => computeTainted(this.#initial, this.data));
   /** Whether any field has been changed since the form was seeded. */
   readonly isTainted: boolean = $derived(isAnyTainted(this.tainted));
+  /** The tree of fields changed since the last submission (empty before any submit). */
+  readonly changedSinceSubmit: TaintedFields = $derived.by(() =>
+    this.#lastSubmitted === undefined ? {} : computeTainted(this.#lastSubmitted, this.data),
+  );
+  /** Whether anything has changed since the last submission. */
+  readonly hasChangedSinceSubmit: boolean = $derived(isAnyTainted(this.changedSinceSubmit));
 
   constructor(initial: FormState<A, Message>, options: FormOptions<S, A, Message> = {}) {
     this.id = initial.id;
     this.#initial = structuredClone(initial.data);
     this.#options = options;
+    this.#mode = Mode.parse(options.mode);
     this.data = structuredClone(initial.data);
     this.errors = initial.errors as TypedFormErrors<A>;
     this.message = initial.message;
@@ -220,6 +265,141 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     return validateField(this.#options.schema, this.data, path, this.#options.validationFormat);
   }
 
+  /** Set the value at `path` (path-addressed, immutable). Bind directly to `data` otherwise. */
+  setValue(path: FormPath, value: unknown): void {
+    this.data = setAt(this.data, path, value);
+  }
+
+  /** Read the value at `path`. */
+  valueAt(path: FormPath): unknown {
+    return getAt(this.data, path);
+  }
+
+  /** Mark the field at `path` touched (defaults to `true`) — drives `onBlur` display. */
+  setTouched(path: FormPath, touched = true): void {
+    this.#touched = { ...this.#touched, [Path.toString(path)]: touched };
+  }
+
+  /** Whether the field at `path` has been touched. */
+  isTouchedAt(path: FormPath): boolean {
+    return this.#touched[Path.toString(path)] === true;
+  }
+
+  /**
+   * Handle a field losing focus: mark it touched, and — in `onBlur` mode —
+   * validate the form (auto-submitting if configured and something changed
+   * since the last submit).
+   */
+  handleBlur(path: FormPath): void {
+    this.setTouched(path, true);
+    if (this.#mode.validation === "onBlur") {
+      this.validate();
+      if (this.#mode.autoSubmit && this.valid && this.#hasUnsubmittedChanges()) this.#autoSubmit();
+    }
+  }
+
+  /**
+   * Whether there are edits worth auto-submitting: before any submit, any
+   * change from the seeded values; afterwards, any change since the last
+   * submission. Stops `autoSubmit` from re-posting server-echoed data in a loop.
+   */
+  #hasUnsubmittedChanges(): boolean {
+    return this.#lastSubmitted === undefined ? this.isTainted : this.hasChangedSinceSubmit;
+  }
+
+  /**
+   * Whether an error at `path` should be shown yet, per the validation mode:
+   * always after a submit; in `onChange` once the field is tainted; in `onBlur`
+   * once it is touched; never in `onSubmit` before posting.
+   */
+  shouldShowError(path: FormPath): boolean {
+    if (this.posted) return true;
+    if (this.#mode.validation === "onChange") return this.taintedAt(path);
+    if (this.#mode.validation === "onBlur") return this.isTouchedAt(path);
+    return false;
+  }
+
+  /** The messages at `path`, but only when {@link shouldShowError} allows it. */
+  visibleErrorsAt(path: FormPath): readonly string[] {
+    return this.shouldShowError(path) ? this.errorsAt(path) : [];
+  }
+
+  /** Append an item to the array at `path` (a blank item is derived when omitted). */
+  append(path: FormPath, value?: unknown): void {
+    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    const item = value !== undefined ? value : this.#defaultItem(path);
+    this.data = setAt(this.data, path, [...current, item]);
+  }
+
+  /** Remove the item at `index` from the array at `path`. */
+  removeItem(path: FormPath, index: number): void {
+    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    this.data = setAt(
+      this.data,
+      path,
+      current.filter((_, i) => i !== index),
+    );
+  }
+
+  /** Swap two items in the array at `path`. */
+  swap(path: FormPath, indexA: number, indexB: number): void {
+    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    if (!inRange(indexA, current.length) || !inRange(indexB, current.length) || indexA === indexB) {
+      return;
+    }
+    const next = [...current];
+    [next[indexA], next[indexB]] = [next[indexB], next[indexA]];
+    this.data = setAt(this.data, path, next);
+  }
+
+  /** Move the item at `from` to `to` within the array at `path`. */
+  move(path: FormPath, from: number, to: number): void {
+    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    if (!inRange(from, current.length) || to < 0 || to >= current.length || from === to) return;
+    const next = [...current];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    this.data = setAt(this.data, path, next);
+  }
+
+  /** Revert `data` to the values sent by the last submission (no-op before any submit). */
+  revertToLastSubmit(): void {
+    if (this.#lastSubmitted === undefined) return;
+    this.data = structuredClone(this.#lastSubmitted);
+    this.errors = noErrors as TypedFormErrors<A>;
+  }
+
+  /** Derive a blank item for the array field at a top-level `path`, else `""`. */
+  #defaultItem(path: FormPath): unknown {
+    const fields = this.#options.fields;
+    if (fields && path.length === 1 && typeof path[0] === "string") {
+      const def = fields[path[0]];
+      if (def && Field.isArrayFieldDef(def)) return Field.defaultValue(def.itemSchema);
+    }
+    return "";
+  }
+
+  /** Submit via the enhanced node, if one is mounted and not already in flight. */
+  #autoSubmit(): void {
+    if (this.submitting || this.#autoSubmitNode === undefined) return;
+    void this.#runSubmit(this.#autoSubmitNode);
+  }
+
+  /** Debounced (in `onChange`) whole-form validation, auto-submitting when valid. */
+  #scheduleValidation(): void {
+    const run = (): void => {
+      this.validate();
+      if (this.#mode.autoSubmit && this.valid && this.#hasUnsubmittedChanges()) this.#autoSubmit();
+    };
+    const ms = this.#mode.debounce;
+    if (ms !== null && ms > 0) {
+      clearTimeout(this.#validateTimer);
+      this.#validateTimer = setTimeout(run, ms);
+    } else {
+      run();
+    }
+  }
+
   /** Reset `data`, `errors`, and `message` back to the seeded values. */
   reset(): void {
     this.data = structuredClone(this.#initial);
@@ -227,6 +407,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     this.message = undefined;
     this.valid = false;
     this.posted = false;
+    this.#touched = {};
+    this.#lastSubmitted = undefined;
   }
 
   /** A serialisable snapshot for SvelteKit's `snapshot` capture/restore. */
@@ -263,8 +445,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       return;
     }
     if (update.data !== undefined) {
-      this.data = update.data;
-      if (this.#options.resetForm && update.valid) this.data = structuredClone(this.#initial);
+      if (this.#options.resetForm && update.valid) {
+        this.data = structuredClone(this.#initial);
+      } else if (!this.#mode.autoSubmit) {
+        this.data = update.data;
+      }
+      // An auto-submitting (live-save) form keeps its local data as the source
+      // of truth: adopting the server's echo would discard keystrokes made
+      // during the round-trip and, when the echo isn't byte-identical (a
+      // trimmed or server-stamped field), retrigger the change watcher — an
+      // extra submit, or an endless loop for a non-idempotent echo.
     }
     if (update.errors !== undefined) this.errors = update.errors as TypedFormErrors<A>;
     this.message = update.message;
@@ -291,6 +481,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       },
     });
     if (cancelled) return;
+
+    // Snapshot what we're sending so `revertToLastSubmit` / `changedSinceSubmit`
+    // measure against the submitted values.
+    this.#lastSubmitted = structuredClone(this.data);
 
     this.submitting = true;
     const delayMs = this.#options.delayMs ?? 500;
@@ -341,10 +535,30 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       window.addEventListener("beforeunload", beforeUnload);
     }
 
+    // Remember the mounted node so `onChange` / `onBlur` auto-submit can post.
+    this.#autoSubmitNode = node;
+
+    // In `onChange` mode, re-validate (and maybe auto-submit) whenever the data
+    // changes — but not on the pristine initial render. An effect root gives us
+    // explicit teardown alongside the DOM listeners.
+    let stopWatching: (() => void) | undefined;
+    if (this.#mode.validation === "onChange") {
+      stopWatching = $effect.root(() => {
+        $effect(() => {
+          // Establish a deep dependency on the data tree.
+          $state.snapshot(this.data);
+          if (this.isTainted || this.posted) this.#scheduleValidation();
+        });
+      });
+    }
+
     return {
       destroy: () => {
         node.removeEventListener("submit", handleSubmit);
         if (typeof window !== "undefined") window.removeEventListener("beforeunload", beforeUnload);
+        stopWatching?.();
+        clearTimeout(this.#validateTimer);
+        if (this.#autoSubmitNode === node) this.#autoSubmitNode = undefined;
       },
     };
   };
@@ -366,11 +580,37 @@ export interface FormSeed<S extends Schema.Top> {
   readonly id?: string;
 }
 
+/** The built-schema type a {@link FormBuilder} of `TFields` / `R` collapses to. */
+type BuiltSchema<TFields extends Field.FieldsRecord, R> = Schema.Codec<
+  Field.DecodedFromFields<TFields>,
+  Field.EncodedFromFields<TFields>,
+  R
+>;
+
+/** Options for the {@link createForm} {@link FormBuilder} overload. */
+export type FormBuilderOptions<TFields extends Field.FieldsRecord, R, Message> = FormOptions<
+  BuiltSchema<TFields, R>,
+  Field.EncodedFromFields<TFields>,
+  Message
+> & {
+  /** Blank-form values. Defaults to a schema-derived encoded blank per field. */
+  readonly defaults?: Field.EncodedFromFields<TFields>;
+  /** Distinguishes multiple forms on a page. Defaults to `"default"`. */
+  readonly id?: string;
+};
+
 /**
- * Create a reactive {@link FormStore}. Pass `{ schema, defaults }` to seed a
- * blank form (wrapping the core's `makeForm`), or a server-produced
- * {@link FormState} to hydrate from (with the schema in `options`).
+ * Create a reactive {@link FormStore}. Three sources are accepted:
+ *
+ * - a {@link FormBuilder} — the schema, blank defaults, and array-item defaults
+ *   are all derived from the builder (client validation is wired automatically);
+ * - `{ schema, defaults }` — seed a blank form (wrapping the core's `makeForm`);
+ * - a server-produced {@link FormState} — hydrate from it (schema in `options`).
  */
+export function createForm<TFields extends Field.FieldsRecord, R, Message = unknown>(
+  builder: FormBuilder.FormBuilder<TFields, R>,
+  options?: FormBuilderOptions<TFields, R, Message>,
+): FormStore<BuiltSchema<TFields, R>, Field.EncodedFromFields<TFields>, Message>;
 export function createForm<S extends Schema.Top, Message = unknown>(
   seed: FormSeed<S>,
   options?: FormOptions<S, S["Type"], Message>,
@@ -380,9 +620,25 @@ export function createForm<S extends Schema.Top, A = S["Type"], Message = unknow
   options: FormOptions<S, A, Message>,
 ): FormStore<S, A, Message>;
 export function createForm(
-  source: FormSeed<Schema.Top> | FormState<unknown, unknown>,
-  options: FormOptions<Schema.Top, unknown, unknown> = {},
-): FormStore<Schema.Top, unknown, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  source: FormBuilder.FormBuilder<any, any> | FormSeed<Schema.Top> | FormState<unknown, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  options: FormOptions<Schema.Top, any, any> & {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    defaults?: any;
+    id?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } = {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): FormStore<Schema.Top, any, any> {
+  if (FormBuilder.isFormBuilder(source)) {
+    const schema = FormBuilder.buildSchema(source) as Schema.Top;
+    const form = Form.fromBuilder(source, {
+      ...(options.defaults !== undefined ? { defaults: options.defaults as never } : {}),
+      ...(options.id !== undefined ? { id: options.id } : {}),
+    });
+    return new FormStore(form.empty(), { ...options, schema, fields: source.fields });
+  }
   const isSeed = "defaults" in source && "schema" in source;
   if (isSeed) {
     const seed = source as FormSeed<Schema.Top>;
