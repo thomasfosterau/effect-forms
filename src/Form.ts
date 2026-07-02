@@ -29,7 +29,10 @@ import * as Effect from "effect/Effect";
 import type * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { constraintsFromSchema, type InputConstraints } from "./Constraints.ts";
+import { defaultEncodedValues } from "./Field.ts";
 import { issuesToErrors } from "./Errors.ts";
+import { buildSchema, type FormBuilder, runAsyncRefinements } from "./FormBuilder.ts";
+import type { DecodedFromFields, EncodedFromFields, FieldsRecord } from "./Field.ts";
 import { formDataToObject, requestToObject } from "./FormData.ts";
 import { type LeafFormatter, schemaIssuesToFormIssues } from "./Issues.ts";
 import { type FormState, make as makeFormState, type MakeFormStateOptions } from "./State.ts";
@@ -150,4 +153,78 @@ export function make<S extends Schema.Top, Message = unknown>(
     );
 
   return { schema, id, constraints, empty, parse, validate };
+}
+
+/** Options for {@link fromBuilder}. Like {@link MakeFormOptions} but `defaults` is optional. */
+export interface FromBuilderOptions<TFields extends FieldsRecord> {
+  /** Distinguishes multiple forms on a page. Defaults to `"default"`. */
+  readonly id?: string;
+  /** Blank-form values. Defaults to a schema-derived encoded blank per field. */
+  readonly defaults?: EncodedFromFields<TFields>;
+  /** Override the per-leaf message rendering. */
+  readonly leafFormatter?: LeafFormatter;
+  /** Constraint overrides deep-merged over the AST-derived tree. */
+  readonly constraints?: InputConstraints;
+  /** Derive {@link InputConstraints} from the schema AST (default `true`). */
+  readonly deriveConstraints?: boolean;
+}
+
+/**
+ * Bind a {@link FormBuilder} to a {@link Form}. Collapses the builder to a
+ * schema (see {@link buildSchema}), then behaves like {@link make} — except its
+ * `validate` also runs the builder's *asynchronous* refinements after a
+ * successful decode, folding any failures into the same nested error tree. When
+ * `defaults` is omitted it is derived from the fields (blank encoded values).
+ */
+export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
+  builder: FormBuilder<TFields, R>,
+  options: FromBuilderOptions<TFields> = {},
+): Form<Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>, Message> {
+  const schema = buildSchema(builder);
+  const defaults = (options.defaults ??
+    defaultEncodedValues(builder.fields)) as EncodedFromFields<TFields>;
+  const base = make<typeof schema, Message>(schema, { ...options, defaults });
+
+  const decode = SchemaParser.decodeUnknownEffect(schema, { errors: "all" });
+
+  const validate: Form<typeof schema, Message>["validate"] = (input) =>
+    toStructured(input).pipe(
+      Effect.flatMap((object) => {
+        if (object === null) return Effect.succeed(base.empty());
+        const posted = { ...(defaults as object), ...object } as DecodedFromFields<TFields>;
+        return decode(object).pipe(
+          Effect.matchEffect({
+            onSuccess: (data) =>
+              runAsyncRefinements(builder, data as DecodedFromFields<TFields>).pipe(
+                Effect.map((issues) =>
+                  issues.length === 0
+                    ? makeFormState<DecodedFromFields<TFields>, Message>(
+                        data as DecodedFromFields<TFields>,
+                        { id: base.id, valid: true, posted: true, constraints: base.constraints },
+                      )
+                    : makeFormState<DecodedFromFields<TFields>, Message>(posted, {
+                        id: base.id,
+                        valid: false,
+                        posted: true,
+                        constraints: base.constraints,
+                        errors: issuesToErrors(issues),
+                      }),
+                ),
+              ),
+            onFailure: (issue) =>
+              Effect.succeed(
+                makeFormState<DecodedFromFields<TFields>, Message>(posted, {
+                  id: base.id,
+                  valid: false,
+                  posted: true,
+                  constraints: base.constraints,
+                  errors: issuesToErrors(schemaIssuesToFormIssues(issue, options.leafFormatter)),
+                }),
+              ),
+          }),
+        );
+      }),
+    );
+
+  return { ...base, validate };
 }

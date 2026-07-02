@@ -17,9 +17,13 @@
 export * as Coerce from "./Coerce.ts";
 export * as Constraints from "./Constraints.ts";
 export * as Errors from "./Errors.ts";
+export * as Field from "./Field.ts";
 export * as Form from "./Form.ts";
+export * as FormBuilder from "./FormBuilder.ts";
 export * as FormData from "./FormData.ts";
 export * as Issues from "./Issues.ts";
+export * as Mode from "./Mode.ts";
+export * as Path from "./Path.ts";
 export * as Result from "./Result.ts";
 export * as State from "./State.ts";
 export * as Validate from "./Validate.ts";

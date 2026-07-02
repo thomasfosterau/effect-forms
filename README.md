@@ -38,6 +38,38 @@ const state = await Effect.runPromise(signupForm.validate(request));
 // state: { id, valid, posted, data, errors, constraints, message? }
 ```
 
+## Building a form incrementally
+
+`Form.make` binds a hand-written `Schema.Struct`. When you'd rather compose a
+form field by field — reusing field groups, merging them, and attaching
+whole-form (cross-field) rules — reach for `FormBuilder`:
+
+```ts
+import * as Schema from "effect/Schema";
+import { Field, Form, FormBuilder } from "@thomasfosterau/effect-forms";
+
+const signup = FormBuilder.empty
+  .addField("email", Schema.String.check(Schema.isMinLength(3)))
+  .addField("password", Schema.String.check(Schema.isMinLength(8)))
+  .addField("confirm", Schema.String)
+  .addField(Field.makeArrayField("tags", Schema.String)) // an array field
+  .refine((v) =>
+    v.password === v.confirm ? undefined : { path: ["confirm"], issue: "Passwords must match" },
+  );
+
+// Bind it exactly like a schema (defaults are derived when omitted):
+const form = Form.fromBuilder(signup, { id: "signup" });
+const state = await Effect.runPromise(form.validate(request));
+```
+
+`FormBuilder.buildSchema` collapses the builder into an ordinary
+`Schema.Struct` (array fields become `Schema.Array(item)`) with each
+synchronous `refine` applied as a struct-level check — so it decodes, derives
+constraints, and validates like any schema. `refineEffect` attaches an
+**asynchronous** whole-form rule (a uniqueness check against a service, say);
+Effect Schema has no effectful filter, so `Form.fromBuilder` runs those on the
+Effect validate path and folds their failures into the same error tree.
+
 Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`,
 `Errors`, …). `Form.make(schema, { defaults })` is the server-side
 validate-and-seed entry point:
@@ -56,17 +88,21 @@ validate-and-seed entry point:
 
 ## What's in the box
 
-| Module                              | Purpose                                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| [`Form`](src/Form.ts)               | `makeForm` — bind a schema to a form (validate + empty).                                                     |
-| [`State`](src/State.ts)             | `FormState`, `makeFormState`, `setMessage`, `withError`, `FormStateSchema` (transport).                      |
-| [`Errors`](src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors`. |
-| [`Issues`](src/Issues.ts)           | `FormIssue` + the Effect Schema issue-tree walker.                                                           |
-| [`FormData`](src/FormData.ts)       | `formDataToObject` / `parseFieldPath` — structured parsing of an HTML body.                                  |
-| [`Coerce`](src/Coerce.ts)           | Tri-state (value / `null` / `undefined`) coercers for the form boundary.                                     |
-| [`Constraints`](src/Constraints.ts) | `constraintsFromSchema` — native input attributes derived from the schema AST.                               |
-| [`Result`](src/Result.ts)           | `FormActionResult` — the framework-neutral submission outcome (success / failure / redirect / error).        |
-| [`Validate`](src/Validate.ts)       | `validateValue` / `validateValueSync` — ad-hoc value/field validation.                                       |
+| Module                              | Purpose                                                                                                        |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [`Form`](src/Form.ts)               | `make` — bind a schema to a form (validate + empty); `fromBuilder` — bind a `FormBuilder`.                     |
+| [`FormBuilder`](src/FormBuilder.ts) | Compose a form field by field: `addField` / `merge` / `refine` / `refineEffect` / `buildSchema`.               |
+| [`Field`](src/Field.ts)             | `makeField` / `makeArrayField` field defs + guards, and blank-default derivation from a schema.                |
+| [`State`](src/State.ts)             | `FormState`, `makeFormState`, `setMessage`, `withError`, `FormStateSchema` (transport).                        |
+| [`Errors`](src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors`.   |
+| [`Issues`](src/Issues.ts)           | `FormIssue` + the Effect Schema issue-tree walker.                                                             |
+| [`FormData`](src/FormData.ts)       | `formDataToObject` / `parseFieldPath` — structured parsing of an HTML body.                                    |
+| [`Path`](src/Path.ts)               | `getAt` / `setAt` (immutable) along a `FormPath`, plus `toString` / `fromString` notation conversion.          |
+| [`Coerce`](src/Coerce.ts)           | Tri-state (value / `null` / `undefined`) coercers for the form boundary.                                       |
+| [`Constraints`](src/Constraints.ts) | `constraintsFromSchema` — native input attributes derived from the schema AST.                                 |
+| [`Mode`](src/Mode.ts)               | `FormMode` + `parse` — when a form validates (`onSubmit` / `onBlur` / `onChange`) and whether it auto-submits. |
+| [`Result`](src/Result.ts)           | `FormActionResult` — the framework-neutral submission outcome (success / failure / redirect / error).          |
+| [`Validate`](src/Validate.ts)       | `validateValue` / `validateValueSync` — ad-hoc value/field validation.                                         |
 
 ## Notes
 
