@@ -2,11 +2,13 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 import {
   defaultEncodedValues,
+  defaultItemAt,
   defaultValue,
   isArrayFieldDef,
   isFieldDef,
   makeArrayField,
   makeField,
+  schemaAt,
 } from "../src/Field.ts";
 
 describe("Field constructors and guards", () => {
@@ -51,5 +53,50 @@ describe("Field.defaultEncodedValues", () => {
       tags: makeArrayField("tags", Schema.String),
     };
     expect(defaultEncodedValues(fields)).toEqual({ name: "", tags: [] });
+  });
+});
+
+describe("Field.schemaAt / defaultItemAt", () => {
+  const Author = Schema.Struct({
+    name: Schema.String,
+    emails: Schema.Array(Schema.Struct({ address: Schema.String, label: Schema.String })),
+  });
+  const Form = Schema.Struct({
+    title: Schema.String,
+    tags: Schema.Array(Schema.String),
+    authors: Schema.Array(Author),
+  });
+
+  it("resolves a top-level array field's item schema", () => {
+    expect(defaultItemAt(Form, ["tags"])).toBe("");
+    expect(defaultItemAt(Form, ["authors"])).toEqual({ name: "", emails: [] });
+  });
+
+  it("walks through a struct into a nested array field", () => {
+    // authors[0].emails is an array nested two levels deep under a top-level array.
+    expect(defaultItemAt(Form, ["authors", 0, "emails"])).toEqual({ address: "", label: "" });
+  });
+
+  it("resolves a struct property's schema", () => {
+    const ast = schemaAt(Form, ["authors", 0, "name"]);
+    expect(ast).toBeDefined();
+  });
+
+  it("returns '' when the path doesn't resolve to an array", () => {
+    expect(defaultItemAt(Form, ["title"])).toBe("");
+    expect(defaultItemAt(Form, ["missing"])).toBe("");
+    expect(defaultItemAt(Form, ["authors", 0, "name"])).toBe("");
+  });
+
+  it("resolves through an optional / nullable wrapper", () => {
+    const WithOptionalAuthors = Schema.Struct({
+      authors: Schema.optional(Schema.Array(Author)),
+    });
+    expect(defaultItemAt(WithOptionalAuthors, ["authors"])).toEqual({ name: "", emails: [] });
+
+    const WithNullableAuthors = Schema.Struct({
+      authors: Schema.NullOr(Schema.Array(Author)),
+    });
+    expect(defaultItemAt(WithNullableAuthors, ["authors"])).toEqual({ name: "", emails: [] });
   });
 });

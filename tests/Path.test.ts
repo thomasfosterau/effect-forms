@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vite-plus/test";
-import { fromString, getAt, isUnder, setAt, toString } from "../src/Path.ts";
+import {
+  clearAll,
+  fromString,
+  getAt,
+  insertAt,
+  isUnder,
+  moveAt,
+  remapIndex,
+  remapKeyedRecord,
+  removeAt,
+  replaceAt,
+  setAt,
+  swapAt,
+  toString,
+} from "../src/Path.ts";
 import type { FieldPath, PathValue } from "../src/Path.ts";
 
 describe("Path.getAt", () => {
@@ -101,5 +115,99 @@ describe("Path.FieldPath / Path.PathValue", () => {
     const wrongType: PathValue<Data, "title"> = 1;
     void [title, name, tag, label, wrongType];
     expect(true).toBe(true);
+  });
+});
+
+describe("Path index maps", () => {
+  it("removeAt shifts later indices down and drops the removed one", () => {
+    const map = removeAt(1);
+    expect(map(0)).toBe(0);
+    expect(map(1)).toBeNull();
+    expect(map(2)).toBe(1);
+  });
+
+  it("insertAt shifts index and later up", () => {
+    const map = insertAt(1);
+    expect(map(0)).toBe(0);
+    expect(map(1)).toBe(2);
+    expect(map(2)).toBe(3);
+  });
+
+  it("swapAt swaps exactly the two indices", () => {
+    const map = swapAt(0, 2);
+    expect(map(0)).toBe(2);
+    expect(map(2)).toBe(0);
+    expect(map(1)).toBe(1);
+  });
+
+  it("moveAt shifts the range between from and to (forward)", () => {
+    const map = moveAt(0, 2);
+    expect(map(0)).toBe(2);
+    expect(map(1)).toBe(0);
+    expect(map(2)).toBe(1);
+    expect(map(3)).toBe(3);
+  });
+
+  it("moveAt shifts the range between from and to (backward)", () => {
+    const map = moveAt(2, 0);
+    expect(map(2)).toBe(0);
+    expect(map(0)).toBe(1);
+    expect(map(1)).toBe(2);
+    expect(map(3)).toBe(3);
+  });
+
+  it("replaceAt drops only the replaced index", () => {
+    const map = replaceAt(1);
+    expect(map(0)).toBe(0);
+    expect(map(1)).toBeNull();
+    expect(map(2)).toBe(2);
+  });
+
+  it("clearAll drops every index", () => {
+    expect(clearAll(0)).toBeNull();
+    expect(clearAll(5)).toBeNull();
+  });
+});
+
+describe("Path.remapIndex", () => {
+  it("passes through paths outside the array path unchanged", () => {
+    expect(remapIndex(["title"], ["tags"], removeAt(0))).toEqual(["title"]);
+  });
+
+  it("passes through the array path itself (a whole-array message)", () => {
+    expect(remapIndex(["tags"], ["tags"], removeAt(0))).toEqual(["tags"]);
+  });
+
+  it("passes through a non-numeric segment under the array path", () => {
+    expect(remapIndex(["tags", "_errors"], ["tags"], removeAt(0))).toEqual(["tags", "_errors"]);
+  });
+
+  it("remaps the index segment and keeps the rest of the path", () => {
+    expect(remapIndex(["tags", 2], ["tags"], removeAt(0))).toEqual(["tags", 1]);
+    expect(remapIndex(["tags", 2, "name"], ["tags"], insertAt(0))).toEqual(["tags", 3, "name"]);
+  });
+
+  it("drops a path whose index maps to null", () => {
+    expect(remapIndex(["tags", 0], ["tags"], removeAt(0))).toBeNull();
+  });
+
+  it("remaps a nested array under a struct path", () => {
+    expect(remapIndex(["authors", 0, "emails", 2], ["authors", 0, "emails"], removeAt(0))).toEqual([
+      "authors",
+      0,
+      "emails",
+      1,
+    ]);
+  });
+});
+
+describe("Path.remapKeyedRecord", () => {
+  it("remaps keys and drops entries whose index maps to null", () => {
+    const record = { "tags[0]": true, "tags[1]": true, "tags[2]": true, title: true };
+    expect(remapKeyedRecord(record, ["tags"], removeAt(0))).toEqual({
+      "tags[0]": true,
+      "tags[1]": true,
+      title: true,
+    });
   });
 });

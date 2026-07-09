@@ -22,6 +22,7 @@
 
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import type { FormPath } from "./Issues.ts";
 
 /** A scalar field: a key bound to a leaf (or nested struct) schema. */
 export interface FieldDef<K extends string, S extends Schema.Top> {
@@ -91,24 +92,77 @@ export function defaultValue(schema: Schema.Top): unknown {
   return fromAst(schema.ast);
 }
 
-function fromAst(ast: SchemaAST.AST): unknown {
-  // Unwrap a union (an `optional` / `NullOr` struct arrives as `Struct | undefined`
-  // / `Struct | null`): recurse into the first structured member so a wrapped
-  // struct still seeds its shape rather than the scalar `""` fallback.
-  if (SchemaAST.isUnion(ast)) {
-    for (const member of ast.types) {
-      const inner = fromAst(member);
-      if (inner !== "") return inner;
-    }
-    return "";
+/**
+ * Unwrap a union to its first structured (struct / array) member — an
+ * `optional` / `NullOr` wrapper (`Struct | undefined` / `Struct | null`)
+ * still resolves to the wrapped struct or array's AST rather than a scalar
+ * fallback. Non-unions, and unions with no structured member, pass through.
+ */
+function unwrapToStructured(ast: SchemaAST.AST): SchemaAST.AST {
+  if (!SchemaAST.isUnion(ast)) return ast;
+  for (const member of ast.types) {
+    const inner = unwrapToStructured(member);
+    if (SchemaAST.isObjects(inner) || SchemaAST.isArrays(inner)) return inner;
   }
-  if (SchemaAST.isObjects(ast)) {
+  return ast;
+}
+
+function fromAst(ast: SchemaAST.AST): unknown {
+  const unwrapped = unwrapToStructured(ast);
+  if (SchemaAST.isObjects(unwrapped)) {
     const out: Record<string, unknown> = {};
-    for (const ps of ast.propertySignatures) out[String(ps.name)] = fromAst(ps.type);
+    for (const ps of unwrapped.propertySignatures) out[String(ps.name)] = fromAst(ps.type);
     return out;
   }
-  if (SchemaAST.isArrays(ast)) return [];
+  if (SchemaAST.isArrays(unwrapped)) return [];
   return "";
+}
+
+/** The item AST of an {@link SchemaAST.Arrays} node: the rest (spread) type, or the first tuple element. */
+function arrayElementAst(ast: SchemaAST.Arrays): SchemaAST.AST | undefined {
+  return ast.rest[0] ?? ast.elements[0];
+}
+
+/** Descend one array-index path segment from an (already-unwrapped) array AST. */
+function stepIntoArray(ast: SchemaAST.AST): SchemaAST.AST | undefined {
+  if (!SchemaAST.isArrays(ast)) return undefined;
+  const item = arrayElementAst(ast);
+  return item === undefined ? undefined : unwrapToStructured(item);
+}
+
+/** Descend one struct-property path segment from an (already-unwrapped) struct AST. */
+function stepIntoStruct(ast: SchemaAST.AST, key: string): SchemaAST.AST | undefined {
+  if (!SchemaAST.isObjects(ast)) return undefined;
+  const ps = ast.propertySignatures.find((p) => String(p.name) === key);
+  return ps === undefined ? undefined : unwrapToStructured(ps.type);
+}
+
+/**
+ * Walk `schema`'s AST along `path` — through struct properties and array
+ * elements alike — and return the AST found there, or `undefined` if `path`
+ * doesn't resolve (a missing property, or a non-array indexed). Unlike a
+ * {@link FieldsRecord} lookup, this works for any nesting depth and for
+ * schemas built directly with `Form.make` (no builder involved).
+ */
+export function schemaAt(schema: Schema.Top, path: FormPath): SchemaAST.AST | undefined {
+  let ast: SchemaAST.AST | undefined = unwrapToStructured(schema.ast);
+  for (const segment of path) {
+    if (ast === undefined) return undefined;
+    ast = typeof segment === "number" ? stepIntoArray(ast) : stepIntoStruct(ast, segment);
+  }
+  return ast;
+}
+
+/**
+ * Derive a blank encoded item for the array field at `path` (any nesting
+ * depth) by walking `schema`'s AST there — the nested-array counterpart to
+ * {@link defaultValue}. Returns `""` when `path` doesn't resolve to an array.
+ */
+export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
+  const ast = schemaAt(schema, path);
+  if (ast === undefined || !SchemaAST.isArrays(ast)) return "";
+  const item = arrayElementAst(ast);
+  return item === undefined ? "" : fromAst(item);
 }
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */

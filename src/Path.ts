@@ -172,3 +172,80 @@ type ResolveSegment<T, S extends string> =
 export type PathValue<T, P extends string> = P extends `${infer Head}.${infer Rest}`
   ? PathValue<ResolveSegment<T, Head>, Rest>
   : ResolveSegment<T, P>;
+
+/**
+ * Maps an array index that existed before an index-shifting mutation to where
+ * it lives afterwards, or to `null` when the item at that index no longer
+ * exists (its per-index state should be dropped). Built by {@link removeAt} /
+ * {@link insertAt} / {@link swapAt} / {@link moveAt} / {@link replaceAt}, and
+ * consumed by {@link remapIndex} / {@link remapKeyedRecord} and
+ * `Errors.remapIndices` to keep per-index state (touched flags, error trees)
+ * in sync with the row it was recorded against.
+ */
+export type IndexMap = (index: number) => number | null;
+
+/** The {@link IndexMap} for removing the item at `index`: shifts later indices down by one. */
+export function removeAt(index: number): IndexMap {
+  return (i) => (i === index ? null : i > index ? i - 1 : i);
+}
+
+/** The {@link IndexMap} for inserting an item at `index`: shifts `index` and later up by one. */
+export function insertAt(index: number): IndexMap {
+  return (i) => (i >= index ? i + 1 : i);
+}
+
+/** The {@link IndexMap} for swapping the items at `a` and `b`. */
+export function swapAt(a: number, b: number): IndexMap {
+  return (i) => (i === a ? b : i === b ? a : i);
+}
+
+/** The {@link IndexMap} for moving the item at `from` to `to`, shifting the items between. */
+export function moveAt(from: number, to: number): IndexMap {
+  return (i) => {
+    if (i === from) return to;
+    if (from < to) return i > from && i <= to ? i - 1 : i;
+    return i >= to && i < from ? i + 1 : i;
+  };
+}
+
+/** The {@link IndexMap} for replacing the item at `index` in place: drops only that index's state. */
+export function replaceAt(index: number): IndexMap {
+  return (i) => (i === index ? null : i);
+}
+
+/** The {@link IndexMap} for clearing every item in the array: drops all per-index state. */
+export const clearAll: IndexMap = () => null;
+
+/**
+ * Remap `path`'s index segment immediately under `arrayPath` through `map`.
+ * Paths outside `arrayPath`, and `arrayPath` itself (a whole-array message),
+ * pass through unchanged; a path whose index segment maps to `null` is
+ * dropped (returns `null`) — its item no longer exists. Pure.
+ */
+export function remapIndex(path: FormPath, arrayPath: FormPath, map: IndexMap): FormPath | null {
+  if (!isUnder(path, arrayPath) || path.length === arrayPath.length) return path;
+  const segment = path[arrayPath.length];
+  if (typeof segment !== "number") return path;
+  const mapped = map(segment);
+  if (mapped === null) return null;
+  if (mapped === segment) return path;
+  return [...path.slice(0, arrayPath.length), mapped, ...path.slice(arrayPath.length + 1)];
+}
+
+/**
+ * Remap every entry of a flat, path-keyed record (a {@link toString} key per
+ * entry — e.g. touched flags) through {@link remapIndex}. Entries whose path
+ * maps to `null` are dropped. Pure.
+ */
+export function remapKeyedRecord<T>(
+  record: Record<string, T>,
+  arrayPath: FormPath,
+  map: IndexMap,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const key of Object.keys(record)) {
+    const remapped = remapIndex(fromString(key), arrayPath, map);
+    if (remapped !== null) out[toString(remapped)] = record[key] as T;
+  }
+  return out;
+}

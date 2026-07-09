@@ -22,6 +22,7 @@
  */
 
 import type { FormIssue, FormPath } from "./Issues.ts";
+import { type IndexMap, remapIndex } from "./Path.ts";
 
 /** The root key under which a branch's own (non-field) messages are stored. */
 export const ROOT_ERROR_KEY = "_errors";
@@ -176,3 +177,18 @@ export function mergeErrors(a: FormErrors, b: FormErrors): FormErrors {
 
 /** The empty error tree. */
 export const noErrors: FormErrors = {};
+
+/**
+ * Remap the array-index segments of every message under `arrayPath` through
+ * `map` (see {@link module:effect-forms/Path.IndexMap}), so an error recorded
+ * against a row follows that row through a remove / insert / swap / move.
+ * Messages whose index maps to `null` are dropped. Pure.
+ */
+export function remapIndices(errors: FormErrors, arrayPath: FormPath, map: IndexMap): FormErrors {
+  const remapped: FormIssue[] = [];
+  for (const issue of flattenErrors(errors)) {
+    const path = remapIndex(issue.path, arrayPath, map);
+    if (path !== null) remapped.push({ path, message: issue.message });
+  }
+  return issuesToErrors(remapped);
+}

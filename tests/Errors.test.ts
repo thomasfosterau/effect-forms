@@ -6,10 +6,12 @@ import {
   issuesToErrors,
   mergeErrors,
   noErrors,
+  remapIndices,
   ROOT_ERROR_KEY,
   setError,
 } from "../src/Errors.ts";
 import type { FormIssue } from "../src/Issues.ts";
+import { insertAt, removeAt } from "../src/Path.ts";
 
 describe("issuesToErrors / flattenErrors", () => {
   it("nests a leaf field's messages under its key", () => {
@@ -93,5 +95,46 @@ describe("hasErrors / getError / setError / mergeErrors", () => {
   it("mergeErrors combines two trees", () => {
     const merged = mergeErrors({ a: ["x"] }, { b: ["y"] });
     expect(merged).toEqual({ a: ["x"], b: ["y"] });
+  });
+});
+
+describe("remapIndices", () => {
+  it("shifts a sibling row's error onto its new index after a removal", () => {
+    // tags[2] has an error; removing tags[0] should leave that error at tags[1].
+    const errors = issuesToErrors([{ path: ["tags", 2], message: "Too short" }]);
+    const next = remapIndices(errors, ["tags"], removeAt(0));
+    expect(getError(next, ["tags", 1])).toEqual(["Too short"]);
+    expect(getError(next, ["tags", 2])).toBeUndefined();
+  });
+
+  it("drops the error for the removed row itself", () => {
+    const errors = issuesToErrors([
+      { path: ["tags", 0], message: "Bad" },
+      { path: ["tags", 1], message: "Also bad" },
+    ]);
+    const next = remapIndices(errors, ["tags"], removeAt(0));
+    expect(flattenErrors(next)).toEqual([{ path: ["tags", 0], message: "Also bad" }]);
+  });
+
+  it("shifts rows up on insert and leaves unrelated fields alone", () => {
+    const errors = issuesToErrors([
+      { path: ["tags", 0], message: "Bad" },
+      { path: ["title"], message: "Required" },
+    ]);
+    const next = remapIndices(errors, ["tags"], insertAt(0));
+    expect(getError(next, ["tags", 1])).toEqual(["Bad"]);
+    expect(getError(next, ["title"])).toEqual(["Required"]);
+  });
+
+  it("preserves a whole-array message (the array path's own _errors)", () => {
+    const errors = issuesToErrors([{ path: ["tags"], message: "At least one tag" }]);
+    const next = remapIndices(errors, ["tags"], removeAt(0));
+    expect(getError(next, ["tags"])).toEqual(["At least one tag"]);
+  });
+
+  it("remaps nested paths beneath the shifted index", () => {
+    const errors = issuesToErrors([{ path: ["authors", 1, "name"], message: "Required" }]);
+    const next = remapIndices(errors, ["authors"], removeAt(0));
+    expect(getError(next, ["authors", 0, "name"])).toEqual(["Required"]);
   });
 });
