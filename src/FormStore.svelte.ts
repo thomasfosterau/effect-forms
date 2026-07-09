@@ -185,8 +185,10 @@ export interface FormOptions<S extends Schema.Top, A, Message> {
   readonly mode?: FormMode;
   /**
    * The builder's field record, set automatically when {@link createForm} is
-   * given a {@link FormBuilder}. Lets {@link FormStore.append} derive a blank
-   * item for a top-level array field from its item schema.
+   * given a {@link FormBuilder}. A fallback for deriving a blank array item
+   * when no `schema` is bound — with a schema, {@link FormStore.append} /
+   * {@link FormStore.insertItem} resolve the item (at any nesting depth) by
+   * walking the schema's AST instead.
    */
   readonly fields?: Field.FieldsRecord;
   /** The action URL the form posts to (defaults to the current page's action). */
@@ -534,28 +536,79 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     return this.shouldShowError(path) ? this.errorsAt(path) : [];
   }
 
+  /** Read the array at `path` (empty when absent). */
+  #arrayAt(path: FormPath): readonly unknown[] {
+    return (getAt(this.data, path) ?? []) as readonly unknown[];
+  }
+
   /** Append an item to the array at `path` (a blank item is derived when omitted). */
   append(path: FormPath, value?: unknown): void {
-    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    const current = this.#arrayAt(path);
     const item = value !== undefined ? value : this.#defaultItem(path);
     this.data = setAt(this.data, path, [...current, item]);
     this.#markDirty(path);
   }
 
-  /** Remove the item at `index` from the array at `path`. */
+  /**
+   * Insert an item into the array at `path` at `index` (clamped to the
+   * array's bounds; a non-finite `index` inserts at the end), shifting later
+   * items — and their per-index touched flags / errors — up by one. A blank
+   * item is derived when `value` is omitted.
+   */
+  insertItem(path: FormPath, index: number, value?: unknown): void {
+    const current = this.#arrayAt(path);
+    const at = Math.max(
+      0,
+      Math.min(Number.isFinite(index) ? index : current.length, current.length),
+    );
+    const item = value !== undefined ? value : this.#defaultItem(path);
+    this.data = setAt(this.data, path, [...current.slice(0, at), item, ...current.slice(at)]);
+    this.#markDirty(path);
+    this.#remapArrayIndices(path, Path.insertAt(at));
+  }
+
+  /**
+   * Replace the item at `index` in the array at `path` in place. Drops that
+   * index's own touched flag / errors (they described the old value); other
+   * indices are untouched.
+   */
+  replaceItem(path: FormPath, index: number, value: unknown): void {
+    const current = this.#arrayAt(path);
+    if (!inRange(index, current.length)) return;
+    const next = [...current];
+    next[index] = value;
+    this.data = setAt(this.data, path, next);
+    this.#markDirty(path);
+    this.#remapArrayIndices(path, Path.replaceAt(index));
+  }
+
+  /** Remove every item from the array at `path`, dropping all of its per-index state. */
+  clearItems(path: FormPath): void {
+    this.data = setAt(this.data, path, []);
+    this.#markDirty(path);
+    this.#remapArrayIndices(path, Path.clearAll);
+  }
+
+  /**
+   * Remove the item at `index` from the array at `path`, shifting later
+   * items' per-index touched flags / errors down by one so they keep
+   * following their row.
+   */
   removeItem(path: FormPath, index: number): void {
-    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    const current = this.#arrayAt(path);
+    if (!inRange(index, current.length)) return;
     this.data = setAt(
       this.data,
       path,
       current.filter((_, i) => i !== index),
     );
     this.#markDirty(path);
+    this.#remapArrayIndices(path, Path.removeAt(index));
   }
 
-  /** Swap two items in the array at `path`. */
+  /** Swap two items in the array at `path`, swapping their per-index touched flags / errors too. */
   swap(path: FormPath, indexA: number, indexB: number): void {
-    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    const current = this.#arrayAt(path);
     if (!inRange(indexA, current.length) || !inRange(indexB, current.length) || indexA === indexB) {
       return;
     }
@@ -563,17 +616,29 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     [next[indexA], next[indexB]] = [next[indexB], next[indexA]];
     this.data = setAt(this.data, path, next);
     this.#markDirty(path);
+    this.#remapArrayIndices(path, Path.swapAt(indexA, indexB));
   }
 
-  /** Move the item at `from` to `to` within the array at `path`. */
+  /** Move the item at `from` to `to` within the array at `path`, carrying its per-index state along. */
   move(path: FormPath, from: number, to: number): void {
-    const current = (getAt(this.data, path) ?? []) as readonly unknown[];
+    const current = this.#arrayAt(path);
     if (!inRange(from, current.length) || to < 0 || to >= current.length || from === to) return;
     const next = [...current];
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item);
     this.data = setAt(this.data, path, next);
     this.#markDirty(path);
+    this.#remapArrayIndices(path, Path.moveAt(from, to));
+  }
+
+  /**
+   * Remap the per-index touched flags and errors under the array at `path`
+   * through `map`, so state recorded against a row follows it through an
+   * index-shifting mutation. See {@link Path.IndexMap}.
+   */
+  #remapArrayIndices(path: FormPath, map: Path.IndexMap): void {
+    this.errors = Errors.remapIndices(this.errors as FormErrors, path, map) as TypedFormErrors<A>;
+    this.#touched = Path.remapKeyedRecord(this.#touched, path, map);
   }
 
   /** Revert `data` to the values sent by the last submission (no-op before any submit). */
@@ -583,8 +648,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     this.errors = noErrors as TypedFormErrors<A>;
   }
 
-  /** Derive a blank item for the array field at a top-level `path`, else `""`. */
+  /**
+   * Derive a blank item for the array field at `path`, at any nesting depth
+   * (e.g. `authors[0].emails`) — by walking the bound schema's AST there when
+   * one is available, falling back to a top-level {@link FormOptions.fields}
+   * lookup, else `""`.
+   */
   #defaultItem(path: FormPath): unknown {
+    if (this.#options.schema) return Field.defaultItemAt(this.#options.schema, path);
     const fields = this.#options.fields;
     if (fields && path.length === 1 && typeof path[0] === "string") {
       const def = fields[path[0]];

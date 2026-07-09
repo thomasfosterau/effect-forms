@@ -68,10 +68,16 @@ see [Field handles](#field-handles)), `shouldShowError(path)` /
 `revertToLastSubmit()`, `reset()`, `capture()` / `restore()` (SvelteKit
 snapshots), `toFormData()`.
 
-**Field arrays** — `append(path, value?)`, `removeItem(path, i)`,
+**Field arrays** — `append(path, value?)`, `insertItem(path, i, value?)`,
+`replaceItem(path, i, value)`, `removeItem(path, i)`, `clearItems(path)`,
 `swap(path, a, b)`, `move(path, from, to)` mutate the array at `path`
-immutably. `append` derives a blank item from the field's schema when the form
-was seeded from a `FormBuilder`.
+immutably. `append` / `insertItem` derive a blank item by walking the bound
+schema's AST at `path` (any nesting depth, e.g. `authors[0].emails`), falling
+back to the top-level `FormBuilder` field when no schema is bound. Every
+index-shifting mutation (`insertItem` / `removeItem` / `swap` / `move` /
+`clearItems`) remaps per-index touched flags and errors so they keep
+following their row — `replaceItem` drops only the replaced index's own
+touched flag / errors.
 
 ## Field handles
 
