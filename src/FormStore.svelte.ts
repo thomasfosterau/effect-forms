@@ -31,6 +31,7 @@ import {
   Result,
   State,
 } from "@thomasfosterau/effect-forms";
+import * as Duration from "effect/Duration";
 import type * as Schema from "effect/Schema";
 import { createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
@@ -41,6 +42,7 @@ import {
   parseActionResult,
   resultToUpdate,
 } from "./EnhanceCore.ts";
+import { dispatchChange, type FieldListener, type FormListeners } from "./Listeners.ts";
 import { computeTainted, isAnyTainted, isTaintedAt, type TaintedFields } from "./Tainted.ts";
 
 // Terse local aliases onto the namespaced core exports (the public API is
@@ -142,6 +144,13 @@ export interface FormOptions<S extends Schema.Top, A, Message> {
   readonly onError?: (input: { readonly error: string }) => void;
   /** Called on a redirect result (default: `window.location.assign`). */
   readonly onRedirect?: (input: { readonly location: string }) => void;
+  /**
+   * Field- and form-level listeners (onMount / onChange / onBlur) — see
+   * {@link module:effect-forms-svelte/Listeners}. Fire independent of
+   * `mode`'s validation, and tear down with {@link FormStore.enhance}'s
+   * `destroy`.
+   */
+  readonly listeners?: FormListeners;
 }
 
 const defaultSubmit = async <A, Message>(
@@ -201,6 +210,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   readonly #attachmentKey = createAttachmentKey();
   #autoSubmitNode: HTMLFormElement | undefined;
   #validateTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Per-field-listener debounce timers, keyed by `"change:<path>"` / `"blur:<path>"`. */
+  readonly #listenerTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   /** The tainted-field tree, re-derived as `data` changes. */
   readonly tainted: TaintedFields = $derived.by(() => computeTainted(this.#initial, this.data));
@@ -288,16 +299,69 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   }
 
   /**
-   * Handle a field losing focus: mark it touched, and — in `onBlur` mode —
+   * Handle a field losing focus: mark it touched, fire that field's `onBlur`
+   * listener (if any, debounced per its config), and — in `onBlur` mode —
    * validate the form (auto-submitting if configured and something changed
    * since the last submit).
    */
   handleBlur(path: FormPath): void {
     this.setTouched(path, true);
+    const key = Path.toString(path);
+    const field = this.#options.listeners?.fields?.[key];
+    if (field?.onBlur) {
+      // Capture the value at blur time, not at timer-fire time — otherwise a
+      // debounced listener would report whatever the field holds *now*, not
+      // what it held when it was blurred.
+      const value = this.valueAt(path);
+      this.#scheduleListener(`blur:${key}`, field.debounce, () => field.onBlur?.({ path, value }));
+    }
     if (this.#mode.validation === "onBlur") {
       this.validate();
       if (this.#mode.autoSubmit && this.valid && this.#hasUnsubmittedChanges()) this.#autoSubmit();
     }
+  }
+
+  /** Run `run` now, or after `debounce` (per-key timer, replacing any pending run for that key). */
+  #scheduleListener(key: string, debounce: Duration.Input | undefined, run: () => void): void {
+    if (debounce === undefined) {
+      run();
+      return;
+    }
+    clearTimeout(this.#listenerTimers.get(key));
+    this.#listenerTimers.set(
+      key,
+      setTimeout(() => {
+        this.#listenerTimers.delete(key);
+        run();
+      }, Duration.toMillis(debounce)),
+    );
+  }
+
+  /**
+   * The listeners table to dispatch change events against, with each field's
+   * `onChange` wrapped in this store's own debounce timer — or `undefined` if
+   * nothing is configured to consume a change (an `onMount`-only config, say),
+   * so the deep watcher can skip diffing the data tree entirely. Built once
+   * per {@link enhance} call rather than per change, since the listener table
+   * itself doesn't change across the mount's lifetime.
+   */
+  #buildDispatchListeners(): FormListeners | undefined {
+    const listeners = this.#options.listeners;
+    if (!listeners || (listeners.onChange === undefined && !listeners.fields)) return undefined;
+    if (!listeners.fields) return listeners;
+    const fields: Record<string, FieldListener> = {};
+    for (const [key, field] of Object.entries(listeners.fields)) {
+      fields[key] = field.onChange
+        ? {
+            ...field,
+            onChange: (input) =>
+              this.#scheduleListener(`change:${key}`, field.debounce, () =>
+                field.onChange?.(input),
+              ),
+          }
+        : field;
+    }
+    return { ...listeners, fields };
   }
 
   /**
@@ -560,16 +624,27 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     // Remember the mounted node so `onChange` / `onBlur` auto-submit can post.
     this.#autoSubmitNode = node;
 
+    this.#options.listeners?.onMount?.({ data: $state.snapshot(this.data) });
+
     // In `onChange` mode, re-validate (and maybe auto-submit) whenever the data
-    // changes — but not on the pristine initial render. An effect root gives us
-    // explicit teardown alongside the DOM listeners.
+    // changes — but not on the pristine initial render. Independent of mode,
+    // also diff the data tree into changed paths and dispatch any configured
+    // change listeners, so listeners fire whichever mode the form validates
+    // in. An effect root gives us explicit teardown alongside the DOM listeners.
+    const dispatchListeners = this.#buildDispatchListeners();
     let stopWatching: (() => void) | undefined;
-    if (this.#mode.validation === "onChange") {
+    if (this.#mode.validation === "onChange" || dispatchListeners !== undefined) {
+      let previous = $state.snapshot(this.data);
       stopWatching = $effect.root(() => {
         $effect(() => {
           // Establish a deep dependency on the data tree.
-          $state.snapshot(this.data);
-          if (this.isTainted || this.posted) this.#scheduleValidation();
+          const snapshot = $state.snapshot(this.data);
+          if (this.#mode.validation === "onChange" && (this.isTainted || this.posted)) {
+            this.#scheduleValidation();
+          }
+          if (dispatchListeners !== undefined)
+            dispatchChange(previous, snapshot, dispatchListeners);
+          previous = snapshot;
         });
       });
     }
@@ -580,6 +655,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
         if (typeof window !== "undefined") window.removeEventListener("beforeunload", beforeUnload);
         stopWatching?.();
         clearTimeout(this.#validateTimer);
+        for (const timer of this.#listenerTimers.values()) clearTimeout(timer);
+        this.#listenerTimers.clear();
         if (this.#autoSubmitNode === node) this.#autoSubmitNode = undefined;
       },
     };
