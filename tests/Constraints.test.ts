@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import { describe, expect, it } from "vite-plus/test";
-import { constraintsFromSchema } from "../src/Constraints.ts";
+import { constraintAt, constraintsFromSchema } from "../src/Constraints.ts";
 
 describe("constraintsFromSchema", () => {
   it("marks non-optional fields as required and optional as not", () => {
@@ -157,5 +157,48 @@ describe("constraintsFromSchema", () => {
     expect(constraintsFromSchema(schema, { name: { maxlength: 10 } })).toEqual({
       name: { required: true, minlength: 2, maxlength: 10 },
     });
+  });
+});
+
+describe("constraintAt", () => {
+  const constraints = constraintsFromSchema(
+    Schema.Struct({
+      title: Schema.String,
+      tags: Schema.Array(Schema.String),
+      author: Schema.Struct({ name: Schema.String, bio: Schema.optional(Schema.String) }),
+    }),
+  );
+
+  it("reads a top-level leaf", () => {
+    expect(constraintAt(constraints, ["title"])).toEqual({ required: true });
+  });
+
+  it("reads a nested leaf", () => {
+    expect(constraintAt(constraints, ["author", "bio"])).toEqual({ required: false });
+  });
+
+  it("skips array-index segments — items share their field's constraint", () => {
+    expect(constraintAt(constraints, ["tags", 0])).toEqual(constraintAt(constraints, ["tags"]));
+  });
+
+  it("returns an empty object for a path with no derived constraint", () => {
+    expect(constraintAt(constraints, ["missing"])).toEqual({});
+    expect(constraintAt(constraints, ["author", "missing", "deeper"])).toEqual({});
+  });
+
+  it("returns an empty object when a leaf path continues past its constraint", () => {
+    expect(constraintAt(constraints, ["title", "deeper"])).toEqual({});
+  });
+
+  it("resolves an item field of an array-of-structs, skipping the index segment", () => {
+    const withItems = constraintsFromSchema(
+      Schema.Struct({ items: Schema.Array(Schema.Struct({ label: Schema.String })) }),
+    );
+    // `items` is a branch here (constraintsFromSchema descends into struct
+    // array items), so the bare array path has no leaf of its own...
+    expect(constraintAt(withItems, ["items"])).toEqual({});
+    // ...but skipping the index segment resolves straight to the item field's
+    // own derived constraint.
+    expect(constraintAt(withItems, ["items", 0, "label"])).toEqual({ required: true });
   });
 });

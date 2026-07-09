@@ -38,28 +38,6 @@ import { isArrayFieldDef, isFieldDef, makeField } from "./Field.ts";
 import type { FormIssue } from "./Issues.ts";
 import { schemaIssuesToFormIssues } from "./Issues.ts";
 
-/** Brand for a {@link FieldRef} — an opaque, typed handle to one field. */
-export const FieldTypeId: unique symbol = Symbol.for("@thomasfosterau/effect-forms/FieldRef");
-export type FieldTypeId = typeof FieldTypeId;
-
-/**
- * A typed reference to a field, carrying its *encoded* value type as a phantom.
- * A reactive store hands these out so a component can bind to one field without
- * stringly-typed paths.
- */
-export interface FieldRef<E> {
-  readonly [FieldTypeId]: FieldTypeId;
-  readonly _E: E;
-  readonly key: string;
-}
-
-/** Construct a {@link FieldRef} for `key`. */
-export const makeFieldRef = <E>(key: string): FieldRef<E> => ({
-  [FieldTypeId]: FieldTypeId,
-  _E: undefined as never,
-  key,
-});
-
 /** Brand for a {@link FormBuilder}. */
 export const TypeId: unique symbol = Symbol.for("@thomasfosterau/effect-forms/FormBuilder");
 export type TypeId = typeof TypeId;

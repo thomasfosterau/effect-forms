@@ -99,3 +99,76 @@ export function toString(path: FormPath): string {
 export function fromString(name: string): FormPath {
   return parseFieldPath(name).map((token) => (/^\d+$/.test(token) ? Number(token) : token));
 }
+
+/**
+ * The deep-key type: every valid {@link toString} path into `T`, as a union of
+ * string literals (`"author.name"`, `"tags[0]"`, `"tags[0].label"`, …). This is
+ * the type-checked counterpart of a hand-written {@link FormPath} — a typo'd
+ * segment or a path into a field that doesn't exist is a compile error. Bounded
+ * to a fixed recursion depth ({@link Prev}'s length) so a struct with cycles
+ * (there shouldn't be any — form data is JSON-shaped) can't blow up inference.
+ *
+ * Used by {@link module:effect-forms-svelte/FormStore}'s `field(path)` — see
+ * the trade-off recorded in `docs/decisions/` for why this was chosen over the
+ * core's (now-removed) opaque `FieldRef`.
+ */
+export type FieldPath<T, D extends number = 8> = T extends object
+  ? [D] extends [never]
+    ? never
+    : {
+        [K in Extract<keyof T, string>]: `${K}${PathSuffix<T[K], Prev[D]>}`;
+      }[Extract<keyof T, string>]
+  : never;
+
+/** Recursion-depth countdown used by {@link FieldPath} / {@link PathValue}. */
+type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7];
+
+/**
+ * The continuation after a key: nothing, an array index (the bracket closes
+ * immediately — `[0]`, not `[0.label]` — then {@link PathSuffix} recurses on
+ * the element type for whatever comes after), or `.key`.
+ */
+type PathSuffix<T, D extends number> = [D] extends [never]
+  ? ""
+  : T extends ReadonlyArray<infer E>
+    ? "" | `[${number}]${PathSuffix<E, Prev[D]>}`
+    : T extends object
+      ?
+          | ""
+          | { [K in Extract<keyof T, string>]: `.${K}${PathSuffix<T[K], Prev[D]>}` }[Extract<
+              keyof T,
+              string
+            >]
+      : "";
+
+/** The base key of a single dot-segment (`"tags[0]"` → `"tags"`). */
+type SegmentBase<S extends string> = S extends `${infer Base}[${string}` ? Base : S;
+
+/** The bracket indices of a single dot-segment (`"tags[0][1]"` → `["0", "1"]`), untyped past presence. */
+type SegmentIndices<S extends string> = S extends `${string}[${infer Idx}]${infer Rest}`
+  ? [Idx, ...SegmentIndicesRest<Rest>]
+  : [];
+
+/** Continuation of {@link SegmentIndices} once the leading (non-bracket) prefix has been consumed. */
+type SegmentIndicesRest<S extends string> = S extends `[${infer Idx}]${infer Rest}`
+  ? [Idx, ...SegmentIndicesRest<Rest>]
+  : [];
+
+/** Step through an array type once per entry in `Idxs`. */
+type ApplyIndices<T, Idxs extends readonly unknown[]> = Idxs extends [unknown, ...infer Rest]
+  ? T extends ReadonlyArray<infer E>
+    ? ApplyIndices<E, Rest>
+    : never
+  : T;
+
+/** Resolve a single dot-segment (base key plus any bracket indices) against `T`. */
+type ResolveSegment<T, S extends string> =
+  SegmentBase<S> extends keyof T ? ApplyIndices<T[SegmentBase<S>], SegmentIndices<S>> : never;
+
+/**
+ * The value type at a {@link FieldPath} `P` into `T` — the leaf type `field(path)`
+ * resolves to. `PathValue<{ tags: string[] }, "tags[0]">` is `string`.
+ */
+export type PathValue<T, P extends string> = P extends `${infer Head}.${infer Rest}`
+  ? PathValue<ResolveSegment<T, Head>, Rest>
+  : ResolveSegment<T, P>;

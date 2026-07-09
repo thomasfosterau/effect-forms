@@ -33,6 +33,7 @@
 
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import type { FormPath } from "./Issues.ts";
 
 /** Native validation attributes for a single input. */
 export interface InputConstraint {
@@ -50,7 +51,10 @@ export interface InputConstraints {
   readonly [key: string]: InputConstraint | InputConstraints | undefined;
 }
 
-const isLeafConstraint = (value: InputConstraint | InputConstraints): value is InputConstraint =>
+/** Whether a node in an {@link InputConstraints} tree is a leaf ({@link InputConstraint}) rather than a branch. */
+export const isLeafConstraint = (
+  value: InputConstraint | InputConstraints,
+): value is InputConstraint =>
   "required" in value ||
   "min" in value ||
   "max" in value ||
@@ -241,4 +245,24 @@ export function constraintsFromSchema(
   const ast = schema.ast;
   const base = SchemaAST.isObjects(ast) ? constraintsForObjects(ast) : {};
   return mergeConstraints(base, overrides);
+}
+
+/**
+ * Read the {@link InputConstraint} leaf at `path` in an {@link InputConstraints}
+ * tree, defaulting to `{}` when `path` has no derived constraints. Array
+ * indices in `path` are skipped rather than descended into — the tree has no
+ * per-item nodes to index into, since {@link constraintsForType} derives one
+ * constraint (or branch) per *field*, shared by every item at that field. A
+ * bare item path (`tags[0]`) resolves to that shared leaf; a path that
+ * continues past the index into a struct item's own field (`items[0].label`)
+ * skips the index and resolves straight to `label`'s derived constraint.
+ */
+export function constraintAt(constraints: InputConstraints, path: FormPath): InputConstraint {
+  let node: InputConstraint | InputConstraints | undefined = constraints;
+  for (const segment of path) {
+    if (typeof segment === "number") continue;
+    if (node === undefined || isLeafConstraint(node)) return {};
+    node = node[segment];
+  }
+  return node !== undefined && isLeafConstraint(node) ? node : {};
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { fromString, getAt, isUnder, setAt, toString } from "../src/Path.ts";
+import type { FieldPath, PathValue } from "../src/Path.ts";
 
 describe("Path.getAt", () => {
   const data = { author: { name: "Ada" }, tags: ["a", "b"] };
@@ -59,5 +60,46 @@ describe("Path.toString / fromString", () => {
     expect(toString(["author", "name"])).toBe("author.name");
     expect(fromString("tags[0]")).toEqual(["tags", 0]);
     expect(fromString("author.name")).toEqual(["author", "name"]);
+  });
+});
+
+// Type-level assertions for `FieldPath` / `PathValue` (#756): a mistyped
+// segment or wrong leaf type must be a compile error. Encoded as assignability
+// checks (the models package's `expectTypeOf`-style pattern) that break the
+// build if the projection ever drifts — there is nothing to assert at runtime.
+describe("Path.FieldPath / Path.PathValue", () => {
+  interface Item {
+    readonly label: string;
+  }
+  interface Data {
+    readonly title: string;
+    readonly author: { readonly name: string; readonly bio?: string };
+    readonly tags: readonly string[];
+    readonly items: readonly Item[];
+  }
+
+  it("accepts every valid deep path and rejects invalid ones", () => {
+    const scalar: FieldPath<Data> = "title";
+    const nested: FieldPath<Data> = "author.name";
+    const optionalNested: FieldPath<Data> = "author.bio";
+    const arrayIndex: FieldPath<Data> = "tags[0]";
+    const arrayItemField: FieldPath<Data> = "items[0].label";
+    // @ts-expect-error -- "titel" is not a key of Data
+    const typo: FieldPath<Data> = "titel";
+    // @ts-expect-error -- "author.missing" is not a key of Data["author"]
+    const missingNested: FieldPath<Data> = "author.missing";
+    void [scalar, nested, optionalNested, arrayIndex, arrayItemField, typo, missingNested];
+    expect(true).toBe(true);
+  });
+
+  it("resolves the leaf type at a path", () => {
+    const title: PathValue<Data, "title"> = "hello";
+    const name: PathValue<Data, "author.name"> = "Ada";
+    const tag: PathValue<Data, "tags[0]"> = "a";
+    const label: PathValue<Data, "items[0].label"> = "x";
+    // @ts-expect-error -- the leaf at "title" is `string`, not `number`
+    const wrongType: PathValue<Data, "title"> = 1;
+    void [title, name, tag, label, wrongType];
+    expect(true).toBe(true);
   });
 });

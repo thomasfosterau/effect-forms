@@ -88,21 +88,21 @@ validate-and-seed entry point:
 
 ## What's in the box
 
-| Module                              | Purpose                                                                                                                                              |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Form`](src/Form.ts)               | `make` — bind a schema to a form (validate + empty); `fromBuilder` — bind a `FormBuilder`.                                                           |
-| [`FormBuilder`](src/FormBuilder.ts) | Compose a form field by field: `addField` / `merge` / `refine` / `refineEffect` / `buildSchema`.                                                     |
-| [`Field`](src/Field.ts)             | `makeField` / `makeArrayField` field defs + guards, and blank-default derivation from a schema.                                                      |
-| [`State`](src/State.ts)             | `FormState`, `makeFormState`, `setMessage`, `withError`, `FormStateSchema` (transport).                                                              |
-| [`Errors`](src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors`.                                         |
-| [`Issues`](src/Issues.ts)           | `FormIssue` + the Effect Schema issue-tree walker.                                                                                                   |
-| [`FormData`](src/FormData.ts)       | `formDataToObject` / `parseFieldPath` — structured parsing of an HTML body.                                                                          |
-| [`Path`](src/Path.ts)               | `getAt` / `setAt` (immutable) along a `FormPath`, plus `toString` / `fromString` notation conversion.                                                |
-| [`Coerce`](src/Coerce.ts)           | Tri-state (value / `null` / `undefined`) coercers for the form boundary.                                                                             |
-| [`Constraints`](src/Constraints.ts) | `constraintsFromSchema` — native input attributes (`required`, `minlength`/`maxlength`, `min`/`max`, `pattern`, `step`) derived from the schema AST. |
-| [`Mode`](src/Mode.ts)               | `FormMode` + `parse` — when a form validates (`onSubmit` / `onBlur` / `onChange`) and whether it auto-submits.                                       |
-| [`Result`](src/Result.ts)           | `FormActionResult` — the framework-neutral submission outcome (success / failure / redirect / error).                                                |
-| [`Validate`](src/Validate.ts)       | `validateValue` / `validateValueSync` — ad-hoc value/field validation.                                                                               |
+| Module                              | Purpose                                                                                                                                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`Form`](src/Form.ts)               | `make` — bind a schema to a form (validate + empty); `fromBuilder` — bind a `FormBuilder`.                                                                                                                    |
+| [`FormBuilder`](src/FormBuilder.ts) | Compose a form field by field: `addField` / `merge` / `refine` / `refineEffect` / `buildSchema`.                                                                                                              |
+| [`Field`](src/Field.ts)             | `makeField` / `makeArrayField` field defs + guards, and blank-default derivation from a schema.                                                                                                               |
+| [`State`](src/State.ts)             | `FormState`, `makeFormState`, `setMessage`, `withError`, `FormStateSchema` (transport).                                                                                                                       |
+| [`Errors`](src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors`.                                                                                                  |
+| [`Issues`](src/Issues.ts)           | `FormIssue` + the Effect Schema issue-tree walker.                                                                                                                                                            |
+| [`FormData`](src/FormData.ts)       | `formDataToObject` / `parseFieldPath` — structured parsing of an HTML body.                                                                                                                                   |
+| [`Path`](src/Path.ts)               | `getAt` / `setAt` (immutable) along a `FormPath`, `toString` / `fromString` notation conversion, and the type-level `FieldPath<T>` / `PathValue<T, P>` deep-key projections a typed field handle is built on. |
+| [`Coerce`](src/Coerce.ts)           | Tri-state (value / `null` / `undefined`) coercers for the form boundary.                                                                                                                                      |
+| [`Constraints`](src/Constraints.ts) | `constraintsFromSchema` — native input attributes derived from the schema AST, including into array items; `constraintAt` reads one field's leaf out of the derived tree.                                     |
+| [`Mode`](src/Mode.ts)               | `FormMode` + `parse` — when a form validates (`onSubmit` / `onBlur` / `onChange`) and whether it auto-submits.                                                                                                |
+| [`Result`](src/Result.ts)           | `FormActionResult` — the framework-neutral submission outcome (success / failure / redirect / error).                                                                                                         |
+| [`Validate`](src/Validate.ts)       | `validateValue` / `validateValueSync` — ad-hoc value/field validation.                                                                                                                                        |
 
 ## Notes
 
