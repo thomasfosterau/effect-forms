@@ -61,14 +61,54 @@ const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 
 **Methods** — `enhance(node)` (the form action), `validate()` /
 `validateField(path)` (client-side, needs `schema`), `errorsAt(path)` /
 `taintedAt(path)`, `setValue(path, v)` / `valueAt(path)`, `handleBlur(path)` /
-`setTouched(path)` / `isTouchedAt(path)`, `shouldShowError(path)` /
-`visibleErrorsAt(path)` (mode-aware display gating), `revertToLastSubmit()`,
-`reset()`, `capture()` / `restore()` (SvelteKit snapshots), `toFormData()`.
+`setTouched(path)` / `isTouchedAt(path)`, `isDirtyAt(path)` /
+`isDefaultValueAt(path)` (persistent per-field dirty tracking —
+see [Field handles](#field-handles)), `shouldShowError(path)` /
+`visibleErrorsAt(path)` (mode-aware display gating), `constraintAt(path)`,
+`revertToLastSubmit()`, `reset()`, `capture()` / `restore()` (SvelteKit
+snapshots), `toFormData()`.
 
 **Field arrays** — `append(path, value?)`, `removeItem(path, i)`,
 `swap(path, a, b)`, `move(path, from, to)` mutate the array at `path`
 immutably. `append` derives a blank item from the field's schema when the form
 was seeded from a `FormBuilder`.
+
+## Field handles
+
+`form.field(path)` (modelled on TanStack Form's `FieldApi`) returns a typed,
+reactive [`FieldHandle`](src/FormStore.svelte.ts) bundling everything one input
+needs, instead of wiring `bind:value` / `name` / `handleBlur` /
+`visibleErrorsAt` / `constraints` against the store separately:
+
+```svelte
+<script lang="ts">
+  const name = form.field("author.name"); // deep paths are type-checked
+</script>
+
+<input
+  name={name.name}
+  bind:value={name.value}
+  onblur={name.handleBlur}
+  {...name.constraints}
+/>
+{#each name.visibleErrors as message}<small>{message}</small>{/each}
+```
+
+`path` is checked against the form data's shape via `Path.FieldPath<A>` — a
+typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a
+compile error, and `field.value` is the leaf's actual type, not `unknown`. This
+replaced the core's unconsumed `FieldRef` seam — see [the trade-off
+decision](../../docs/decisions/typed-field-path-over-fieldref.md).
+
+`field.meta` exposes TanStack-style field state: `isBlurred` (lost focus at
+least once), `isTouched` (`isBlurred || isDirty`), `isDirty` (changed away from
+the default at some point — **persistent**, unlike `taintedAt` it does not
+clear on reverting to the default; only `reset()` clears it), and
+`isDefaultValue` (current value equals the default — flips back on revert).
+`isDirty` only tracks writes made through `field.value = …` / `setValue` /
+the array mutators (`append` / `removeItem` / `swap` / `move`) — a form that
+still binds `bind:value={form.data.x}` directly, bypassing `field()`, never
+marks that field dirty.
 
 **Validation modes** — the `mode` option (see
 [`Mode`](../effect-forms/src/Mode.ts)) drives when the form validates:

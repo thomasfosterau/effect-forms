@@ -52,6 +52,7 @@ type FormErrors = Errors.FormErrors;
 type FormPath = Issues.FormPath;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
 type TypedFormErrors<A> = Errors.TypedFormErrors<A>;
+type InputConstraint = Constraints.InputConstraint;
 type InputConstraints = Constraints.InputConstraints;
 type LeafFormatter = Issues.LeafFormatter;
 /** How a form validates (and optionally auto-submits) as the user types. */
@@ -59,6 +60,85 @@ export type FormMode = Mode.FormMode;
 const { getError, noErrors } = Errors;
 const { getAt, setAt } = Path;
 const makeForm = Form.make;
+
+/** Per-field state exposed on a {@link FieldHandle}, mirroring TanStack Form's field meta. */
+export interface FieldMeta {
+  /** Changed at some point, or blurred (TanStack: `isTouched = isDirty || isBlurred`). */
+  readonly isTouched: boolean;
+  /** Has lost focus at least once — distinct from {@link isTouched}. */
+  readonly isBlurred: boolean;
+  /**
+   * Was changed away from its default value at some point, via `field.value =
+   * …` (or another {@link FormStore} write method). Persistent: unlike {@link
+   * isDefaultValue}, this does not flip back to `false` if the value is later
+   * reverted to the default — only {@link FormStore.reset} clears it.
+   */
+  readonly isDirty: boolean;
+  /** Whether the current value is (still, or again) equal to the field's default. */
+  readonly isDefaultValue: boolean;
+}
+
+/**
+ * A typed, reactive handle to one field, returned by {@link FormStore.field}.
+ * Bundles everything a single input needs — `bind:value={field.value}`,
+ * `name={field.name}`, `onblur={field.handleBlur}`, `{...field.constraints}`,
+ * `field.visibleErrors`, `field.meta` — instead of wiring each by hand against
+ * an untyped {@link FormPath}. See {@link Path.FieldPath} for how the path is
+ * type-checked.
+ */
+export class FieldHandle<V> {
+  readonly #store: FormStore<Schema.Top, object, unknown>;
+  readonly #path: FormPath;
+  /** The path in flat field-name notation — use as the input's `name` attribute. */
+  readonly name: string;
+
+  constructor(store: FormStore<Schema.Top, object, unknown>, path: FormPath) {
+    this.#store = store;
+    this.#path = path;
+    this.name = Path.toString(path);
+  }
+
+  /** The field's current value. Assignable — `bind:value={field.value}` works. */
+  get value(): V {
+    return this.#store.valueAt(this.#path) as V;
+  }
+
+  set value(next: V) {
+    this.#store.setValue(this.#path, next);
+  }
+
+  /** All messages currently attached to this field. */
+  get errors(): readonly string[] {
+    return this.#store.errorsAt(this.#path);
+  }
+
+  /** This field's messages, gated by the form's validation mode (see {@link FormStore.shouldShowError}). */
+  get visibleErrors(): readonly string[] {
+    return this.#store.visibleErrorsAt(this.#path);
+  }
+
+  /** Native validation attributes for this field — spread onto the `<input>`. */
+  get constraints(): InputConstraint {
+    return this.#store.constraintAt(this.#path);
+  }
+
+  /** This field's {@link FieldMeta}. */
+  get meta(): FieldMeta {
+    const isBlurred = this.#store.isTouchedAt(this.#path);
+    const isDirty = this.#store.isDirtyAt(this.#path);
+    return {
+      isTouched: isBlurred || isDirty,
+      isBlurred,
+      isDirty,
+      isDefaultValue: this.#store.isDefaultValueAt(this.#path),
+    };
+  }
+
+  /** Mark this field blurred — see {@link FormStore.handleBlur}. */
+  handleBlur = (): void => {
+    this.#store.handleBlur(this.#path);
+  };
+}
 
 /** Transport: turn a submission into a {@link FormActionResult}. Defaults to `fetch`. */
 export type SubmitFn<A, Message> = (
@@ -199,8 +279,22 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
 
   /** The values sent by the last submission (for revert / changed-since-submit). */
   #lastSubmitted: A | undefined = $state();
-  /** Per-field touched flags, keyed by {@link Path.toString}. Drives `onBlur` display. */
+  /**
+   * Per-field blurred flags, keyed by {@link Path.toString}. Drives `onBlur`
+   * display (via {@link shouldShowError}) and {@link FieldMeta.isBlurred}.
+   */
   #touched: Record<string, boolean> = $state({});
+  /**
+   * Per-field persistent dirty flags, keyed by {@link Path.toString}. Set once
+   * a field's value is changed away from its default via {@link setValue} or
+   * an array mutator (`append` / `removeItem` / `swap` / `move`), and never
+   * cleared except by {@link reset} — unlike {@link taintedAt}, a revert to the
+   * default value does not clear it. Backs {@link FieldMeta.isDirty}. Only
+   * tracks writes made through those methods — mutating `data` directly
+   * (`bind:value={form.data.x}`, bypassing {@link FormStore.field}) never marks
+   * a field dirty.
+   */
+  #dirtied: Record<string, boolean> = $state({});
 
   readonly id: string;
   /** The tainted baseline `tainted`/`isTainted` compare against — rebased on every successful submit. */
@@ -281,6 +375,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   /** Set the value at `path` (path-addressed, immutable). Bind directly to `data` otherwise. */
   setValue(path: FormPath, value: unknown): void {
     this.data = setAt(this.data, path, value);
+    this.#markDirty(path);
   }
 
   /** Read the value at `path`. */
@@ -296,6 +391,48 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   /** Whether the field at `path` has been touched. */
   isTouchedAt(path: FormPath): boolean {
     return this.#touched[Path.toString(path)] === true;
+  }
+
+  /**
+   * Once a change away from the default at `path` is seen (per the current
+   * `data`, against `taintedAt`), sticks until {@link reset}. Called after
+   * `data` has already been updated, by every method that writes it
+   * (`setValue` and the array mutators below) — writing `data` directly
+   * (`bind:value={form.data.x}`) bypasses this, same as it bypasses `tainted`
+   * recomputing off anything but `data` itself would.
+   */
+  #markDirty(path: FormPath): void {
+    const key = Path.toString(path);
+    if (!this.#dirtied[key] && this.taintedAt(path)) {
+      this.#dirtied = { ...this.#dirtied, [key]: true };
+    }
+  }
+
+  /** Whether the field at `path` was ever changed away from its default — see {@link FieldMeta.isDirty}. */
+  isDirtyAt(path: FormPath): boolean {
+    return this.#dirtied[Path.toString(path)] === true;
+  }
+
+  /** Whether the field at `path` currently holds its default value — the negation of {@link taintedAt}. */
+  isDefaultValueAt(path: FormPath): boolean {
+    return !this.taintedAt(path);
+  }
+
+  /** The native validation attributes for `path` (a leaf of {@link constraints}). */
+  constraintAt(path: FormPath): InputConstraint {
+    return Constraints.constraintAt(this.constraints, path);
+  }
+
+  /**
+   * A typed, reactive handle to the field at `path` — see {@link FieldHandle}.
+   * `path` is type-checked against the form data's shape (see {@link
+   * Path.FieldPath}); a typo'd segment or wrong-shaped path is a compile error.
+   */
+  field<P extends Path.FieldPath<A>>(path: P): FieldHandle<Path.PathValue<A, P>> {
+    return new FieldHandle(
+      this as unknown as FormStore<Schema.Top, object, unknown>,
+      Path.fromString(path),
+    );
   }
 
   /**
@@ -395,6 +532,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     const current = (getAt(this.data, path) ?? []) as readonly unknown[];
     const item = value !== undefined ? value : this.#defaultItem(path);
     this.data = setAt(this.data, path, [...current, item]);
+    this.#markDirty(path);
   }
 
   /** Remove the item at `index` from the array at `path`. */
@@ -405,6 +543,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       path,
       current.filter((_, i) => i !== index),
     );
+    this.#markDirty(path);
   }
 
   /** Swap two items in the array at `path`. */
@@ -416,6 +555,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     const next = [...current];
     [next[indexA], next[indexB]] = [next[indexB], next[indexA]];
     this.data = setAt(this.data, path, next);
+    this.#markDirty(path);
   }
 
   /** Move the item at `from` to `to` within the array at `path`. */
@@ -426,6 +566,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item);
     this.data = setAt(this.data, path, next);
+    this.#markDirty(path);
   }
 
   /** Revert `data` to the values sent by the last submission (no-op before any submit). */
@@ -479,6 +620,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     this.valid = false;
     this.posted = false;
     this.#touched = {};
+    this.#dirtied = {};
     this.#lastSubmitted = undefined;
   }
 
