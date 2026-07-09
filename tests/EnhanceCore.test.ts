@@ -1,11 +1,13 @@
 import { Result, State } from "@thomasfosterau/effect-forms";
 import { describe, expect, it } from "vite-plus/test";
 import {
+  computeDataApplication,
   objectToEntries,
   objectToFormData,
   parseActionResult,
   resultToUpdate,
 } from "../src/EnhanceCore.ts";
+import { computeTainted, isAnyTainted } from "../src/Tainted.ts";
 
 // Terse local aliases onto the namespaced core exports.
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
@@ -84,5 +86,107 @@ describe("resultToUpdate", () => {
   it("Error → error message", () => {
     const result: FormActionResult<unknown> = { _tag: "Error", status: 500, message: "boom" };
     expect(resultToUpdate(result)).toEqual({ error: "boom", valid: false });
+  });
+});
+
+describe("computeDataApplication", () => {
+  const initial = { title: "Old" };
+  const submittedData = { title: "New" };
+
+  it("on a plain successful submit, adopts the server data and rebases the baseline to it", () => {
+    const appliedData = { title: "New (echoed)" };
+    const applied = computeDataApplication({
+      isSuccess: true,
+      appliedData,
+      initial,
+      submittedData,
+      resetForm: false,
+      autoSubmit: false,
+    });
+    expect(applied).toEqual({ data: appliedData, rebaseTo: appliedData });
+  });
+
+  it("on a failed submit, adopts the server data but does not rebase the baseline", () => {
+    const appliedData = { title: "New" };
+    const applied = computeDataApplication({
+      isSuccess: false,
+      appliedData,
+      initial,
+      submittedData,
+      resetForm: false,
+      autoSubmit: false,
+    });
+    expect(applied).toEqual({ data: appliedData, rebaseTo: undefined });
+  });
+
+  it("with resetForm, a successful submit reverts data and rebases the baseline to the original seed", () => {
+    const applied = computeDataApplication({
+      isSuccess: true,
+      appliedData: { title: "New" },
+      initial,
+      submittedData,
+      resetForm: true,
+      autoSubmit: false,
+    });
+    expect(applied).toEqual({ data: initial, rebaseTo: initial });
+  });
+
+  it("with resetForm, a failed submit adopts the server data (not the seed) and does not rebase", () => {
+    const appliedData = { title: "New" };
+    const applied = computeDataApplication({
+      isSuccess: false,
+      appliedData,
+      initial,
+      submittedData,
+      resetForm: true,
+      autoSubmit: false,
+    });
+    expect(applied).toEqual({ data: appliedData, rebaseTo: undefined });
+  });
+
+  it("auto-submit keeps local data as-is, but rebases the baseline to the submitted snapshot on success", () => {
+    const applied = computeDataApplication({
+      isSuccess: true,
+      appliedData: { title: "server echo" },
+      initial,
+      submittedData,
+      resetForm: false,
+      autoSubmit: true,
+    });
+    expect(applied).toEqual({ data: undefined, rebaseTo: submittedData });
+  });
+
+  it("auto-submit does not rebase on a failed submit", () => {
+    const applied = computeDataApplication({
+      isSuccess: false,
+      appliedData: { title: "server echo" },
+      initial,
+      submittedData,
+      resetForm: false,
+      autoSubmit: true,
+    });
+    expect(applied).toEqual({ data: undefined, rebaseTo: undefined });
+  });
+
+  it("save-then-navigate: after a successful submit, the field is no longer tainted against the new baseline", () => {
+    const seeded = { title: "Old" };
+    const edited = { title: "Saved" };
+
+    // Before submitting, the edit is tainted against the seed.
+    expect(isAnyTainted(computeTainted(seeded, edited))).toBe(true);
+
+    // A successful submit rebases the baseline to what was actually saved.
+    const applied = computeDataApplication({
+      isSuccess: true,
+      appliedData: edited,
+      initial: seeded,
+      submittedData: edited,
+      resetForm: false,
+      autoSubmit: false,
+    });
+    const rebasedInitial = applied.rebaseTo!;
+
+    // The `beforeunload` guard's `isTainted` check now sees no changes.
+    expect(isAnyTainted(computeTainted(rebasedInitial, edited))).toBe(false);
   });
 });

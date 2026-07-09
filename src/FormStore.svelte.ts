@@ -35,6 +35,7 @@ import type * as Schema from "effect/Schema";
 import { createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
 import {
+  computeDataApplication,
   type FormUpdate,
   objectToFormData,
   parseActionResult,
@@ -193,7 +194,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   #touched: Record<string, boolean> = $state({});
 
   readonly id: string;
-  readonly #initial: A;
+  /** The tainted baseline `tainted`/`isTainted` compare against — rebased on every successful submit. */
+  #initial: A;
   readonly #options: FormOptions<S, A, Message>;
   readonly #mode: Mode.ParsedMode;
   readonly #attachmentKey = createAttachmentKey();
@@ -400,8 +402,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     }
   }
 
-  /** Reset `data`, `errors`, and `message` back to the seeded values. */
-  reset(): void {
+  /**
+   * Reset `data`, `errors`, and `message` back to the tainted baseline. Pass
+   * `values` to re-seed that baseline first (e.g. adopting a different
+   * entity's values) instead of returning to the original seed.
+   */
+  reset(values?: A): void {
+    if (values !== undefined) this.#initial = structuredClone(values);
     this.data = structuredClone(this.#initial);
     this.errors = noErrors as TypedFormErrors<A>;
     this.message = undefined;
@@ -431,6 +438,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     this.message = snapshot.message;
     this.valid = snapshot.valid;
     this.posted = snapshot.posted;
+    this.constraints = snapshot.constraints ?? {};
   }
 
   #applyUpdate(update: FormUpdate<A, Message>, result: FormActionResult<A, Message>): void {
@@ -445,16 +453,30 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       return;
     }
     if (update.data !== undefined) {
-      if (this.#options.resetForm && update.valid) {
-        this.data = structuredClone(this.#initial);
-      } else if (!this.#mode.autoSubmit) {
-        this.data = update.data;
-      }
       // An auto-submitting (live-save) form keeps its local data as the source
       // of truth: adopting the server's echo would discard keystrokes made
       // during the round-trip and, when the echo isn't byte-identical (a
       // trimmed or server-stamped field), retrigger the change watcher — an
-      // extra submit, or an endless loop for a non-idempotent echo.
+      // extra submit, or an endless loop for a non-idempotent echo. On a
+      // successful submit the tainted baseline still rebases to whatever
+      // `data` ends up holding, so `isTainted` (and the `beforeunload` guard
+      // it drives) reflects what was actually just saved, not the original
+      // seed.
+      const applied = computeDataApplication({
+        isSuccess: result._tag === "Success",
+        appliedData: update.data,
+        initial: this.#initial,
+        // The snapshot actually sent (see `#runSubmit`), not the live `data` —
+        // further edits may have landed while this request was in flight.
+        submittedData: this.#lastSubmitted ?? this.data,
+        resetForm: this.#options.resetForm ?? false,
+        autoSubmit: this.#mode.autoSubmit,
+      });
+      if (applied.data !== undefined) this.data = structuredClone(applied.data);
+      if (applied.rebaseTo !== undefined) {
+        this.#initial = structuredClone(applied.rebaseTo);
+        this.#touched = {};
+      }
     }
     if (update.errors !== undefined) this.errors = update.errors as TypedFormErrors<A>;
     this.message = update.message;

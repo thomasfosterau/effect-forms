@@ -129,3 +129,38 @@ export function resultToUpdate<A, Message>(
       return { error: result.message, valid: false };
   }
 }
+
+/** How a successful/failed submit's data should land on `data` and the tainted baseline. */
+export interface DataApplication<A> {
+  /** The next value for `data`, or `undefined` to leave it untouched (an auto-submit keeps local edits). */
+  readonly data: A | undefined;
+  /** The next tainted baseline (`#initial`), or `undefined` when this isn't a successful submit. */
+  readonly rebaseTo: A | undefined;
+}
+
+/**
+ * Decide how a submit result's data applies to the store, given a defined
+ * `update.data` (redirects/errors never reach this — see {@link resultToUpdate}).
+ * Pure so the save-then-navigate baseline rebase is unit-testable without
+ * compiling the rune store: on a successful submit the tainted baseline
+ * rebases to whatever was actually persisted, so `isTainted` goes back to
+ * `false` for values that were just saved, not just the original seed. An
+ * auto-submitting (live-save) form keeps its local `data` as the source of
+ * truth while a request is in flight — adopting the server's echo would
+ * discard keystrokes made during the round-trip — but on success rebases to
+ * `submittedData` (the snapshot actually sent), not the live value, since the
+ * user may have typed further edits that haven't been submitted yet.
+ */
+export function computeDataApplication<A>(params: {
+  readonly isSuccess: boolean;
+  readonly appliedData: A;
+  readonly initial: A;
+  readonly submittedData: A;
+  readonly resetForm: boolean;
+  readonly autoSubmit: boolean;
+}): DataApplication<A> {
+  const { isSuccess, appliedData, initial, submittedData, resetForm, autoSubmit } = params;
+  if (resetForm && isSuccess) return { data: initial, rebaseTo: initial };
+  if (autoSubmit) return { data: undefined, rebaseTo: isSuccess ? submittedData : undefined };
+  return { data: appliedData, rebaseTo: isSuccess ? appliedData : undefined };
+}
