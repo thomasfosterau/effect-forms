@@ -28,8 +28,11 @@ describe("Form.make → empty", () => {
     });
   });
 
-  it("derives constraints from the schema (required reflects optionality)", () => {
-    expect(form.constraints).toEqual({ name: { required: true }, age: { required: false } });
+  it("derives constraints from the schema (required reflects optionality, minlength from isMinLength)", () => {
+    expect(form.constraints).toEqual({
+      name: { required: true, minlength: 2 },
+      age: { required: false },
+    });
   });
 });
 
