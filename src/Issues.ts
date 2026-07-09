@@ -19,6 +19,7 @@
  * @module effect-forms/Issues
  */
 
+import type * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 
 /**
@@ -95,4 +96,31 @@ export function schemaIssuesToFormIssues(
 
   walk(issue, []);
   return out;
+}
+
+/**
+ * Normalise a filter predicate's {@link Schema.FilterOutput} into a flat list of
+ * {@link FormIssue}s (empty on success). Shared by whole-form refinements
+ * ({@link module:effect-forms/FormBuilder}) and per-field validators
+ * ({@link module:effect-forms/Validate}) so both fold into the same nested
+ * error tree as schema-decode failures.
+ */
+export function filterOutputToFormIssues(output: Schema.FilterOutput): FormIssue[] {
+  if (output === undefined || output === true) return [];
+  if (output === false) return [{ path: [], message: "Invalid value" }];
+  if (Array.isArray(output)) return output.flatMap(filterIssueToFormIssues);
+  return filterIssueToFormIssues(output as Schema.FilterIssue);
+}
+
+function filterIssueToFormIssues(issue: Schema.FilterIssue): FormIssue[] {
+  if (typeof issue === "string") return [{ path: [], message: issue }];
+  if ("path" in issue && "issue" in issue) {
+    const prefix = issue.path.map((s) => (typeof s === "symbol" ? s.toString() : s));
+    const inner =
+      typeof issue.issue === "string"
+        ? [{ path: [], message: issue.issue }]
+        : schemaIssuesToFormIssues(issue.issue);
+    return inner.map((i) => ({ path: [...prefix, ...i.path], message: i.message }));
+  }
+  return schemaIssuesToFormIssues(issue);
 }

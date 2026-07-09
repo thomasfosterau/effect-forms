@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  clearSourceAt,
+  emptySourced,
   flattenErrors,
   getError,
   hasErrors,
   issuesToErrors,
   mergeErrors,
+  mergeSourced,
   noErrors,
   remapIndices,
+  replaceAt,
   ROOT_ERROR_KEY,
   setError,
+  setSourceAt,
 } from "../src/Errors.ts";
 import type { FormIssue } from "../src/Issues.ts";
 import { insertAt, removeAt } from "../src/Path.ts";
@@ -136,5 +141,99 @@ describe("remapIndices", () => {
     const errors = issuesToErrors([{ path: ["authors", 1, "name"], message: "Required" }]);
     const next = remapIndices(errors, ["authors"], removeAt(0));
     expect(getError(next, ["authors", 0, "name"])).toEqual(["Required"]);
+  });
+});
+
+describe("replaceAt", () => {
+  it("sets a fresh leaf's messages", () => {
+    expect(replaceAt(noErrors, ["email"], ["Required"])).toEqual({ email: ["Required"] });
+  });
+
+  it("replaces (not appends to) an existing leaf", () => {
+    const before = { email: ["Old message"] };
+    expect(replaceAt(before, ["email"], ["New message"])).toEqual({ email: ["New message"] });
+  });
+
+  it("clears a leaf back to valid, removing the key, when messages is empty", () => {
+    const before = { email: ["Required"], name: ["Too short"] };
+    expect(replaceAt(before, ["email"], [])).toEqual({ name: ["Too short"] });
+  });
+
+  it("does nothing when clearing an already-absent path", () => {
+    expect(replaceAt(noErrors, ["email"], [])).toEqual(noErrors);
+  });
+
+  it("is a no-op on a nested path that doesn't exist yet when clearing", () => {
+    expect(replaceAt(noErrors, ["author", "name"], [])).toEqual(noErrors);
+  });
+
+  it("sets a nested leaf without disturbing siblings", () => {
+    const before = { author: { name: ["Required"] } };
+    const after = replaceAt(before, ["author", "bio"], ["Too long"]);
+    expect(after).toEqual({ author: { name: ["Required"], bio: ["Too long"] } });
+  });
+
+  it("replaces a branch's own _errors, preserving its children", () => {
+    const before = issuesToErrors([
+      { path: ["tags"], message: "Need one" },
+      { path: ["tags", 0], message: "Bad" },
+    ]);
+    const after = replaceAt(before, ["tags"], ["Need at least two"]);
+    expect(after).toEqual({
+      tags: { [ROOT_ERROR_KEY]: ["Need at least two"], "0": ["Bad"] },
+    });
+  });
+
+  it("clearing a branch's own _errors preserves its children", () => {
+    const before = issuesToErrors([
+      { path: ["tags"], message: "Need one" },
+      { path: ["tags", 0], message: "Bad" },
+    ]);
+    expect(replaceAt(before, ["tags"], [])).toEqual({ tags: { "0": ["Bad"] } });
+  });
+
+  it("is pure", () => {
+    const before = { email: ["Required"] };
+    replaceAt(before, ["email"], []);
+    expect(before).toEqual({ email: ["Required"] });
+  });
+
+  it("clears the root's own message with the empty path", () => {
+    const before = issuesToErrors([{ path: [], message: "Passwords must match" }]);
+    expect(replaceAt(before, [], [])).toEqual(noErrors);
+  });
+});
+
+describe("SourcedErrors (setSourceAt / clearSourceAt / mergeSourced)", () => {
+  it("mergeSourced combines server (first) and client trees", () => {
+    const sourced = { server: { email: ["Taken (server)"] }, client: { name: ["Required"] } };
+    expect(mergeSourced(sourced)).toEqual({
+      email: ["Taken (server)"],
+      name: ["Required"],
+    });
+  });
+
+  it("setSourceAt only touches the given source's tree", () => {
+    const sourced = setSourceAt(emptySourced, "server", ["email"], ["Taken"]);
+    expect(sourced.server).toEqual({ email: ["Taken"] });
+    expect(sourced.client).toEqual(noErrors);
+
+    const both = setSourceAt(sourced, "client", ["name"], ["Required"]);
+    expect(both.server).toEqual({ email: ["Taken"] });
+    expect(both.client).toEqual({ name: ["Required"] });
+  });
+
+  it("clearSourceAt clears one source at a path without touching the other source or path", () => {
+    const sourced = {
+      server: { email: ["Taken"], name: ["Server says no"] },
+      client: { email: ["Required"] },
+    };
+    const cleared = clearSourceAt(sourced, "server", ["email"]);
+    expect(cleared.server).toEqual({ name: ["Server says no"] });
+    expect(cleared.client).toEqual({ email: ["Required"] });
+    expect(mergeSourced(cleared)).toEqual({
+      name: ["Server says no"],
+      email: ["Required"],
+    });
   });
 });

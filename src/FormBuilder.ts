@@ -36,7 +36,7 @@ import type {
 } from "./Field.ts";
 import { isArrayFieldDef, isFieldDef, makeField } from "./Field.ts";
 import type { FormIssue } from "./Issues.ts";
-import { schemaIssuesToFormIssues } from "./Issues.ts";
+import { filterOutputToFormIssues } from "./Issues.ts";
 
 /** Brand for a {@link FormBuilder}. */
 export const TypeId: unique symbol = Symbol.for("@thomasfosterau/effect-forms/FormBuilder");
@@ -190,30 +190,9 @@ export function asyncRefinements<TFields extends FieldsRecord, R>(
     .map((r) => r.fn as never);
 }
 
-/**
- * Normalise a filter predicate's {@link Schema.FilterOutput} into a flat list of
- * {@link FormIssue}s (empty on success). Shared by the async-refinement path so
- * whole-form failures fold into the same nested error tree as field failures.
- */
-export function filterOutputToFormIssues(output: Schema.FilterOutput): FormIssue[] {
-  if (output === undefined || output === true) return [];
-  if (output === false) return [{ path: [], message: "Invalid value" }];
-  if (Array.isArray(output)) return output.flatMap(filterIssueToFormIssues);
-  return filterIssueToFormIssues(output as Schema.FilterIssue);
-}
-
-function filterIssueToFormIssues(issue: Schema.FilterIssue): FormIssue[] {
-  if (typeof issue === "string") return [{ path: [], message: issue }];
-  if ("path" in issue && "issue" in issue) {
-    const prefix = issue.path.map((s) => (typeof s === "symbol" ? s.toString() : s));
-    const inner =
-      typeof issue.issue === "string"
-        ? [{ path: [], message: issue.issue }]
-        : schemaIssuesToFormIssues(issue.issue);
-    return inner.map((i) => ({ path: [...prefix, ...i.path], message: i.message }));
-  }
-  return schemaIssuesToFormIssues(issue);
-}
+// {@link filterOutputToFormIssues} moved to {@link module:effect-forms/Issues}
+// (shared with per-field validators); re-exported here for existing callers.
+export { filterOutputToFormIssues };
 
 /**
  * Run every asynchronous refinement on `self` against `values` and collect

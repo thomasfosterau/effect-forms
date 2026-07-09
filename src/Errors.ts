@@ -68,6 +68,18 @@ const ownErrors = (node: MutableNode): string[] => {
 };
 
 /**
+ * If `node[key]` is a leaf's message list, convert it in place into a branch
+ * carrying those same messages as its own {@link ROOT_ERROR_KEY} (a path used
+ * as a leaf is now needed as a branch too) — a no-op when `node[key]` is
+ * already a branch or absent. Shared by {@link insert} and {@link setLeaf}'s
+ * path-descent, the one piece of their branch-walking that's identical.
+ */
+const promoteLeafToBranch = (node: MutableNode, key: string): void => {
+  const existing = node[key];
+  if (isMessageList(existing)) node[key] = { [ROOT_ERROR_KEY]: existing };
+};
+
+/**
  * Insert one message at `path` into a mutable error tree. A leaf becomes a
  * `string[]`; if the same path is later used as a branch the existing list is
  * preserved under {@link ROOT_ERROR_KEY}; if a branch later receives its own
@@ -83,14 +95,8 @@ const insert = (root: MutableNode, path: FormPath, message: string): void => {
   let node = root;
   for (let i = 0; i < path.length - 1; i++) {
     const key = String(path[i]);
-    const existing = node[key];
-    if (existing === undefined) {
-      node[key] = {};
-    } else if (isMessageList(existing)) {
-      // A path used as a leaf is now needed as a branch — keep the leaf
-      // messages under the branch's own `_errors`.
-      node[key] = { [ROOT_ERROR_KEY]: existing };
-    }
+    if (node[key] === undefined) node[key] = {};
+    else promoteLeafToBranch(node, key);
     node = node[key] as MutableNode;
   }
 
@@ -191,4 +197,129 @@ export function remapIndices(errors: FormErrors, arrayPath: FormPath, map: Index
     if (path !== null) remapped.push({ path, message: issue.message });
   }
   return issuesToErrors(remapped);
+}
+
+/**
+ * Return a new tree with the messages *directly at* `path` replaced by
+ * `messages` (removing the key when `messages` is empty), leaving every other
+ * path — including children of a branch `path` — untouched. Unlike
+ * {@link setError} (which appends one message), this is the "this field's
+ * validator just ran, here is its complete result" operation a per-field
+ * validator needs: it can clear a field back to valid without disturbing
+ * sibling or nested messages. Pure.
+ */
+export function replaceAt(
+  errors: FormErrors,
+  path: FormPath,
+  messages: readonly string[],
+): FormErrors {
+  const next = structuredClone(errors) as unknown as MutableNode;
+  setLeaf(next, path, messages);
+  return next;
+}
+
+const setLeaf = (root: MutableNode, path: FormPath, messages: readonly string[]): void => {
+  if (path.length === 0) {
+    setOwnMessages(root, messages);
+    return;
+  }
+  const parent = descendClearing(root, path, messages);
+  if (parent === undefined) return; // an absent branch on the clearing path — nothing to clear
+  setLeafMessages(parent, String(path[path.length - 1]), messages);
+};
+
+/** Set or clear a node's own {@link ROOT_ERROR_KEY} messages. */
+const setOwnMessages = (node: MutableNode, messages: readonly string[]): void => {
+  if (messages.length === 0) delete node[ROOT_ERROR_KEY];
+  else node[ROOT_ERROR_KEY] = [...messages];
+};
+
+/**
+ * Walk to `path`'s parent branch, creating branches as needed. When
+ * `messages` is empty (a clear, not a set) a missing branch means there is
+ * nothing to clear — descent stops early and returns `undefined` rather than
+ * creating empty branches just to immediately no-op inside them.
+ */
+const descendClearing = (
+  root: MutableNode,
+  path: FormPath,
+  messages: readonly string[],
+): MutableNode | undefined => {
+  let node = root;
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = String(path[i]);
+    if (node[key] === undefined) {
+      if (messages.length === 0) return undefined;
+      node[key] = {};
+    } else {
+      promoteLeafToBranch(node, key);
+    }
+    node = node[key] as MutableNode;
+  }
+  return node;
+};
+
+/** Set or clear `node[key]`'s messages — a leaf's list, or (if it's already a branch) its own {@link ROOT_ERROR_KEY}. */
+const setLeafMessages = (node: MutableNode, key: string, messages: readonly string[]): void => {
+  const existing = node[key];
+  if (existing === undefined) {
+    if (messages.length > 0) node[key] = [...messages];
+    return;
+  }
+  if (isMessageList(existing)) {
+    if (messages.length === 0) delete node[key];
+    else node[key] = [...messages];
+    return;
+  }
+  // Already a branch (has nested children) — replace its own messages,
+  // preserving the children.
+  if (messages.length === 0) delete existing[ROOT_ERROR_KEY];
+  else existing[ROOT_ERROR_KEY] = [...messages];
+};
+
+/**
+ * Where a message in a {@link FormErrors} tree came from. `"server"` messages
+ * come from the last submission response; `"client"` messages come from
+ * browser-side validation (schema re-run, per-field validators, client-run
+ * `refineEffect` refinements). Kept as parallel trees (see {@link
+ * SourcedErrors}) rather than tagging each message, so a UI can style sources
+ * differently and client revalidation can clear only its own tree, leaving
+ * server-reported failures in place until their field actually changes.
+ */
+export type ErrorSource = "client" | "server";
+
+/** Parallel error trees, one per {@link ErrorSource}, plus their {@link mergeSourced} view. */
+export interface SourcedErrors {
+  readonly client: FormErrors;
+  readonly server: FormErrors;
+}
+
+/** Both source trees empty. */
+export const emptySourced: SourcedErrors = { client: noErrors, server: noErrors };
+
+/** Combine both source trees into the single tree a UI reads (server first, then client). */
+export function mergeSourced(sourced: SourcedErrors): FormErrors {
+  return mergeErrors(sourced.server, sourced.client);
+}
+
+/**
+ * Return new {@link SourcedErrors} with `source`'s tree updated at `path` via
+ * {@link replaceAt} (the other source's tree is untouched). Pure.
+ */
+export function setSourceAt(
+  sourced: SourcedErrors,
+  source: ErrorSource,
+  path: FormPath,
+  messages: readonly string[],
+): SourcedErrors {
+  return { ...sourced, [source]: replaceAt(sourced[source], path, messages) };
+}
+
+/** Clear `source`'s messages at `path` (and nowhere else). Shorthand for {@link setSourceAt} with `[]`. */
+export function clearSourceAt(
+  sourced: SourcedErrors,
+  source: ErrorSource,
+  path: FormPath,
+): SourcedErrors {
+  return setSourceAt(sourced, source, path, []);
 }
