@@ -31,7 +31,7 @@
 import type { Issues } from "@thomasfosterau/effect-forms";
 import { Path } from "@thomasfosterau/effect-forms";
 import type * as Duration from "effect/Duration";
-import { computeTainted, type TaintedFields } from "./Tainted.ts";
+import { computeTainted, taintedLeafPaths } from "./Tainted.ts";
 
 type FormPath = Issues.FormPath;
 
@@ -63,19 +63,6 @@ export interface FormListeners {
   readonly fields?: Record<string, FieldListener>;
 }
 
-/** Flatten a {@link TaintedFields} tree into the leaf paths it marks changed. */
-function taintedToPaths(tainted: TaintedFields, prefix: FormPath = []): FormPath[] {
-  const out: FormPath[] = [];
-  for (const key of Object.keys(tainted)) {
-    const value = tainted[key];
-    const segment: string | number = /^\d+$/.test(key) ? Number(key) : key;
-    const path = [...prefix, segment];
-    if (value === true) out.push(path);
-    else if (typeof value === "object") out.push(...taintedToPaths(value, path));
-  }
-  return out;
-}
-
 /**
  * The leaf paths that changed from `before` to `after`, each with its new
  * value. Built on {@link computeTainted}, so the same rules apply: array
@@ -83,7 +70,7 @@ function taintedToPaths(tainted: TaintedFields, prefix: FormPath = []): FormPath
  * the whole field rather than recursing.
  */
 export function changeEvents(before: unknown, after: unknown): ListenerEvent[] {
-  return taintedToPaths(computeTainted(before, after)).map((path) => ({
+  return taintedLeafPaths(computeTainted(before, after)).map((path) => ({
     path,
     value: Path.getAt(after, path),
   }));

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
-import { computeTainted, deepEqual, isAnyTainted, isTaintedAt } from "../src/Tainted.ts";
+import {
+  computeTainted,
+  deepEqual,
+  isAnyTainted,
+  isTaintedAt,
+  taintedLeafPaths,
+} from "../src/Tainted.ts";
 
 describe("deepEqual", () => {
   it("compares scalars, arrays, objects", () => {
@@ -55,5 +61,38 @@ describe("isAnyTainted / isTaintedAt", () => {
     expect(isTaintedAt(tainted, ["author", "name"])).toBe(true);
     expect(isTaintedAt(tainted, ["author"])).toBe(true);
     expect(isTaintedAt(tainted, ["missing"])).toBe(false);
+  });
+});
+
+describe("taintedLeafPaths", () => {
+  it("is empty for an empty tree", () => {
+    expect(taintedLeafPaths({})).toEqual([]);
+  });
+
+  it("lists top-level changed leaves", () => {
+    expect(taintedLeafPaths({ title: true })).toEqual([["title"]]);
+  });
+
+  it("walks nested objects into leaf paths", () => {
+    expect(taintedLeafPaths({ author: { name: true, bio: true }, title: true })).toEqual(
+      expect.arrayContaining([["author", "name"], ["author", "bio"], ["title"]]),
+    );
+  });
+
+  it("numbers array-index segments", () => {
+    expect(taintedLeafPaths({ tags: { 0: true, 2: true } })).toEqual(
+      expect.arrayContaining([
+        ["tags", 0],
+        ["tags", 2],
+      ]),
+    );
+  });
+
+  it("round-trips with computeTainted for a nested array-of-objects change", () => {
+    const tainted = computeTainted(
+      { items: [{ name: "a" }, { name: "b" }] },
+      { items: [{ name: "a" }, { name: "B" }] },
+    );
+    expect(taintedLeafPaths(tainted)).toEqual([["items", 1, "name"]]);
   });
 });

@@ -14,7 +14,7 @@ import type { FormStore } from "./FormStore.svelte.ts";
 
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
-type TypedFormErrors<A> = Errors.TypedFormErrors<A>;
+type FormErrors = Errors.FormErrors;
 
 /**
  * The minimal view of SvelteKit's `ActionResult` that {@link applyActionResult}
@@ -44,9 +44,6 @@ export function applyActionResult(
 ): boolean {
   if (result.type !== "failure" || !isFormActionData(result.data)) return false;
   const state = result.data.form;
-  form.data = state.data;
-  form.errors = state.errors as TypedFormErrors<unknown>;
-  form.valid = false;
-  form.posted = true;
+  form.setServerState(state.data, state.errors as FormErrors);
   return true;
 }

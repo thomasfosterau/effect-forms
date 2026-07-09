@@ -16,6 +16,30 @@
  * returned result), or — by default — a POST to the form's action (e.g. a
  * derived SvelteKit action) whose result is applied back to the store.
  *
+ * ## Validation engine v2
+ *
+ * `errors` merges two parallel trees (see {@link Errors.SourcedErrors}):
+ * `server` (the last submission's response) and `client` (browser-side
+ * validation — the schema, per-field validators, a builder's `refineEffect`
+ * refinements). A field's value changing clears *only that field's* server
+ * error — a `State.withError` uniqueness failure the user hasn't touched
+ * survives a client revalidation of some other field. `clientErrors` /
+ * `serverErrors` expose the per-source trees for a UI that wants to style
+ * them differently.
+ *
+ * `validators` (keyed by {@link Path.toString}) attach per-field sync/async
+ * validators (the `FieldValidators` shape — TanStack Form's `onChange(Async)`
+ * / `onBlur(Async)` vocabulary). Async validators run as Effect fibers: a new
+ * value interrupts the field's in-flight fiber before forking the next run —
+ * debounce + "latest wins" cancellation fall out of that alone (see
+ * {@link Validate.runAsyncFieldValidator}). `isValidating` /
+ * {@link FormStore.isValidatingAt} reflect any fiber still running; supply
+ * `layer` when a validator (or a builder's `refineEffect`) needs services.
+ *
+ * `Mode.RevalidateMode` (`options.mode.revalidate`, default `"onChange"`)
+ * governs what happens *after* a failed post in `onSubmit` mode: fixing a
+ * field re-validates it (clearing its error) without a resubmit.
+ *
  * @module effect-forms-svelte/FormStore
  */
 
@@ -30,8 +54,13 @@ import {
   Path,
   Result,
   State,
+  Validate,
 } from "@thomasfosterau/effect-forms";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import type * as Schema from "effect/Schema";
 import { createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
@@ -43,21 +72,31 @@ import {
   resultToUpdate,
 } from "./EnhanceCore.ts";
 import { dispatchChange, type FieldListener, type FormListeners } from "./Listeners.ts";
-import { computeTainted, isAnyTainted, isTaintedAt, type TaintedFields } from "./Tainted.ts";
+import {
+  computeTainted,
+  isAnyTainted,
+  isTaintedAt,
+  taintedLeafPaths,
+  type TaintedFields,
+} from "./Tainted.ts";
 
 // Terse local aliases onto the namespaced core exports (the public API is
 // `import { Form, State, … } from "@thomasfosterau/effect-forms"`).
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
 type FormErrors = Errors.FormErrors;
 type FormPath = Issues.FormPath;
+type FormIssue = Issues.FormIssue;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
 type TypedFormErrors<A> = Errors.TypedFormErrors<A>;
 type InputConstraint = Constraints.InputConstraint;
 type InputConstraints = Constraints.InputConstraints;
 type LeafFormatter = Issues.LeafFormatter;
-/** How a form validates (and optionally auto-submits) as the user types. */
+/** How a form validates (and optionally auto-submits, and revalidates after a post) as the user types. */
 export type FormMode = Mode.FormMode;
-const { getError, noErrors } = Errors;
+/** A field's sync / async validators — see {@link module:effect-forms/Validate}. */
+export type FieldValidators<A, R = never> = Validate.FieldValidators<A, R>;
+const { clearSourceAt, emptySourced, hasErrors, mergeSourced, noErrors, replaceAt, setSourceAt } =
+  Errors;
 const { getAt, setAt } = Path;
 const makeForm = Form.make;
 
@@ -173,7 +212,7 @@ export interface Submission<A, Message> {
 }
 
 /** Options for {@link createForm}. */
-export interface FormOptions<S extends Schema.Top, A, Message> {
+export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
   /** The schema to validate against in the browser (defaults to the bound schema). */
   readonly schema?: S;
   /**
@@ -191,6 +230,12 @@ export interface FormOptions<S extends Schema.Top, A, Message> {
    * walking the schema's AST instead.
    */
   readonly fields?: Field.FieldsRecord;
+  /**
+   * The builder itself, set automatically when {@link createForm} is given a
+   * {@link FormBuilder}. Its `refineEffect` refinements run client-side as a
+   * whole-form async validator whenever {@link FormStore.validate} runs.
+   */
+  readonly builder?: FormBuilder.FormBuilder<Field.FieldsRecord, R>;
   /** The action URL the form posts to (defaults to the current page's action). */
   readonly action?: string;
   /** Reset `data` back to the initial values after a successful submit. */
@@ -203,6 +248,19 @@ export interface FormOptions<S extends Schema.Top, A, Message> {
   readonly validationFormat?: LeafFormatter;
   /** Override how a submission is sent (default: `fetch` to the form's action). */
   readonly submit?: SubmitFn<A, Message>;
+  /**
+   * Per-field sync/async validators, keyed by {@link Path.toString} (e.g.
+   * `"author.name"`, `"tags[0]"`). See {@link FormStore.setFieldValidators} to
+   * register these dynamically instead (e.g. once an array item exists).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly validators?: Record<string, FieldValidators<any, R>>;
+  /**
+   * Services an async field validator or a builder's `refineEffect`
+   * refinement needs on its `R` channel. A `ManagedRuntime` is built from
+   * this once per store and reused for every client-side Effect run.
+   */
+  readonly layer?: Layer.Layer<R>;
   /**
    * Handle the submission entirely in JS: given the current data, return the
    * {@link FormActionResult} to apply (e.g. by calling an API client). When set,
@@ -267,12 +325,13 @@ const defaultSubmit = async <A, Message>(
 /** Whether `index` is a valid position in an array of `length`. */
 const inRange = (index: number, length: number): boolean => index >= 0 && index < length;
 
+/** A field trigger a validator or the revalidate mode reacts to. */
+type FieldTrigger = "change" | "blur";
+
 /** A reactive form, returned by {@link createForm}. */
-export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
+export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R = never> {
   /** The reactive form data — bind inputs to its fields. */
   data: A = $state()!;
-  /** The current nested error tree, typed to the form data's shape. */
-  errors: TypedFormErrors<A> = $state(noErrors as TypedFormErrors<A>);
   /** The current status message, if any. */
   message: Message | undefined = $state();
   /** Native input constraints derived server-side. */
@@ -285,6 +344,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   posted = $state(false);
   /** Whether the last validation/submit was valid. */
   valid = $state(false);
+  /** How many times {@link FormStore.enhance}'s submit handler has actually attempted a submission. */
+  submissionAttempts = $state(0);
 
   /** The values sent by the last submission (for revert / changed-since-submit). */
   #lastSubmitted: A | undefined = $state();
@@ -304,17 +365,58 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
    * a field dirty.
    */
   #dirtied: Record<string, boolean> = $state({});
+  /** Parallel error trees — see {@link Errors.SourcedErrors}. `errors` is their merged view. */
+  #sourced: Errors.SourcedErrors = $state(emptySourced);
+  /** Whether *any* validation (whole-form or per-field) has run yet — see {@link canSubmit}. */
+  #hasValidated = $state(false);
+  /** Per-field / whole-form ("") async-validation-in-flight flags, keyed by `"<path>:<trigger>"` or `""`. */
+  #validating: Record<string, boolean> = $state({});
+  /** Per-key run counter guarding `#validating` writes — see {@link FormStore.#runValidatorFiber}. */
+  #validatingGeneration: Record<string, number> = {};
+  /** The outcome of the last completed submission, for {@link isSubmitSuccessful}. */
+  #lastSubmitOutcome: "success" | "failure" | undefined = $state(undefined);
 
   readonly id: string;
   /** The tainted baseline `tainted`/`isTainted` compare against — rebased on every successful submit. */
   #initial: A;
-  readonly #options: FormOptions<S, A, Message>;
+  readonly #options: FormOptions<S, A, Message, R>;
   readonly #mode: Mode.ParsedMode;
   readonly #attachmentKey = createAttachmentKey();
+  readonly #runtime: ManagedRuntime.ManagedRuntime<R, never>;
   #autoSubmitNode: HTMLFormElement | undefined;
   #validateTimer: ReturnType<typeof setTimeout> | undefined;
   /** Per-field-listener debounce timers, keyed by `"change:<path>"` / `"blur:<path>"`. */
   readonly #listenerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Per-field validators, keyed by {@link Path.toString}; seeded from `options.validators`. */
+  #fieldValidators: Record<string, FieldValidators<unknown, R>>;
+  /** In-flight async-validator fibers, keyed by `"<path>:<trigger>"` (fields) or `""` (whole-form `refineEffect`). */
+  #fibers: Record<string, Fiber.Fiber<unknown, never>> = {};
+  /** The error paths the last `refineEffect` run set, so the next run can clear exactly those before merging fresh ones. */
+  #lastRefinementPaths: FormPath[] = [];
+  /** The data snapshot the field-tracking watcher last diffed against. */
+  #previousData: A;
+
+  /** The current nested error tree (server errors merged with client errors), typed to the form data's shape. */
+  readonly errors: TypedFormErrors<A> = $derived.by(() => mergeSourced(this.#sourced) as never);
+  /** Client-side-sourced errors only (schema, per-field validators, `refineEffect`). */
+  readonly clientErrors: TypedFormErrors<A> = $derived.by(() => this.#sourced.client as never);
+  /** Server-sourced errors only (the last submission's response). */
+  readonly serverErrors: TypedFormErrors<A> = $derived.by(() => this.#sourced.server as never);
+  /** Whether any async field validator or `refineEffect` run is currently in flight. */
+  readonly isValidating: boolean = $derived(Object.values(this.#validating).some(Boolean));
+  /** Whether the form has ever been submitted (attempted). */
+  readonly isSubmitted: boolean = $derived(this.submissionAttempts > 0);
+  /** Whether the most recently *completed* submission succeeded. `false` before any submit completes. */
+  readonly isSubmitSuccessful: boolean = $derived(this.#lastSubmitOutcome === "success");
+  /**
+   * Whether the submit button should be enabled: not mid-submit, not
+   * mid-validation, and either nothing has been validated yet (a pristine
+   * form isn't presumptively invalid — the server gets the first look) or the
+   * last validation run said valid.
+   */
+  readonly canSubmit: boolean = $derived(
+    !this.submitting && !this.isValidating && (!this.#hasValidated || this.valid),
+  );
 
   /** The tainted-field tree, re-derived as `data` changes. */
   readonly tainted: TaintedFields = $derived.by(() => computeTainted(this.#initial, this.data));
@@ -327,17 +429,32 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   /** Whether anything has changed since the last submission. */
   readonly hasChangedSinceSubmit: boolean = $derived(isAnyTainted(this.changedSinceSubmit));
 
-  constructor(initial: FormState<A, Message>, options: FormOptions<S, A, Message> = {}) {
+  constructor(initial: FormState<A, Message>, options: FormOptions<S, A, Message, R> = {}) {
     this.id = initial.id;
     this.#initial = structuredClone(initial.data);
+    this.#previousData = structuredClone(initial.data);
     this.#options = options;
     this.#mode = Mode.parse(options.mode);
+    // `Layer.empty` is `Layer<never>`; when `options.layer` is omitted the
+    // caller is asserting `R` is `never` (no validator / refineEffect
+    // refinement on this store demands a service) — the same "caller
+    // asserts" contract `validateValueSync` documents for a sync-only schema.
+    this.#runtime = ManagedRuntime.make(options.layer ?? (Layer.empty as Layer.Layer<R>));
+    this.#fieldValidators = {
+      ...(options.validators as Record<string, FieldValidators<unknown, R>> | undefined),
+    };
     this.data = structuredClone(initial.data);
-    this.errors = initial.errors as TypedFormErrors<A>;
+    this.#sourced = { client: noErrors, server: (initial.errors ?? noErrors) as FormErrors };
     this.message = initial.message;
     this.constraints = initial.constraints ?? {};
     this.posted = initial.posted;
     this.valid = initial.valid;
+    // `canSubmit` treats "never validated" as presumptively valid (a pristine
+    // form isn't guilty until proven so); hydrating from a `posted` state
+    // means something already *has* judged it, so `valid` must be trusted
+    // from the start — otherwise a server-rejected `FormState` briefly (or
+    // permanently, if nothing re-triggers validation) reports `canSubmit: true`.
+    this.#hasValidated = initial.posted;
   }
 
   /**
@@ -360,18 +477,37 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
 
   /** The messages currently attached to `path` (for dynamic / nested paths). */
   errorsAt(path: FormPath): readonly string[] {
-    return getError(this.errors as FormErrors, path) ?? [];
+    return Errors.getError(this.errors as FormErrors, path) ?? [];
   }
 
-  /** Re-validate the whole form against the schema (if one was supplied). */
+  /** Whether the async validator(s) at `path` are currently running. */
+  isValidatingAt(path: FormPath): boolean {
+    const key = Path.toString(path);
+    return this.#validating[`${key}:change`] === true || this.#validating[`${key}:blur`] === true;
+  }
+
+  /**
+   * Register (or replace) `path`'s validators — the option-driven equivalent
+   * of attaching `validators` at {@link createForm} time, for fields that
+   * don't exist until later (e.g. an appended array item).
+   */
+  setFieldValidators(path: FormPath, validators: FieldValidators<unknown, R>): void {
+    this.#fieldValidators = { ...this.#fieldValidators, [Path.toString(path)]: validators };
+  }
+
+  /** Re-validate the whole form against the schema (if one was supplied), plus a builder's `refineEffect` refinements. */
   validate(): boolean {
-    if (!this.#options.schema) return this.valid;
-    this.errors = validateData(
-      this.#options.schema,
-      this.data,
-      this.#options.validationFormat,
-    ) as TypedFormErrors<A>;
-    this.valid = Object.keys(this.errors).length === 0;
+    if (this.#options.schema) {
+      const clientErrors = validateData(
+        this.#options.schema,
+        this.data,
+        this.#options.validationFormat,
+      );
+      this.#sourced = { ...this.#sourced, client: clientErrors };
+      this.#hasValidated = true;
+      this.#recomputeValid();
+    }
+    this.#runRefineEffect();
     return this.valid;
   }
 
@@ -385,6 +521,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   setValue(path: FormPath, value: unknown): void {
     this.data = setAt(this.data, path, value);
     this.#markDirty(path);
+    this.#previousData = structuredClone(this.data);
+    this.#onFieldChanged(path);
   }
 
   /** Read the value at `path`. */
@@ -445,13 +583,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   }
 
   /**
-   * Handle a field losing focus: mark it touched, fire that field's `onBlur`
-   * listener (if any, debounced per its config), and — in `onBlur` mode —
-   * validate the form (auto-submitting if configured and something changed
-   * since the last submit).
+   * Handle a field losing focus: mark it touched, run its `onBlur` /
+   * `onBlurAsync` validators (or, once posted, the revalidate-on-blur mode),
+   * fire that field's `onBlur` listener (if any, debounced per its config),
+   * and — in `onBlur` validation mode — validate the whole form
+   * (auto-submitting if configured and something changed since the last
+   * submit).
    */
   handleBlur(path: FormPath): void {
     this.setTouched(path, true);
+    this.#onFieldBlurred(path);
     const key = Path.toString(path);
     const field = this.#options.listeners?.fields?.[key];
     if (field?.onBlur) {
@@ -547,6 +688,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     const item = value !== undefined ? value : this.#defaultItem(path);
     this.data = setAt(this.data, path, [...current, item]);
     this.#markDirty(path);
+    this.#previousData = structuredClone(this.data);
+    this.#onFieldChanged(path);
   }
 
   /**
@@ -604,6 +747,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     );
     this.#markDirty(path);
     this.#remapArrayIndices(path, Path.removeAt(index));
+    this.#previousData = structuredClone(this.data);
+    this.#onFieldChanged(path);
   }
 
   /** Swap two items in the array at `path`, swapping their per-index touched flags / errors too. */
@@ -617,6 +762,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     this.data = setAt(this.data, path, next);
     this.#markDirty(path);
     this.#remapArrayIndices(path, Path.swapAt(indexA, indexB));
+    this.#previousData = structuredClone(this.data);
+    this.#onFieldChanged(path);
   }
 
   /** Move the item at `from` to `to` within the array at `path`, carrying its per-index state along. */
@@ -629,6 +776,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     this.data = setAt(this.data, path, next);
     this.#markDirty(path);
     this.#remapArrayIndices(path, Path.moveAt(from, to));
+    this.#previousData = structuredClone(this.data);
+    this.#onFieldChanged(path);
   }
 
   /**
@@ -637,7 +786,11 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
    * index-shifting mutation. See {@link Path.IndexMap}.
    */
   #remapArrayIndices(path: FormPath, map: Path.IndexMap): void {
-    this.errors = Errors.remapIndices(this.errors as FormErrors, path, map) as TypedFormErrors<A>;
+    const sourced = this.#sourcedSnapshot();
+    this.#sourced = {
+      client: Errors.remapIndices(sourced.client, path, map),
+      server: Errors.remapIndices(sourced.server, path, map),
+    };
     this.#touched = Path.remapKeyedRecord(this.#touched, path, map);
   }
 
@@ -645,7 +798,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   revertToLastSubmit(): void {
     if (this.#lastSubmitted === undefined) return;
     this.data = structuredClone(this.#lastSubmitted);
-    this.errors = noErrors as TypedFormErrors<A>;
+    this.#previousData = structuredClone(this.data);
+    this.#sourced = emptySourced;
   }
 
   /**
@@ -685,6 +839,193 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     }
   }
 
+  #recomputeValid(): void {
+    this.valid = !hasErrors(mergeSourced(this.#sourced));
+  }
+
+  /**
+   * A plain (non-`$state`-proxy) snapshot of `#sourced`. `clearSourceAt` /
+   * `setSourceAt` / `replaceAt` in the framework-neutral core `structuredClone`
+   * their `errors` argument — which throws `DataCloneError` on a live Svelte
+   * `$state` proxy — so anywhere `#sourced` (or one of its two branches) feeds
+   * one of those calls, snapshot it first.
+   */
+  #sourcedSnapshot(): Errors.SourcedErrors {
+    return $state.snapshot(this.#sourced) as Errors.SourcedErrors;
+  }
+
+  /** Whether {@link Mode.ParsedMode.revalidate} names this field trigger. */
+  #revalidatesOn(trigger: FieldTrigger): boolean {
+    if (this.#mode.revalidate === "never") return false;
+    return this.#mode.revalidate === "onChange" ? trigger === "change" : trigger === "blur";
+  }
+
+  /** Interrupt (fire-and-forget) any fiber running under `key`, if one is in flight. */
+  #interruptFiber(key: string): void {
+    const previous = this.#fibers[key];
+    if (previous) Effect.runFork(Fiber.interrupt(previous));
+    delete this.#fibers[key];
+  }
+
+  /**
+   * Fork `effect` under `key` as an interrupt-on-supersede fiber, toggling
+   * `#validating[key]` for its duration: any fiber already running under
+   * `key` is interrupted first (this — not a timer — is what gives "latest
+   * wins"; see {@link Validate.runAsyncFieldValidator}). The old and new
+   * fiber's `#validating` writes are guarded by a per-key generation counter
+   * — `Effect.runFork(Fiber.interrupt(previous))` is fire-and-forget, so the
+   * *old* fiber's `Effect.ensuring` finalizer can run after the *new* one has
+   * already flipped `#validating[key]` back to `true`; without the guard that
+   * finalizer would clear it while the new run is still genuinely in flight.
+   */
+  #runValidatorFiber(key: string, effect: Effect.Effect<unknown, never, R>): void {
+    this.#interruptFiber(key);
+    const generation = (this.#validatingGeneration[key] ?? 0) + 1;
+    this.#validatingGeneration[key] = generation;
+    this.#validating = { ...this.#validating, [key]: true };
+
+    const program = effect.pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (this.#validatingGeneration[key] === generation) {
+            this.#validating = { ...this.#validating, [key]: false };
+          }
+        }),
+      ),
+    );
+
+    this.#fibers[key] = this.#runtime.runFork(program);
+  }
+
+  /**
+   * Handle a field's value actually changing: the field's server-sourced
+   * error (if any) is superseded — clear it — then run whichever validators
+   * apply for the `"change"` trigger.
+   */
+  #onFieldChanged(path: FormPath): void {
+    this.#sourced = clearSourceAt(this.#sourcedSnapshot(), "server", path);
+    this.#runFieldTrigger(path, "change");
+    this.#recomputeValid();
+  }
+
+  /** Handle a field losing focus: run whichever validators apply for the `"blur"` trigger. */
+  #onFieldBlurred(path: FormPath): void {
+    this.#runFieldTrigger(path, "blur");
+    this.#recomputeValid();
+  }
+
+  /**
+   * Run `path`'s sync + async validators for `trigger` (resolved by {@link
+   * Validate.resolveFieldTrigger}). When neither is registered, falls back to
+   * a whole-schema {@link validateField} re-run once the form has been
+   * posted and {@link Mode.ParsedMode.revalidate} names this trigger — the
+   * "fixing a field clears its error without a resubmit" behaviour.
+   */
+  #runFieldTrigger(path: FormPath, trigger: FieldTrigger): void {
+    const validators = this.#fieldValidators[Path.toString(path)];
+    const value = getAt(this.data, path);
+    const resolved = Validate.resolveFieldTrigger(validators, trigger);
+
+    if (resolved.sync) {
+      this.#applySyncFieldValidator(path, resolved.sync, value);
+    } else if (this.#shouldFallBackToRevalidate(trigger)) {
+      this.#applyRevalidateFallback(path);
+    }
+
+    if (resolved.async) {
+      this.#hasValidated = true;
+      this.#runAsyncFieldValidator(path, trigger, resolved.async, value, resolved.asyncDebounceMs);
+    }
+  }
+
+  /** Run a field's registered sync validator and set its client messages. */
+  #applySyncFieldValidator(
+    path: FormPath,
+    validator: Validate.SyncFieldValidator<unknown>,
+    value: unknown,
+  ): void {
+    this.#setClientMessagesAt(path, Validate.runSyncFieldValidator(validator, value));
+    this.#hasValidated = true;
+  }
+
+  /** Whether, absent a registered validator, a whole-schema fallback revalidation applies for `trigger`. */
+  #shouldFallBackToRevalidate(trigger: FieldTrigger): boolean {
+    return this.posted && this.#revalidatesOn(trigger) && this.#options.schema !== undefined;
+  }
+
+  /** Re-run the whole-schema client validation and adopt just `path`'s messages. */
+  #applyRevalidateFallback(path: FormPath): void {
+    this.#sourced = setSourceAt(this.#sourcedSnapshot(), "client", path, this.validateField(path));
+    this.#hasValidated = true;
+  }
+
+  /** Replace `path`'s client messages with `issues`' messages (folding {@link FormIssue}s at the field's own path). */
+  #setClientMessagesAt(path: FormPath, issues: ReadonlyArray<FormIssue>): void {
+    this.#sourced = setSourceAt(
+      this.#sourcedSnapshot(),
+      "client",
+      path,
+      issues.map((issue) => issue.message),
+    );
+  }
+
+  /**
+   * Run `path`'s `trigger` async validator as an interrupt-on-supersede
+   * fiber (via {@link FormStore.#runValidatorFiber}) — the result (unless
+   * the fiber is itself later interrupted) replaces the field's client
+   * messages.
+   */
+  #runAsyncFieldValidator(
+    path: FormPath,
+    trigger: FieldTrigger,
+    validator: Validate.AsyncFieldValidator<unknown, R>,
+    value: unknown,
+    debounceMs: number,
+  ): void {
+    const fiberKey = `${Path.toString(path)}:${trigger}`;
+    this.#runValidatorFiber(
+      fiberKey,
+      Validate.runAsyncFieldValidator(validator, value, debounceMs).pipe(
+        Effect.tap((issues) =>
+          Effect.sync(() => {
+            this.#setClientMessagesAt(path, issues);
+            this.#recomputeValid();
+          }),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Run the builder's `refineEffect` refinements (client-side, when the form
+   * was seeded from a {@link FormBuilder}) as a whole-form async validator —
+   * interrupt-on-supersede, same as a field's async validator (see {@link
+   * FormStore.#runValidatorFiber}). The previous run's issue *paths* are
+   * cleared before the fresh ones are merged in, so a superseded run can't
+   * leave stale messages behind without disturbing schema-derived client
+   * errors set by {@link validate} in between.
+   */
+  #runRefineEffect(): void {
+    const builder = this.#options.builder;
+    if (!builder || FormBuilder.asyncRefinements(builder).length === 0) return;
+
+    this.#runValidatorFiber(
+      "",
+      FormBuilder.runAsyncRefinements(builder, this.data as never).pipe(
+        Effect.tap((issues) =>
+          Effect.sync(() => {
+            let client = this.#sourcedSnapshot().client;
+            for (const path of this.#lastRefinementPaths) client = replaceAt(client, path, []);
+            client = Errors.mergeErrors(client, Errors.issuesToErrors(issues));
+            this.#lastRefinementPaths = issues.map((issue) => issue.path);
+            this.#sourced = { ...this.#sourced, client };
+            this.#recomputeValid();
+          }),
+        ),
+      ),
+    );
+  }
+
   /**
    * Reset `data`, `errors`, and `message` back to the tainted baseline. Pass
    * `values` to re-seed that baseline first (e.g. adopting a different
@@ -692,14 +1033,21 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
    */
   reset(values?: A): void {
     if (values !== undefined) this.#initial = structuredClone(values);
+    for (const key of Object.keys(this.#fibers)) this.#interruptFiber(key);
     this.data = structuredClone(this.#initial);
-    this.errors = noErrors as TypedFormErrors<A>;
+    this.#previousData = structuredClone(this.data);
+    this.#sourced = emptySourced;
     this.message = undefined;
     this.valid = false;
     this.posted = false;
     this.#touched = {};
     this.#dirtied = {};
     this.#lastSubmitted = undefined;
+    this.#hasValidated = false;
+    this.#validating = {};
+    this.#lastRefinementPaths = [];
+    this.submissionAttempts = 0;
+    this.#lastSubmitOutcome = undefined;
   }
 
   /** A serialisable snapshot for SvelteKit's `snapshot` capture/restore. */
@@ -725,60 +1073,100 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     return structuredClone($state.snapshot(this.data)) as A;
   }
 
-  /** Restore from a {@link capture} snapshot. */
+  /** Restore from a {@link capture} snapshot (its merged tree becomes the server tree; the client tree clears). */
   restore(snapshot: FormState<A, Message>): void {
     this.data = structuredClone(snapshot.data);
-    this.errors = snapshot.errors as TypedFormErrors<A>;
+    this.#previousData = structuredClone(this.data);
+    this.#sourced = { client: noErrors, server: snapshot.errors };
     this.message = snapshot.message;
     this.valid = snapshot.valid;
     this.posted = snapshot.posted;
     this.constraints = snapshot.constraints ?? {};
+    this.#hasValidated = snapshot.posted;
+  }
+
+  /**
+   * Apply server-sourced `data` + `errors` directly, bypassing a submit
+   * round-trip — for glue code that repopulates the store from a derived
+   * result it received some other way (e.g.
+   * {@link module:effect-forms-svelte/SvelteKit}'s `applyActionResult`, from
+   * a SvelteKit form action's failure). Sets `posted` so
+   * {@link shouldShowError} shows the new errors immediately; `valid` is
+   * always `false` (the caller only reaches for this on a failure result).
+   */
+  setServerState(data: A, errors: FormErrors): void {
+    this.data = data;
+    this.#previousData = structuredClone(data);
+    this.#sourced = { client: noErrors, server: errors };
+    this.valid = false;
+    this.posted = true;
+    this.#hasValidated = true;
   }
 
   #applyUpdate(update: FormUpdate<A, Message>, result: FormActionResult<A, Message>): void {
     this.#options.onUpdate?.({ update, result });
-    if (update.redirect !== undefined) {
-      if (this.#options.onRedirect) this.#options.onRedirect({ location: update.redirect });
-      else if (typeof window !== "undefined") window.location.assign(update.redirect);
-      return;
-    }
-    if (update.error !== undefined) {
-      this.#options.onError?.({ error: update.error });
-      return;
-    }
-    if (update.data !== undefined) {
-      // An auto-submitting (live-save) form keeps its local data as the source
-      // of truth: adopting the server's echo would discard keystrokes made
-      // during the round-trip and, when the echo isn't byte-identical (a
-      // trimmed or server-stamped field), retrigger the change watcher — an
-      // extra submit, or an endless loop for a non-idempotent echo. On a
-      // successful submit the tainted baseline still rebases to whatever
-      // `data` ends up holding, so `isTainted` (and the `beforeunload` guard
-      // it drives) reflects what was actually just saved, not the original
-      // seed.
-      const applied = computeDataApplication({
-        isSuccess: result._tag === "Success",
-        appliedData: update.data,
-        initial: this.#initial,
-        // The snapshot actually sent (see `#runSubmit`), not the live `data` —
-        // further edits may have landed while this request was in flight.
-        submittedData: this.#lastSubmitted ?? this.data,
-        resetForm: this.#options.resetForm ?? false,
-        autoSubmit: this.#mode.autoSubmit,
-      });
-      if (applied.data !== undefined) this.data = structuredClone(applied.data);
-      if (applied.rebaseTo !== undefined) {
-        this.#initial = structuredClone(applied.rebaseTo);
-        this.#touched = {};
-      }
-    }
-    if (update.errors !== undefined) this.errors = update.errors as TypedFormErrors<A>;
+    if (update.redirect !== undefined) return this.#applyRedirect(update.redirect);
+    if (update.error !== undefined) return this.#applyError(update.error);
+    if (update.data !== undefined) this.#applySubmittedData(update.data, result);
+
+    // A submission result is authoritative: it superseded whatever the client
+    // last computed, so the client tree clears and the response becomes the
+    // new server tree (server errors are then cleared field-by-field as the
+    // user edits / revalidates — see #onFieldChanged / #runFieldTrigger).
+    this.#sourced = { client: noErrors, server: (update.errors ?? noErrors) as FormErrors };
+    this.#hasValidated = true;
     this.message = update.message;
     if (update.valid !== undefined) this.valid = update.valid;
+    this.#lastSubmitOutcome = this.valid ? "success" : "failure";
     this.posted = true;
     this.#options.onUpdated?.({
       form: { data: this.data, errors: this.errors as FormErrors, valid: this.valid },
     });
+  }
+
+  #applyRedirect(location: string): void {
+    this.#lastSubmitOutcome = "success";
+    if (this.#options.onRedirect) this.#options.onRedirect({ location });
+    else if (typeof window !== "undefined") window.location.assign(location);
+  }
+
+  #applyError(error: string): void {
+    this.#lastSubmitOutcome = "failure";
+    this.#options.onError?.({ error });
+  }
+
+  /**
+   * Adopt (or discard) the submission's echoed data via {@link
+   * computeDataApplication} and rebase the tainted baseline. An
+   * auto-submitting (live-save) form keeps its local data as the source of
+   * truth: adopting the server's echo would discard keystrokes made during
+   * the round-trip and, when the echo isn't byte-identical (a trimmed or
+   * server-stamped field), retrigger the change watcher — an extra submit,
+   * or an endless loop for a non-idempotent echo. On a successful submit the
+   * tainted baseline still rebases to whatever `data` ends up holding, so
+   * `isTainted` (and the `beforeunload` guard it drives) reflects what was
+   * actually just saved, not the original seed.
+   */
+  #applySubmittedData(data: A, result: FormActionResult<A, Message>): void {
+    const applied = computeDataApplication({
+      isSuccess: result._tag === "Success",
+      appliedData: data,
+      initial: this.#initial,
+      // The snapshot actually sent (see `#runSubmit`), not the live `data` —
+      // further edits may have landed while this request was in flight.
+      submittedData: this.#lastSubmitted ?? this.data,
+      resetForm: this.#options.resetForm ?? false,
+      autoSubmit: this.#mode.autoSubmit,
+    });
+    if (applied.data !== undefined) this.data = structuredClone(applied.data);
+    if (applied.rebaseTo !== undefined) {
+      this.#initial = structuredClone(applied.rebaseTo);
+      this.#touched = {};
+    }
+    // Resync the field-tracking watcher's baseline to whatever `data` ends up
+    // holding post-submit, so it doesn't re-diff (and re-run field validators
+    // / re-clear server errors for) the submission's own echo.
+    this.#previousData = structuredClone(this.data);
   }
 
   async #runSubmit(node: HTMLFormElement, submitter: HTMLElement | null = null): Promise<void> {
@@ -805,6 +1193,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     // Snapshot what we're sending so `revertToLastSubmit` / `changedSinceSubmit`
     // measure against the submitted values.
     this.#lastSubmitted = this.#detachedData();
+    this.submissionAttempts++;
 
     this.submitting = true;
     const delayMs = this.#options.delayMs ?? 500;
@@ -827,6 +1216,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       this.#applyUpdate(resultToUpdate(result), result);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Submission failed";
+      this.#lastSubmitOutcome = "failure";
       this.#options.onError?.({ error: message });
     } finally {
       clearTimeout(delayTimer);
@@ -860,11 +1250,21 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
 
     this.#options.listeners?.onMount?.({ data: $state.snapshot(this.data) });
 
-    // In `onChange` mode, re-validate (and maybe auto-submit) whenever the data
-    // changes — but not on the pristine initial render. Independent of mode,
-    // also diff the data tree into changed paths and dispatch any configured
-    // change listeners, so listeners fire whichever mode the form validates
-    // in. An effect root gives us explicit teardown alongside the DOM listeners.
+    // Two independent watchers over `data`, both rooted so they get explicit
+    // teardown alongside the DOM listeners:
+    //  - the `onChange`-mode one re-validates (and maybe auto-submits) the
+    //    whole form, debounced by `mode.debounce`, and dispatches any
+    //    configured change listeners (independent of mode, so listeners fire
+    //    whichever mode the form validates in);
+    //  - the field-tracking one diffs against the last-seen snapshot and runs
+    //    per-field validators / clears superseded server errors for exactly
+    //    the paths that changed — independent of `mode.validation`, since a
+    //    field's own validators and the post-submit revalidate mode both
+    //    apply regardless of the whole-form trigger. Always on (not gated on
+    //    whether any validator is registered yet): `setFieldValidators` can
+    //    register one after mount (its documented use case — a field that
+    //    doesn't exist until an array item is appended), and a gate evaluated
+    //    only at mount time would silently never watch for it.
     const dispatchListeners = this.#buildDispatchListeners();
     let stopWatching: (() => void) | undefined;
     if (this.#mode.validation === "onChange" || dispatchListeners !== undefined) {
@@ -883,14 +1283,25 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       });
     }
 
+    const stopFieldWatching = $effect.root(() => {
+      $effect(() => {
+        const snapshot = $state.snapshot(this.data) as A;
+        const changed = taintedLeafPaths(computeTainted(this.#previousData, snapshot));
+        this.#previousData = snapshot;
+        for (const path of changed) this.#onFieldChanged(path);
+      });
+    });
+
     return {
       destroy: () => {
         node.removeEventListener("submit", handleSubmit);
         if (typeof window !== "undefined") window.removeEventListener("beforeunload", beforeUnload);
         stopWatching?.();
+        stopFieldWatching?.();
         clearTimeout(this.#validateTimer);
         for (const timer of this.#listenerTimers.values()) clearTimeout(timer);
         this.#listenerTimers.clear();
+        for (const key of Object.keys(this.#fibers)) this.#interruptFiber(key);
         if (this.#autoSubmitNode === node) this.#autoSubmitNode = undefined;
       },
     };
@@ -924,7 +1335,8 @@ type BuiltSchema<TFields extends Field.FieldsRecord, R> = Schema.Codec<
 export type FormBuilderOptions<TFields extends Field.FieldsRecord, R, Message> = FormOptions<
   BuiltSchema<TFields, R>,
   Field.EncodedFromFields<TFields>,
-  Message
+  Message,
+  R
 > & {
   /** Blank-form values. Defaults to a schema-derived encoded blank per field. */
   readonly defaults?: Field.EncodedFromFields<TFields>;
@@ -936,41 +1348,47 @@ export type FormBuilderOptions<TFields extends Field.FieldsRecord, R, Message> =
  * Create a reactive {@link FormStore}. Three sources are accepted:
  *
  * - a {@link FormBuilder} — the schema, blank defaults, and array-item defaults
- *   are all derived from the builder (client validation is wired automatically);
+ *   are all derived from the builder (client validation, including
+ *   `refineEffect` refinements, is wired automatically);
  * - `{ schema, defaults }` — seed a blank form (wrapping the core's `makeForm`);
  * - a server-produced {@link FormState} — hydrate from it (schema in `options`).
  */
 export function createForm<TFields extends Field.FieldsRecord, R, Message = unknown>(
   builder: FormBuilder.FormBuilder<TFields, R>,
   options?: FormBuilderOptions<TFields, R, Message>,
-): FormStore<BuiltSchema<TFields, R>, Field.EncodedFromFields<TFields>, Message>;
-export function createForm<S extends Schema.Top, Message = unknown>(
+): FormStore<BuiltSchema<TFields, R>, Field.EncodedFromFields<TFields>, Message, R>;
+export function createForm<S extends Schema.Top, Message = unknown, R = never>(
   seed: FormSeed<S>,
-  options?: FormOptions<S, S["Type"], Message>,
-): FormStore<S, S["Type"], Message>;
-export function createForm<S extends Schema.Top, A = S["Type"], Message = unknown>(
+  options?: FormOptions<S, S["Type"], Message, R>,
+): FormStore<S, S["Type"], Message, R>;
+export function createForm<S extends Schema.Top, A = S["Type"], Message = unknown, R = never>(
   initial: FormState<A, Message>,
-  options: FormOptions<S, A, Message>,
-): FormStore<S, A, Message>;
+  options: FormOptions<S, A, Message, R>,
+): FormStore<S, A, Message, R>;
 export function createForm(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   source: FormBuilder.FormBuilder<any, any> | FormSeed<Schema.Top> | FormState<unknown, unknown>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options: FormOptions<Schema.Top, any, any> & {
+  options: FormOptions<Schema.Top, any, any, any> & {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     defaults?: any;
     id?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = {},
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): FormStore<Schema.Top, any, any> {
+): FormStore<Schema.Top, any, any, any> {
   if (FormBuilder.isFormBuilder(source)) {
     const schema = FormBuilder.buildSchema(source) as Schema.Top;
     const form = Form.fromBuilder(source, {
       ...(options.defaults !== undefined ? { defaults: options.defaults as never } : {}),
       ...(options.id !== undefined ? { id: options.id } : {}),
     });
-    return new FormStore(form.empty(), { ...options, schema, fields: source.fields });
+    return new FormStore(form.empty(), {
+      ...options,
+      schema,
+      fields: source.fields,
+      builder: source,
+    });
   }
   const isSeed = "defaults" in source && "schema" in source;
   if (isSeed) {

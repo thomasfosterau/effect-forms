@@ -90,3 +90,27 @@ export function isTaintedAt(tainted: TaintedFields, path: FormPath): boolean {
   if (typeof node === "boolean") return node;
   return isAnyTainted(node);
 }
+
+/**
+ * Flatten a {@link TaintedFields} tree into the list of leaf {@link FormPath}s
+ * that actually changed, in depth-first order — the per-field-changed events
+ * a reactive store needs to run per-field validators / clear a superseded
+ * server error at exactly the field that moved (as opposed to `isAnyTainted`,
+ * which only says *something* changed).
+ */
+export function taintedLeafPaths(tainted: TaintedFields): FormPath[] {
+  const out: FormPath[] = [];
+
+  const walk = (node: TaintedFields, path: Array<string | number>): void => {
+    for (const key of Object.keys(node)) {
+      const value = node[key];
+      if (value === undefined) continue;
+      const segment: string | number = /^\d+$/.test(key) ? Number(key) : key;
+      if (value === true) out.push([...path, segment]);
+      else if (typeof value === "object") walk(value, [...path, segment]);
+    }
+  };
+
+  walk(tainted, []);
+  return out;
+}
