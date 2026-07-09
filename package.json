@@ -26,11 +26,11 @@
     "@effect/language-service": "catalog:",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@thomasfosterau/test-config": "workspace:*",
-    "@types/node": "^26.1.0",
-    "svelte": "^5.56.4",
-    "svelte-check": "^4.7.1"
+    "@types/node": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:"
   },
   "peerDependencies": {
-    "svelte": "^5.0.0"
+    "svelte": "catalog:"
   }
 }
