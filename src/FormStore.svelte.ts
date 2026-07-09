@@ -155,6 +155,13 @@ export interface Submission<A, Message> {
   readonly formData: FormData;
   /** The form element being submitted. */
   readonly form: HTMLFormElement;
+  /**
+   * The submit button that triggered this submission (its `name`/`value` is
+   * already folded into {@link Submission.formData}, matching native
+   * `new FormData(form, submitter)` semantics), or `null` for an auto-submit
+   * (no button was clicked).
+   */
+  readonly submitter: HTMLElement | null;
   /** Abort the submission entirely (no network request, no result applied). */
   readonly cancel: () => void;
   /**
@@ -630,11 +637,21 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
       id: this.id,
       valid: this.valid,
       posted: this.posted,
-      data: structuredClone(this.data),
+      data: this.#detachedData(),
       errors: this.errors as FormErrors,
       message: this.message,
       constraints: this.constraints,
     };
+  }
+
+  /**
+   * An independent deep copy of `data`, detached from the live `$state`
+   * proxy. `structuredClone` can't clone the proxy directly (Node's
+   * structured-clone algorithm rejects it); take a plain snapshot first, per
+   * Svelte's own guidance for this exact case.
+   */
+  #detachedData(): A {
+    return structuredClone($state.snapshot(this.data)) as A;
   }
 
   /** Restore from a {@link capture} snapshot. */
@@ -693,14 +710,18 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
     });
   }
 
-  async #runSubmit(node: HTMLFormElement): Promise<void> {
-    const formData = new FormData(node);
+  async #runSubmit(node: HTMLFormElement, submitter: HTMLElement | null = null): Promise<void> {
+    // `new FormData(node, submitter)` folds the clicked button's name/value in,
+    // matching the native no-JS POST; the auto-submit path calls this with no
+    // submitter by definition, so it keeps its current (button-less) body.
+    const formData = new FormData(node, submitter);
     let cancelled = false;
     let resolved: FormActionResult<A, Message> | undefined;
     await this.#options.onSubmit?.({
       data: this.data,
       formData,
       form: node,
+      submitter,
       cancel: () => {
         cancelled = true;
       },
@@ -712,7 +733,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
 
     // Snapshot what we're sending so `revertToLastSubmit` / `changedSinceSubmit`
     // measure against the submitted values.
-    this.#lastSubmitted = structuredClone(this.data);
+    this.#lastSubmitted = this.#detachedData();
 
     this.submitting = true;
     const delayMs = this.#options.delayMs ?? 500;
@@ -752,7 +773,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown> {
   enhance = (node: HTMLFormElement): { destroy: () => void } => {
     const handleSubmit = (event: SubmitEvent): void => {
       event.preventDefault();
-      void this.#runSubmit(node);
+      void this.#runSubmit(node, event.submitter);
     };
     node.addEventListener("submit", handleSubmit);
 

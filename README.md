@@ -135,9 +135,17 @@ The reactive store lives in `FormStore.svelte.ts` (rune-compiled, checked by
 | [`ClientValidate`](src/ClientValidate.ts) | Validate the form / one field against the schema.                         |
 | [`EnhanceCore`](src/EnhanceCore.ts)       | Serialise data → form body, parse the response, compute the store update. |
 
+The store itself is mostly exercised only by `svelte-check`, but the
+submitter-aware enhanced submit path (`enhance` → `#runSubmit` → the posted
+`FormData`) is directly unit-tested in
+[`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts) — a `.svelte.ts`
+rune file needs the Svelte compiler to run at all, hence the `.svelte.test.ts`
+extension and the `svelte()` plugin in `vite.config.ts` (scoped to a `happy-dom`
+DOM via a per-file `@vitest-environment` docblock, not the package default).
+
 ## Development
 
 ```sh
 vp exec svelte-check --tsconfig ./tsconfig.json   # typecheck (incl. runes)
-vp test run tests                                 # unit tests (pure modules)
+vp test run tests                                 # unit tests (pure modules + the submit path)
 ```
