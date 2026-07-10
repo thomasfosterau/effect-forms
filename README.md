@@ -1,18 +1,12 @@
 # @thomasfosterau/effect-forms-svelte
 
-Svelte 5 (runes) bindings for
-[`@thomasfosterau/effect-forms`](../effect-forms). A reactive form store with
-progressive-enhancement submission, tainted tracking, lifecycle events, and
-optional client-side validation against the **same Effect Schema the server
-uses**.
+Svelte 5 (runes) bindings for [`@thomasfosterau/effect-forms`](../effect-forms). A reactive form store with progressive-enhancement submission, tainted tracking, lifecycle events, and optional client-side validation against the **same Effect Schema the server uses**.
 
-This package depends only on `svelte` (a peer) and the framework-neutral core —
-not SvelteKit — so it works in any Svelte 5 app.
+This package depends only on `svelte` (a peer) and the framework-neutral core — not SvelteKit — so it works in any Svelte 5 app.
 
 ## Usage
 
-Server (`+page.server.ts` or any action) produces a `FormState` with the core's
-`makeForm`, and returns it to the page. The component hydrates it:
+Server (`+page.server.ts` or any action) produces a `FormState` with the core's `makeForm`, and returns it to the page. The component hydrates it:
 
 ```svelte
 <script lang="ts">
@@ -41,10 +35,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's
 
 ## The store
 
-`createForm(source, options)` returns a [`FormStore`](src/FormStore.svelte.ts).
-`source` is a server-produced `FormState`, a `{ schema, defaults }` seed, or a
-[`FormBuilder`](../effect-forms/src/FormBuilder.ts) — the builder derives its
-schema, blank defaults, and array-item defaults for you:
+`createForm(source, options)` returns a [`FormStore`](src/FormStore.svelte.ts). `source` is a server-produced `FormState`, a `{ schema, defaults }` seed, or a [`FormBuilder`](../effect-forms/src/FormBuilder.ts) — the builder derives its schema, blank defaults, and array-item defaults for you:
 
 ```ts
 import { createForm } from "@thomasfosterau/effect-forms-svelte";
@@ -53,43 +44,15 @@ import { signup } from "$lib/forms"; // a FormBuilder
 const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 } });
 ```
 
-**Reactive state** — `data` (mutable, bind inputs to it), `errors` (merged
-client + server), `clientErrors` / `serverErrors` (per-source views), `message`,
-`constraints`, `submitting`, `delayed`, `posted`, `valid`, `canSubmit`,
-`isValidating`, `isSubmitted`, `isSubmitSuccessful`, `submissionAttempts`,
-`tainted`, `isTainted`, and (against the last submission) `changedSinceSubmit`
-/ `hasChangedSinceSubmit`.
+**Reactive state** — `data` (mutable, bind inputs to it), `errors` (merged client + server), `clientErrors` / `serverErrors` (per-source views), `message`, `constraints`, `submitting`, `delayed`, `posted`, `valid`, `canSubmit`, `isValidating`, `isSubmitted`, `isSubmitSuccessful`, `submissionAttempts`, `tainted`, `isTainted`, and (against the last submission) `changedSinceSubmit` / `hasChangedSinceSubmit`.
 
-**Methods** — `enhance(node)` (the form action), `validate()` /
-`validateField(path)` (client-side, needs `schema`; also runs a builder's
-`refineEffect` refinements), `errorsAt(path)` / `taintedAt(path)` /
-`isValidatingAt(path)`, `setValue(path, v)` / `valueAt(path)`,
-`handleBlur(path)` / `setTouched(path)` / `isTouchedAt(path)`, `isDirtyAt(path)`
-/ `isDefaultValueAt(path)` (persistent per-field dirty tracking — see
-[Field handles](#field-handles)), `setFieldValidators(path, validators)`
-(register a field's validators dynamically), `shouldShowError(path)` /
-`visibleErrorsAt(path)` (mode-aware display gating), `constraintAt(path)`,
-`revertToLastSubmit()`, `reset()`, `capture()` / `restore()` (SvelteKit
-snapshots), `setServerState(data, errors)` (apply a result received some other
-way), `toFormData()`.
+**Methods** — `enhance(node)` (the form action), `validate()` / `validateField(path)` (client-side, needs `schema`; also runs a builder's `refineEffect` refinements), `errorsAt(path)` / `taintedAt(path)` / `isValidatingAt(path)`, `setValue(path, v)` / `valueAt(path)`, `handleBlur(path)` / `setTouched(path)` / `isTouchedAt(path)`, `isDirtyAt(path)` / `isDefaultValueAt(path)` (persistent per-field dirty tracking — see [Field handles](#field-handles)), `setFieldValidators(path, validators)` (register a field's validators dynamically), `shouldShowError(path)` / `visibleErrorsAt(path)` (mode-aware display gating), `constraintAt(path)`, `revertToLastSubmit()`, `reset()`, `capture()` / `restore()` (SvelteKit snapshots), `setServerState(data, errors)` (apply a result received some other way), `toFormData()`.
 
-**Field arrays** — `append(path, value?)`, `insertItem(path, i, value?)`,
-`replaceItem(path, i, value)`, `removeItem(path, i)`, `clearItems(path)`,
-`swap(path, a, b)`, `move(path, from, to)` mutate the array at `path`
-immutably. `append` / `insertItem` derive a blank item by walking the bound
-schema's AST at `path` (any nesting depth, e.g. `authors[0].emails`), falling
-back to the top-level `FormBuilder` field when no schema is bound. Every
-index-shifting mutation (`insertItem` / `removeItem` / `swap` / `move` /
-`clearItems`) remaps per-index touched flags and errors so they keep
-following their row — `replaceItem` drops only the replaced index's own
-touched flag / errors.
+**Field arrays** — `append(path, value?)`, `insertItem(path, i, value?)`, `replaceItem(path, i, value)`, `removeItem(path, i)`, `clearItems(path)`, `swap(path, a, b)`, `move(path, from, to)` mutate the array at `path` immutably. `append` / `insertItem` derive a blank item by walking the bound schema's AST at `path` (any nesting depth, e.g. `authors[0].emails`), falling back to the top-level `FormBuilder` field when no schema is bound. Every index-shifting mutation (`insertItem` / `removeItem` / `swap` / `move` / `clearItems`) remaps per-index touched flags and errors so they keep following their row — `replaceItem` drops only the replaced index's own touched flag / errors.
 
 ## Field handles
 
-`form.field(path)` (modelled on TanStack Form's `FieldApi`) returns a typed,
-reactive [`FieldHandle`](src/FormStore.svelte.ts) bundling everything one input
-needs, instead of wiring `bind:value` / `name` / `handleBlur` /
-`visibleErrorsAt` / `constraints` against the store separately:
+`form.field(path)` (modelled on TanStack Form's `FieldApi`) returns a typed, reactive [`FieldHandle`](src/FormStore.svelte.ts) bundling everything one input needs, instead of wiring `bind:value` / `name` / `handleBlur` / `visibleErrorsAt` / `constraints` against the store separately:
 
 ```svelte
 <script lang="ts">
@@ -105,42 +68,13 @@ needs, instead of wiring `bind:value` / `name` / `handleBlur` /
 {#each name.visibleErrors as message}<small>{message}</small>{/each}
 ```
 
-`path` is checked against the form data's shape via `Path.FieldPath<A>` — a
-typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a
-compile error, and `field.value` is the leaf's actual type, not `unknown`. This
-replaced the core's unconsumed `FieldRef` seam — see [the trade-off
-decision](../../docs/decisions/typed-field-path-over-fieldref.md).
+`path` is checked against the form data's shape via `Path.FieldPath<A>` — a typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a compile error, and `field.value` is the leaf's actual type, not `unknown`. This replaced the core's unconsumed `FieldRef` seam — see [the trade-off decision](../../docs/decisions/typed-field-path-over-fieldref.md).
 
-`field.meta` exposes TanStack-style field state: `isBlurred` (lost focus at
-least once), `isTouched` (`isBlurred || isDirty`), `isDirty` (changed away from
-the default at some point — **persistent**, unlike `taintedAt` it does not
-clear on reverting to the default; only `reset()` clears it), and
-`isDefaultValue` (current value equals the default — flips back on revert).
-`isDirty` only tracks writes made through `field.value = …` / `setValue` /
-the array mutators (`append` / `removeItem` / `swap` / `move`) — a form that
-still binds `bind:value={form.data.x}` directly, bypassing `field()`, never
-marks that field dirty.
+`field.meta` exposes TanStack-style field state: `isBlurred` (lost focus at least once), `isTouched` (`isBlurred || isDirty`), `isDirty` (changed away from the default at some point — **persistent**, unlike `taintedAt` it does not clear on reverting to the default; only `reset()` clears it), and `isDefaultValue` (current value equals the default — flips back on revert). `isDirty` only tracks writes made through `field.value = …` / `setValue` / the array mutators (`append` / `removeItem` / `swap` / `move`) — a form that still binds `bind:value={form.data.x}` directly, bypassing `field()`, never marks that field dirty.
 
-**Validation modes** — the `mode` option (see
-[`Mode`](../effect-forms/src/Mode.ts)) drives when the form validates:
-`onSubmit` (default), `onBlur` (call `handleBlur` from an input's blur), or
-`onChange` (debounced). `onBlur` / `onChange` may `autoSubmit`, turning the
-form into a live-saving surface. `revalidate` (`"onChange"` default / `"onBlur"`
-/ `"never"`) governs what happens _after_ a failed post in `onSubmit` mode:
-fixing a field re-validates just that field, clearing its error without a
-resubmit. Errors are computed for the whole form; gate their display per field
-with `visibleErrorsAt(path)` (shown only once the field is tainted / touched,
-or after a submit).
+**Validation modes** — the `mode` option (see [`Mode`](../effect-forms/src/Mode.ts)) drives when the form validates: `onSubmit` (default), `onBlur` (call `handleBlur` from an input's blur), or `onChange` (debounced). `onBlur` / `onChange` may `autoSubmit`, turning the form into a live-saving surface. `revalidate` (`"onChange"` default / `"onBlur"` / `"never"`) governs what happens _after_ a failed post in `onSubmit` mode: fixing a field re-validates just that field, clearing its error without a resubmit. Errors are computed for the whole form; gate their display per field with `visibleErrorsAt(path)` (shown only once the field is tainted / touched, or after a submit).
 
-**Per-field validators** — the `validators` option (or `setFieldValidators`)
-attaches TanStack-Form-style `{ onChange?, onBlur?, onChangeAsync?,
-onBlurAsync?, asyncDebounceMs? }` per field, keyed by `Path.toString` (e.g.
-`"author.name"`, `"tags[0]"`). Sync validators return a `Schema.FilterOutput`;
-async ones are `Effect`s, run as a fiber per field — a new value interrupts
-the field's in-flight fiber before forking the next run, which is what gives
-the debounce + "latest wins" cancellation (no timer bookkeeping needed). Pass
-`layer` when a validator (or a builder's `refineEffect` refinement) needs
-services on its `R` channel:
+**Per-field validators** — the `validators` option (or `setFieldValidators`) attaches TanStack-Form-style `{ onChange?, onBlur?, onChangeAsync?, onBlurAsync?, asyncDebounceMs? }` per field, keyed by `Path.toString` (e.g. `"author.name"`, `"tags[0]"`). Sync validators return a `Schema.FilterOutput`; async ones are `Effect`s, run as a fiber per field — a new value interrupts the field's in-flight fiber before forking the next run, which is what gives the debounce + "latest wins" cancellation (no timer bookkeeping needed). Pass `layer` when a validator (or a builder's `refineEffect` refinement) needs services on its `R` channel:
 
 ```ts
 const form = createForm(
@@ -157,36 +91,21 @@ const form = createForm(
 );
 ```
 
-**Error sources** — a field's server-reported error (from the last submission)
-survives a client-side revalidation of some _other_ field; it clears once
-_that_ field's own value changes (or the server clears it on the next submit).
-`errors` is the merged view; `clientErrors` / `serverErrors` expose the two
-trees separately for a UI that wants to style them differently.
+**Error sources** — a field's server-reported error (from the last submission) survives a client-side revalidation of some _other_ field; it clears once _that_ field's own value changes (or the server clears it on the next submit). `errors` is the merged view; `clientErrors` / `serverErrors` expose the two trees separately for a UI that wants to style them differently.
 
-**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`,
-`onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`,
-`delayMs`, and a `submit` transport override (defaults to `fetch` to the form's
-action, parsing a JSON [`FormActionResult`](../effect-forms/src/Result.ts) or a
-bare `FormState`).
+**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to `fetch` to the form's action, parsing a JSON [`FormActionResult`](../effect-forms/src/Result.ts) or a bare `FormState`).
 
 ## Layout
 
-The reactive store lives in `FormStore.svelte.ts` (rune-compiled, checked by
-`svelte-check`). Its logic is delegated to pure, unit-tested modules:
+The reactive store lives in `FormStore.svelte.ts` (rune-compiled, checked by `svelte-check`). Its logic is delegated to pure, unit-tested modules:
 
-| Module                                    | Purpose                                                                   |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| [`Tainted`](src/Tainted.ts)               | Deep-diff the data to compute the tainted tree.                           |
-| [`ClientValidate`](src/ClientValidate.ts) | Validate the form / one field against the schema.                         |
-| [`EnhanceCore`](src/EnhanceCore.ts)       | Serialise data → form body, parse the response, compute the store update. |
+| Module | Purpose |
+| --- | --- |
+| [`Tainted`](src/Tainted.ts) | Deep-diff the data to compute the tainted tree. |
+| [`ClientValidate`](src/ClientValidate.ts) | Validate the form / one field against the schema. |
+| [`EnhanceCore`](src/EnhanceCore.ts) | Serialise data → form body, parse the response, compute the store update. |
 
-The store itself is mostly exercised only by `svelte-check`, but the
-submitter-aware enhanced submit path (`enhance` → `#runSubmit` → the posted
-`FormData`) is directly unit-tested in
-[`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts) — a `.svelte.ts`
-rune file needs the Svelte compiler to run at all, hence the `.svelte.test.ts`
-extension and the `svelte()` plugin in `vite.config.ts` (scoped to a `happy-dom`
-DOM via a per-file `@vitest-environment` docblock, not the package default).
+The store itself is mostly exercised only by `svelte-check`, but the submitter-aware enhanced submit path (`enhance` → `#runSubmit` → the posted `FormData`) is directly unit-tested in [`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts) — a `.svelte.ts` rune file needs the Svelte compiler to run at all, hence the `.svelte.test.ts` extension and the `svelte()` plugin in `vite.config.ts` (scoped to a `happy-dom` DOM via a per-file `@vitest-environment` docblock, not the package default).
 
 ## Development
 
