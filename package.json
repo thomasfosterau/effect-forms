@@ -5,13 +5,7 @@
   "description": "Svelte 5 (runes) bindings for @thomasfosterau/effect-forms — a reactive form store, an enhance action, tainted tracking, and client-side validation.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./FormStore": "./src/FormStore.svelte.ts",
-    "./Listeners": "./src/Listeners.ts",
-    "./Tainted": "./src/Tainted.ts",
-    "./ClientValidate": "./src/ClientValidate.ts",
-    "./EnhanceCore": "./src/EnhanceCore.ts",
-    "./SvelteKit": "./src/SvelteKit.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "check": "svelte-check --tsconfig ./tsconfig.json",
