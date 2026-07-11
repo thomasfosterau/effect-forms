@@ -31,6 +31,6 @@
   "devDependencies": {
     "@effect/language-service": "catalog:",
     "@thomasfosterau/test-config": "workspace:*",
-    "@types/node": "^26.1.0"
+    "@types/node": "catalog:"
   }
 }
