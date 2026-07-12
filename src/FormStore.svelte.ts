@@ -521,7 +521,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   setValue(path: FormPath, value: unknown): void {
     this.data = setAt(this.data, path, value);
     this.#markDirty(path);
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#onFieldChanged(path);
   }
 
@@ -688,7 +688,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     const item = value !== undefined ? value : this.#defaultItem(path);
     this.data = setAt(this.data, path, [...current, item]);
     this.#markDirty(path);
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#onFieldChanged(path);
   }
 
@@ -747,7 +747,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     );
     this.#markDirty(path);
     this.#remapArrayIndices(path, Path.removeAt(index));
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#onFieldChanged(path);
   }
 
@@ -762,7 +762,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.data = setAt(this.data, path, next);
     this.#markDirty(path);
     this.#remapArrayIndices(path, Path.swapAt(indexA, indexB));
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#onFieldChanged(path);
   }
 
@@ -776,7 +776,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.data = setAt(this.data, path, next);
     this.#markDirty(path);
     this.#remapArrayIndices(path, Path.moveAt(from, to));
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#onFieldChanged(path);
   }
 
@@ -797,8 +797,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Revert `data` to the values sent by the last submission (no-op before any submit). */
   revertToLastSubmit(): void {
     if (this.#lastSubmitted === undefined) return;
-    this.data = structuredClone(this.#lastSubmitted);
-    this.#previousData = structuredClone(this.data);
+    // `#lastSubmitted` is `$state`; reading it yields a proxy `structuredClone`
+    // rejects — snapshot first (same rule as `#detachedData`).
+    this.data = structuredClone($state.snapshot(this.#lastSubmitted)) as A;
+    this.#previousData = this.#detachedData();
     this.#sourced = emptySourced;
   }
 
@@ -1035,7 +1037,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     if (values !== undefined) this.#initial = structuredClone(values);
     for (const key of Object.keys(this.#fibers)) this.#interruptFiber(key);
     this.data = structuredClone(this.#initial);
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#sourced = emptySourced;
     this.message = undefined;
     this.valid = false;
@@ -1076,7 +1078,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Restore from a {@link capture} snapshot (its merged tree becomes the server tree; the client tree clears). */
   restore(snapshot: FormState<A, Message>): void {
     this.data = structuredClone(snapshot.data);
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
     this.#sourced = { client: noErrors, server: snapshot.errors };
     this.message = snapshot.message;
     this.valid = snapshot.valid;
@@ -1154,7 +1156,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       initial: this.#initial,
       // The snapshot actually sent (see `#runSubmit`), not the live `data` —
       // further edits may have landed while this request was in flight.
-      submittedData: this.#lastSubmitted ?? this.data,
+      // Detached (`$state.snapshot`) so the `structuredClone`s below never
+      // receive a `$state` proxy via `applied.data` / `applied.rebaseTo`.
+      submittedData: $state.snapshot(this.#lastSubmitted ?? this.data) as A,
       resetForm: this.#options.resetForm ?? false,
       autoSubmit: this.#mode.autoSubmit,
     });
@@ -1166,7 +1170,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     // Resync the field-tracking watcher's baseline to whatever `data` ends up
     // holding post-submit, so it doesn't re-diff (and re-run field validators
     // / re-clear server errors for) the submission's own echo.
-    this.#previousData = structuredClone(this.data);
+    this.#previousData = this.#detachedData();
   }
 
   async #runSubmit(node: HTMLFormElement, submitter: HTMLElement | null = null): Promise<void> {

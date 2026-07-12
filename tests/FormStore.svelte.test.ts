@@ -178,3 +178,22 @@ describe("auto-submit — no submitter", () => {
     expect(submitter).toBeNull();
   });
 });
+
+describe("setValue on the deeply-proxied store data", () => {
+  it("does not throw DataCloneError and keeps the value + dirty tracking (regression)", () => {
+    // `data` is a deep `$state` proxy; every path-addressed write re-snapshots
+    // `#previousData` for diffing. `structuredClone` rejects proxies, so the
+    // snapshot must go through `$state.snapshot` (the #detachedData helper) —
+    // this threw `DataCloneError` before the fix, breaking every
+    // `form.field(...).value = …` write (FieldHandle setters, widget bridges).
+    const store = createForm({
+      schema: Schema.Struct({ title: Schema.optional(Schema.String) }),
+      defaults: { title: "" },
+    });
+    expect(() => store.setValue(["title"], "typed")).not.toThrow();
+    expect(store.valueAt(["title"])).toBe("typed");
+    expect(store.isDirtyAt(["title"])).toBe(true);
+    expect(() => store.setValue(["title"], "typed more")).not.toThrow();
+    expect(store.valueAt(["title"])).toBe("typed more");
+  });
+});
