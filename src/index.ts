@@ -15,6 +15,7 @@
  */
 
 export * as Coerce from "./Coerce.ts";
+export * as Command from "./Command.ts";
 export * as Constraints from "./Constraints.ts";
 export * as Errors from "./Errors.ts";
 export * as Field from "./Field.ts";
