@@ -158,6 +158,15 @@ export interface DefineEntityFormOptions<C extends CommandStructLike, U extends 
     readonly create?: Readonly<Record<string, Schema.Top>>;
     readonly update?: Readonly<Record<string, Schema.Top>>;
   };
+  /**
+   * Command fields deliberately absent from the standalone form (a carve-out,
+   * e.g. BookSeries' `editors` — managed through the Book form's inline-create
+   * path instead). Omitted fields are stripped from the create/update field
+   * records before `Command.plan` runs, so they need no entry, are never
+   * classified (a kind-less omitted field can't throw at definition time),
+   * and never appear in the derived input schema, defaults, or adapters.
+   */
+  readonly omit?: readonly CommandKeys<C, U>[];
 }
 
 const builders: EntryBuilders<string> = {
@@ -191,7 +200,14 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
   options: DefineEntityFormOptions<C, U>,
   build: (f: EntryBuilders<CommandKeys<C, U>>) => readonly EntityFormEntry[],
 ): EntityFormDefinition => {
-  const plan = Command.plan(options.create, options.update);
+  const omitted = new Set<string>(options.omit ?? []);
+  const withoutOmitted = (struct: CommandStructLike): CommandStructLike => {
+    if (omitted.size === 0) return struct;
+    const fields: Record<string, Schema.Top> = {};
+    for (const key in struct.fields) if (!omitted.has(key)) fields[key] = struct.fields[key];
+    return { fields };
+  };
+  const plan = Command.plan(withoutOmitted(options.create), withoutOmitted(options.update));
   const entries = build(builders as EntryBuilders<CommandKeys<C, U>>);
 
   const byKey = new Map<string, Command.FieldPlan>(plan.fields.map((field) => [field.key, field]));
