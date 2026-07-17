@@ -19,7 +19,6 @@
   "devDependencies": {
     "@effect/language-service": "catalog:",
     "@sveltejs/vite-plugin-svelte": "catalog:",
-    "@thomasfosterau/test-config": "workspace:*",
     "@types/node": "catalog:",
     "svelte": "catalog:",
     "svelte-check": "catalog:"
