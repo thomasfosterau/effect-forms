@@ -11,7 +11,7 @@ const run = <A>(eff: Effect.Effect<A>) => Effect.runSync(eff);
 
 describe("FormBuilder composition", () => {
   it("accumulates fields via addField (key+schema, def, array) and merge", () => {
-    const names = empty.addField("name", Schema.String).addField("age", Schema.NumberFromString);
+    const names = empty.addField("name", Schema.String).addField("age", Schema.FiniteFromString);
     const extra = empty.addField(makeArrayField("tags", Schema.String));
     const builder = names.merge(extra);
 
@@ -30,7 +30,7 @@ describe("FormBuilder composition", () => {
 describe("FormBuilder.buildSchema", () => {
   const builder = empty
     .addField("name", Schema.String.check(Schema.isMinLength(2)))
-    .addField("age", Schema.NumberFromString)
+    .addField("age", Schema.FiniteFromString)
     .addField(makeArrayField("tags", Schema.String));
 
   it("collapses to a schema that decodes fields and array items", () => {

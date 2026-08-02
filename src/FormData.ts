@@ -10,7 +10,7 @@
  * the framework-neutral step that turns a form body into structured data, before handing it
  * to a validator. Coercion (strings → numbers / booleans / dates) is then the
  * schema's job: decode the result with a schema built from coercing leaves
- * (`Schema.NumberFromString`, `Schema.BooleanFromString`, the {@link
+ * (`Schema.FiniteFromString`, `Schema.BooleanFromString`, the {@link
  * module:effect-forms/Coerce} helpers, …).
  *
  * `File` values pass through untouched; repeated bare keys collapse into an

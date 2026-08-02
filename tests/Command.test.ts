@@ -19,7 +19,7 @@ const Row = Schema.Struct({
   id: Schema.optional(Uuid),
   agentId: Schema.String,
   creditedName: Schema.optional(Schema.String),
-  orderingPosition: Schema.Number,
+  orderingPosition: Schema.Finite,
 });
 
 const CreateThing = Schema.Struct({
@@ -27,7 +27,7 @@ const CreateThing = Schema.Struct({
   title: Schema.String,
   parentId: ParentId,
   note: Schema.optional(Schema.String),
-  count: Schema.optional(Schema.Number),
+  count: Schema.optional(Schema.Finite),
   publishedOn: Schema.optional(Schema.DateFromString),
   rows: Schema.optional(Schema.Array(Row)),
 });
@@ -37,7 +37,7 @@ const UpdateThing = Schema.Struct({
   title: Schema.optional(Schema.String),
   parentId: Schema.optional(Schema.NullOr(ParentId)),
   note: Schema.optional(Schema.NullOr(Schema.String)),
-  count: Schema.optional(Schema.NullOr(Schema.Number)),
+  count: Schema.optional(Schema.NullOr(Schema.Finite)),
   publishedOn: Schema.optional(Schema.NullOr(Schema.DateFromString)),
   rows: Schema.optional(Schema.Array(Row)),
 });

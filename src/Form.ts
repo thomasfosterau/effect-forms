@@ -18,7 +18,7 @@
  *   defaults — what a `load` returns to render a blank create form.
  *
  * Coercion (strings → numbers / booleans / dates) is the schema's job: build
- * the schema from coercing leaves (`Schema.NumberFromString`, the
+ * the schema from coercing leaves (`Schema.FiniteFromString`, the
  * {@link module:effect-forms/Coerce} helpers, …) so a multipart body decodes
  * cleanly.
  *

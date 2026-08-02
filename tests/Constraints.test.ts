@@ -64,12 +64,12 @@ describe("constraintsFromSchema", () => {
 
   it("derives min / max from the number order checks", () => {
     const schema = Schema.Struct({
-      exclusive: Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThan(10)),
-      inclusive: Schema.Number.check(
+      exclusive: Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThan(10)),
+      inclusive: Schema.Finite.check(
         Schema.isGreaterThanOrEqualTo(0),
         Schema.isLessThanOrEqualTo(10),
       ),
-      between: Schema.Number.check(Schema.isBetween({ minimum: 1, maximum: 5 })),
+      between: Schema.Finite.check(Schema.isBetween({ minimum: 1, maximum: 5 })),
     });
     expect(constraintsFromSchema(schema)).toEqual({
       exclusive: { required: true, min: 0, max: 10 },
@@ -80,9 +80,9 @@ describe("constraintsFromSchema", () => {
 
   it("derives step from isMultipleOf, and from isInt when no divisor is set", () => {
     const schema = Schema.Struct({
-      multiple: Schema.Number.check(Schema.isMultipleOf(5)),
+      multiple: Schema.Finite.check(Schema.isMultipleOf(5)),
       integer: Schema.Int,
-      both: Schema.Number.check(Schema.isMultipleOf(5), Schema.isInt),
+      both: Schema.Finite.check(Schema.isMultipleOf(5), Schema.isInt),
     });
     expect(constraintsFromSchema(schema)).toEqual({
       multiple: { required: true, step: 5 },
@@ -142,7 +142,7 @@ describe("constraintsFromSchema", () => {
     const schema = Schema.Struct({
       pair: Schema.Tuple([
         Schema.String.check(Schema.isMinLength(3)),
-        Schema.Number.check(Schema.isGreaterThan(0)),
+        Schema.Finite.check(Schema.isGreaterThan(0)),
       ]),
     });
     expect(constraintsFromSchema(schema)).toEqual({

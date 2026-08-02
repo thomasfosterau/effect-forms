@@ -131,7 +131,7 @@ describe("runAsyncFieldValidator", () => {
         let calls = 0;
         const validator: AsyncFieldValidator<string> = () => {
           calls++;
-          return Effect.succeed(undefined);
+          return Effect.void;
         };
 
         const fiber = yield* runAsyncFieldValidator(validator, "x", 300).pipe(Effect.forkChild);
@@ -205,8 +205,8 @@ describe("runAsyncFieldValidator", () => {
 describe("resolveFieldTrigger", () => {
   const onChange: SyncFieldValidator<string> = () => undefined;
   const onBlur: SyncFieldValidator<string> = () => undefined;
-  const onChangeAsync: AsyncFieldValidator<string> = () => Effect.succeed(undefined);
-  const onBlurAsync: AsyncFieldValidator<string> = () => Effect.succeed(undefined);
+  const onChangeAsync: AsyncFieldValidator<string> = () => Effect.void;
+  const onBlurAsync: AsyncFieldValidator<string> = () => Effect.void;
 
   it("picks onChange / onChangeAsync for the change trigger", () => {
     const resolved = resolveFieldTrigger(

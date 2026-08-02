@@ -6,7 +6,7 @@ import { make } from "../src/Form.ts";
 
 const Signup = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(2)),
-  age: Schema.optional(Schema.NumberFromString),
+  age: Schema.optional(Schema.FiniteFromString),
 });
 
 const form = make(Signup, {

@@ -25,14 +25,14 @@ describe("Field constructors and guards", () => {
 describe("Field.defaultValue", () => {
   it("seeds scalars to empty string (including coercing leaves)", () => {
     expect(defaultValue(Schema.String)).toBe("");
-    expect(defaultValue(Schema.NumberFromString)).toBe("");
+    expect(defaultValue(Schema.FiniteFromString)).toBe("");
     expect(defaultValue(Schema.String.check(Schema.isMinLength(2)))).toBe("");
   });
 
   it("seeds arrays to [] and recurses into structs", () => {
     expect(defaultValue(Schema.Array(Schema.String))).toEqual([]);
     expect(
-      defaultValue(Schema.Struct({ name: Schema.String, age: Schema.NumberFromString })),
+      defaultValue(Schema.Struct({ name: Schema.String, age: Schema.FiniteFromString })),
     ).toEqual({
       name: "",
       age: "",

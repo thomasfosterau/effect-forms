@@ -15,7 +15,7 @@ import { Form } from "@thomasfosterau/effect-forms";
 
 const Signup = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(2)),
-  age: Schema.optional(Schema.NumberFromString),
+  age: Schema.optional(Schema.FiniteFromString),
 });
 
 const signupForm = Form.make(Signup, {
@@ -77,7 +77,7 @@ Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`, `Erro
 
 ## Notes
 
-- **Coercion is the schema's job.** An HTML body is all strings; build the schema from coercing leaves (`Schema.NumberFromString`, `Schema.BooleanFromString`, the `Coerce` helpers) so the parsed object decodes cleanly. The parser never guesses types.
+- **Coercion is the schema's job.** An HTML body is all strings; build the schema from coercing leaves (`Schema.FiniteFromString`, `Schema.BooleanFromString`, the `Coerce` helpers) so the parsed object decodes cleanly. The parser never guesses types.
 - **Errors nest by field.** Leaf fields are `string[]`; nested objects / array indices nest; a branch's own (cross-field) message lives under `_errors`. The tree is plain JSON — it crosses the SSR boundary unchanged.
 - **Update semantics.** The `Coerce` helpers honour the value / `null` / `undefined` contract (set / clear / carry-forward) the app uses for partial updates.
 - **Constraint derivation reads schema checks, not just optionality.** `constraintsFromSchema` walks each property's `.check()`s for the `meta` annotation Effect Schema's built-in checks carry (`isMinLength`, `isLengthBetween`, `isPattern`, `isGreaterThanOrEqualTo`, `isBetween`, `isMultipleOf`, `isInt`, …), unwraps `optional` / `NullOr` unions, and descends into struct and array-item shapes. A check with no recognised `meta` tag (a bare `Schema.filter` predicate) derives nothing — there's no attribute to guess at. Anything the walk can't (or shouldn't) infer goes through the `overrides` argument, which always wins on conflict.
