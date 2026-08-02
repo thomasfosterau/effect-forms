@@ -446,7 +446,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.data = structuredClone(initial.data);
     this.#sourced = { client: noErrors, server: (initial.errors ?? noErrors) as FormErrors };
     this.message = initial.message;
-    this.constraints = initial.constraints ?? {};
+    // The `{ schema, defaults }` overload always arrives with `constraints`
+    // already derived (via the core's `Form.make`); the `FormState`-hydration
+    // overload's caller may not have supplied any, so derive from
+    // `options.schema` here too — the two overloads must be symmetric.
+    this.constraints =
+      initial.constraints ??
+      (options.schema ? Constraints.constraintsFromSchema(options.schema) : {});
     this.posted = initial.posted;
     this.valid = initial.valid;
     // `canSubmit` treats "never validated" as presumptively valid (a pristine

@@ -16,7 +16,7 @@
  * @module tests/FormStore.svelte
  */
 
-import { Result, State } from "@thomasfosterau/effect-forms";
+import { Constraints, Result, State } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 import { createForm } from "../src/FormStore.svelte.ts";
@@ -195,5 +195,34 @@ describe("setValue on the deeply-proxied store data", () => {
     expect(store.isDirtyAt(["title"])).toBe(true);
     expect(() => store.setValue(["title"], "typed more")).not.toThrow();
     expect(store.valueAt(["title"])).toBe("typed more");
+  });
+});
+
+describe("constraints — createForm overload symmetry (issue #1330)", () => {
+  const ConstrainedSchema = Schema.Struct({
+    title: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(50)),
+    subtitle: Schema.optional(Schema.String),
+  });
+
+  it("derives identical constraints from the { schema, defaults } and FormState-hydration overloads", () => {
+    const seeded = createForm({ schema: ConstrainedSchema, defaults: { title: "", subtitle: "" } });
+    const hydrated = createForm(State.make({ title: "", subtitle: "" }), {
+      schema: ConstrainedSchema,
+    });
+
+    const expected = Constraints.constraintsFromSchema(ConstrainedSchema);
+    expect(seeded.constraints).toEqual(expected);
+    expect(hydrated.constraints).toEqual(expected);
+    expect(hydrated.constraints).toEqual(seeded.constraints);
+  });
+
+  it("prefers a hydrated FormState's own constraints over deriving from options.schema", () => {
+    const explicit: Constraints.InputConstraints = { title: { required: false } };
+    const hydrated = createForm(
+      State.make({ title: "", subtitle: "" }, { constraints: explicit }),
+      { schema: ConstrainedSchema },
+    );
+
+    expect(hydrated.constraints).toEqual(explicit);
   });
 });
