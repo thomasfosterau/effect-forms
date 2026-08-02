@@ -6,7 +6,7 @@ import { defineEntityForm, type EntityFormEntry } from "../src/EntityForm.ts";
 // title, a required FK, an optional scalar, and a contributor list.
 
 const Uuid = Schema.String.check(Schema.isUUID());
-const Row = Schema.Struct({ agentId: Schema.String, orderingPosition: Schema.Number });
+const Row = Schema.Struct({ agentId: Schema.String, orderingPosition: Schema.Finite });
 
 const CreateThing = Schema.Struct({
   id: Schema.optional(Uuid),

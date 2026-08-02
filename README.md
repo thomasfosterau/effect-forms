@@ -68,7 +68,7 @@ const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 
 {#each name.visibleErrors as message}<small>{message}</small>{/each}
 ```
 
-`path` is checked against the form data's shape via `Path.FieldPath<A>` — a typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a compile error, and `field.value` is the leaf's actual type, not `unknown`. This replaced the core's unconsumed `FieldRef` seam — see [the trade-off decision](../../docs/decisions/typed-field-path-over-fieldref.md).
+`path` is checked against the form data's shape via `Path.FieldPath<A>` — a typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a compile error, and `field.value` is the leaf's actual type, not `unknown`. This replaced the core's unconsumed `FieldRef` seam.
 
 `field.meta` exposes TanStack-style field state: `isBlurred` (lost focus at least once), `isTouched` (`isBlurred || isDirty`), `isDirty` (changed away from the default at some point — **persistent**, unlike `taintedAt` it does not clear on reverting to the default; only `reset()` clears it), and `isDefaultValue` (current value equals the default — flips back on revert). `isDirty` only tracks writes made through `field.value = …` / `setValue` / the array mutators (`append` / `removeItem` / `swap` / `move`) — a form that still binds `bind:value={form.data.x}` directly, bypassing `field()`, never marks that field dirty.
 
