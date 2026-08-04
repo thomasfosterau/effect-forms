@@ -11,10 +11,11 @@
  *
  * `required` comes from a struct field's optionality; `minlength` /
  * `maxlength` / `min` / `max` / `pattern` / `step` are derived from the
- * `meta` annotation Effect Schema's built-in checks carry (`isMinLength`,
- * `isBetween`, `isPattern`, …) — see `Schema.Annotations.BuiltInMetaDefinitions`.
- * A check with no recognised `meta` tag (a bare `Schema.filter` predicate, a
- * custom `.check()`) contributes nothing; there is no attribute to guess at,
+ * `representation` annotation Effect Schema's built-in checks carry
+ * (`isMinLength`, `isBetween`, `isPattern`, …), keyed by its stable
+ * `effect/schema/<check>` id. A check with no recognised representation id
+ * (a bare `Schema.filter` predicate, a custom `.check()`) contributes
+ * nothing; there is no attribute to guess at,
  * so the derivation stays silent rather than wrong. The walk descends into
  * nested structs and into a homogeneous array's item type (folding the
  * array's own optionality into the item's `required`); a fixed-shape tuple
@@ -33,6 +34,7 @@
 
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import type * as SchemaRepresentation from "effect/SchemaRepresentation";
 import type { FormPath } from "./Issues.ts";
 
 /** Native validation attributes for a single input. */
@@ -99,40 +101,60 @@ function flattenChecks(
 /** A same-shape, mutable patch of {@link InputConstraint} fields. */
 type ConstraintPatch = { -readonly [K in keyof InputConstraint]?: InputConstraint[K] };
 
-/** The `meta` payload a built-in (or user-augmented) Effect Schema check carries. */
-type CheckMeta = Schema.Annotations.Meta;
+/**
+ * The `representation.payload` shapes of the built-in checks that map onto a
+ * native HTML attribute, keyed by the check's stable representation id.
+ * Mirrors each check constructor in `effect/Schema` (e.g. `isMinLength`
+ * writes `{ id: "effect/schema/isMinLength", payload: { minLength } }`).
+ */
+interface CheckPayloads {
+  readonly "effect/schema/isMinLength": { readonly minLength: number };
+  readonly "effect/schema/isMaxLength": { readonly maxLength: number };
+  readonly "effect/schema/isLengthBetween": { readonly minimum: number; readonly maximum: number };
+  readonly "effect/schema/isPattern": { readonly source: string; readonly flags: string };
+  readonly "effect/schema/isGreaterThan": { readonly exclusiveMinimum: number };
+  readonly "effect/schema/isGreaterThanOrEqualTo": { readonly minimum: number };
+  readonly "effect/schema/isLessThan": { readonly exclusiveMaximum: number };
+  readonly "effect/schema/isLessThanOrEqualTo": { readonly maximum: number };
+  readonly "effect/schema/isBetween": { readonly minimum: number; readonly maximum: number };
+  readonly "effect/schema/isMultipleOf": { readonly divisor: number };
+}
 
 /**
- * One constraint patch per recognised `meta._tag` — the built-in checks that
- * map onto a native HTML attribute. A tag with no entry here (an unannotated
- * custom filter, or a built-in check with no HTML equivalent) derives
- * nothing. `isInt` isn't a plain patch: it only sets `step` as a fallback
- * when nothing more specific already did, so it's handled separately in
- * {@link constraintFromChecks}.
+ * One constraint patch per recognised representation id — the built-in
+ * checks that map onto a native HTML attribute. An id with no entry here
+ * (an unannotated custom filter, or a built-in check with no HTML
+ * equivalent) derives nothing. `isInt` isn't a plain patch: it only sets
+ * `step` as a fallback when nothing more specific already did, so it's
+ * handled separately in {@link constraintFromChecks}.
  */
-const metaPatches: {
-  readonly [K in CheckMeta["_tag"]]?: (meta: Extract<CheckMeta, { _tag: K }>) => ConstraintPatch;
+const payloadPatches: {
+  readonly [K in keyof CheckPayloads]: (payload: CheckPayloads[K]) => ConstraintPatch;
 } = {
-  isMinLength: (meta) => ({ minlength: meta.minLength }),
-  isMaxLength: (meta) => ({ maxlength: meta.maxLength }),
-  isLengthBetween: (meta) => ({ minlength: meta.minimum, maxlength: meta.maximum }),
-  isPattern: (meta) => ({ pattern: meta.regExp.source }),
-  isGreaterThan: (meta) => ({ min: meta.exclusiveMinimum }),
-  isGreaterThanOrEqualTo: (meta) => ({ min: meta.minimum }),
-  isLessThan: (meta) => ({ max: meta.exclusiveMaximum }),
-  isLessThanOrEqualTo: (meta) => ({ max: meta.maximum }),
-  isBetween: (meta) => ({ min: meta.minimum, max: meta.maximum }),
-  isMultipleOf: (meta) => ({ step: meta.divisor }),
+  "effect/schema/isMinLength": (p) => ({ minlength: p.minLength }),
+  "effect/schema/isMaxLength": (p) => ({ maxlength: p.maxLength }),
+  "effect/schema/isLengthBetween": (p) => ({ minlength: p.minimum, maxlength: p.maximum }),
+  "effect/schema/isPattern": (p) => ({ pattern: p.source }),
+  "effect/schema/isGreaterThan": (p) => ({ min: p.exclusiveMinimum }),
+  "effect/schema/isGreaterThanOrEqualTo": (p) => ({ min: p.minimum }),
+  "effect/schema/isLessThan": (p) => ({ max: p.exclusiveMaximum }),
+  "effect/schema/isLessThanOrEqualTo": (p) => ({ max: p.maximum }),
+  "effect/schema/isBetween": (p) => ({ min: p.minimum, max: p.maximum }),
+  "effect/schema/isMultipleOf": (p) => ({ step: p.divisor }),
 };
 
 /**
- * Look up and apply `metaPatches[meta._tag]`. The cast is sound: each entry's
- * parameter type is keyed to the same tag `meta` is dispatched on, so the
- * record is never called with a mismatched payload.
+ * Look up and apply `payloadPatches[representation.id]`. The cast is sound:
+ * each payload is authored by the same built-in check constructor its id
+ * names, so an entry is never called with a mismatched payload shape.
  */
-function applyMetaPatch(meta: CheckMeta): ConstraintPatch | undefined {
-  const patch = metaPatches[meta._tag] as ((meta: CheckMeta) => ConstraintPatch) | undefined;
-  return patch?.(meta);
+function applyPayloadPatch(
+  representation: SchemaRepresentation.RepresentationAnnotation,
+): ConstraintPatch | undefined {
+  const patch = payloadPatches[representation.id as keyof CheckPayloads] as
+    | ((payload: Schema.Json) => ConstraintPatch)
+    | undefined;
+  return patch?.(representation.payload);
 }
 
 /**
@@ -140,8 +162,8 @@ function applyMetaPatch(meta: CheckMeta): ConstraintPatch | undefined {
  * attached to `outer` (the property's own type, e.g. the union wrapping an
  * optional field) and `inner` (the unwrapped leaf) — `inner`'s checks win on
  * conflict since they're the more specific, unwrapped node. A check whose
- * `meta` annotation has no recognised `_tag` (an unannotated custom filter)
- * is skipped: there is no attribute to derive from it.
+ * `representation` annotation has no recognised id (an unannotated custom
+ * filter) is skipped: there is no attribute to derive from it.
  */
 function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): InputConstraint {
   const filters: Array<SchemaAST.Filter<unknown>> = [];
@@ -151,13 +173,13 @@ function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): Input
   let out: ConstraintPatch = {};
   let hasIntCheck = false;
   for (const filter of filters) {
-    const meta = filter.annotations?.meta;
-    if (!meta) continue;
-    if (meta._tag === "isInt") {
+    const representation = filter.annotations?.representation;
+    if (!representation) continue;
+    if (representation.id === "effect/schema/isInt") {
       hasIntCheck = true;
       continue;
     }
-    out = { ...out, ...applyMetaPatch(meta) };
+    out = { ...out, ...applyPayloadPatch(representation) };
   }
   if (hasIntCheck && out.step === undefined) out.step = 1;
 
