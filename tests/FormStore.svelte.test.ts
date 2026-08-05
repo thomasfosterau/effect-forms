@@ -168,7 +168,10 @@ describe("auto-submit — no submitter", () => {
     // detection reads — both need the change for `handleBlur`'s autoSubmit
     // condition to fire and for the posted body to reflect it.
     titleInput.value = "changed";
-    store.data.title = "changed";
+    // `data`'s public type is the schema's (readonly) decoded shape; the
+    // underlying `$state` is mutable at runtime regardless — this simulates a
+    // live input change the way taint detection observes it.
+    (store.data as { title: string }).title = "changed";
     store.handleBlur(["title"]);
     await done;
 
