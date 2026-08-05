@@ -13,10 +13,14 @@
  * defaults, and the tri-state adapters that map a validated multipart input
  * onto the encoded command payload.
  *
- * Classification uses behavioural decode probes rather than AST matching —
- * date codecs are transformations and branded ids erase to `String`, so
- * "what does this schema accept" is the only robust signal (the same approach
- * the host app's model walkers use).
+ * Classification leads with behavioural decode probes — date codecs are
+ * transformations and branded ids erase to `String`, so "what does this
+ * schema accept" is the only robust signal for those (the same approach the
+ * host app's model walkers use). Two kinds fall back to AST matching instead,
+ * because no decode probe can name what they are: `enum`'s literal option set
+ * (needed anyway for the renderer, not just the classification) and
+ * `structured`'s "this is a nested object, not a scalar" shape. Neither
+ * shadows a probe-classified kind — see {@link classify}.
  *
  * The derived adapters emit the **encoded** command payload (dates stay
  * `YYYY-MM-DD` strings, ids stay plain strings) — the command's canonical
@@ -28,6 +32,7 @@
  */
 
 import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 import {
   emptyToNull,
   emptyToUndefined,
@@ -37,7 +42,15 @@ import {
 } from "./Coerce.ts";
 
 /** How a command field renders and coerces at the form boundary. */
-export type FieldKind = "text" | "id" | "number" | "date" | "jsonArray";
+export type FieldKind =
+  | "text"
+  | "id"
+  | "number"
+  | "date"
+  | "jsonArray"
+  | "boolean"
+  | "enum"
+  | "structured";
 
 /** One command field's derived plan, as plain data. */
 export interface FieldPlan {
@@ -51,6 +64,13 @@ export interface FieldPlan {
   readonly inUpdate: boolean;
   /** `optional(NullOr(...))` on the update struct — blank clears (`null`). */
   readonly updateClearable: boolean;
+  /**
+   * The field's literal option values, read off the AST — present only when
+   * `kind` is `"enum"`. In declaration order, stringified (a `<select>`'s
+   * option values are always strings at the form boundary, whatever the
+   * decoded literal's own type).
+   */
+  readonly options?: readonly string[];
 }
 
 /** The derived plan for one entity's create/update command pair. */
@@ -92,21 +112,103 @@ const decodes = (schema: Schema.Top, input: unknown): boolean => probe(schema, i
 const PROBE_UUID = "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f";
 
 /**
- * Classify one field schema by what it accepts. Order matters: array → number
- * → date → id → text. A field that accepts none of the probes (e.g. a
- * `Schema.Boolean` — checkbox tri-state needs deliberate form-level treatment,
- * not a silent string passthrough) throws at module load so the gap surfaces
- * when the plan is declared, not on a live submission.
+ * Peel exactly the `optional` / `NullOr` wrapper layers off a property's type
+ * AST, stopping at the first union that isn't itself a pure wrapper. A wrapper
+ * union carries exactly one non-`null`/`undefined` member (the wrapped type);
+ * a union with zero or several such members is a real value-level union (an
+ * `enum` field's own literal set, say) rather than another layer to peel, so
+ * the loop stops there. Unlike {@link module:effect-forms/Constraints}'s
+ * `unwrapOptional` (which only ever needs the *first* real member), this
+ * walks every wrapper layer and preserves a multi-member union intact —
+ * `enumOptions` below needs the full literal set, not just one branch of it.
  */
-const classify = (key: string, schema: Schema.Top): FieldKind => {
+function unwrapWrapperUnion(ast: SchemaAST.AST): SchemaAST.AST {
+  let current = ast;
+  while (SchemaAST.isUnion(current)) {
+    const real = current.types.filter((t) => !SchemaAST.isUndefined(t) && !SchemaAST.isNull(t));
+    if (real.length !== 1 || real.length === current.types.length) break;
+    current = real[0];
+  }
+  return current;
+}
+
+/**
+ * The literal option values of a field shaped like `Schema.Literal(...)` or
+ * `Schema.Literals([...])` (optionally `optional` / `NullOr`-wrapped) —
+ * `undefined` when the field isn't literal-shaped. Stringified: a `<select>`'s
+ * option values are strings at the form boundary regardless of the literal's
+ * own type.
+ */
+function enumOptions(ast: SchemaAST.AST): readonly string[] | undefined {
+  const inner = unwrapWrapperUnion(ast);
+  if (SchemaAST.isLiteral(inner)) return [String(inner.literal)];
+  if (SchemaAST.isUnion(inner)) {
+    const literals = inner.types.filter(SchemaAST.isLiteral);
+    if (literals.length === inner.types.length && literals.length > 0) {
+      return literals.map((literal) => String(literal.literal));
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether a field is itself an object/struct schema (optionally `optional` /
+ * `NullOr`-wrapped) — the `structured` kind's shape (inline / block ProseKit
+ * JSON: `{ type, content }`). Mirrors {@link module:effect-forms/Field}'s and
+ * {@link module:effect-forms/Constraints}'s own `SchemaAST.isObjects` struct
+ * check. A `Schema.declare`d type (`UploadedDocument`, `Image`) has no
+ * `Objects` AST node, so it is never caught here — the default-throw the
+ * derivation relies on stays intact.
+ */
+function isStructured(ast: SchemaAST.AST): boolean {
+  return SchemaAST.isObjects(unwrapWrapperUnion(ast));
+}
+
+/** One field's classification: its {@link FieldKind}, plus `options` for `"enum"`. */
+interface Classification {
+  readonly kind: FieldKind;
+  readonly options?: readonly string[];
+}
+
+/**
+ * The scalar kinds classified purely by what a schema decodes, with no AST
+ * inspection: array → boolean → number → date → id → text. `undefined` when
+ * the schema accepts none of them, so {@link classify} can fall through to
+ * its AST-based checks (`enum`, `structured`).
+ */
+const probeKind = (schema: Schema.Top): FieldKind | undefined => {
   if (decodes(schema, [])) return "jsonArray";
+  if (decodes(schema, true)) return "boolean";
   if (decodes(schema, 42)) return "number";
   const date = probe(schema, "2024-01-02T03:04:05.000Z");
   if (date.ok && date.value instanceof Date) return "date";
   if (decodes(schema, PROBE_UUID) && !decodes(schema, "not-a-uuid")) return "id";
   if (decodes(schema, "plain text")) return "text";
+  return undefined;
+};
+
+/**
+ * Classify one field schema: by its AST shape first, then by what it accepts.
+ * `enum` is checked before {@link probeKind} rather than after, since a
+ * decode probe can't tell "the literal set an enum accepts" from any other
+ * shape (worse, a numeric-literal enum whose set happens to include the `42`
+ * probe value would otherwise misclassify as `number`) — reading the literal
+ * set off the AST is unambiguous, and it's needed anyway for the renderer.
+ * `structured` is checked last, after every probe has failed: an object
+ * schema never decodes any of `probeKind`'s scalar probes, so there is no
+ * real ordering hazard, but putting the broadest, AST-only check last keeps
+ * every more specific kind first in line. A field that matches nothing
+ * (`Schema.declare`d — `UploadedDocument`, `Image`) throws at module load so
+ * the gap surfaces when the plan is declared, not on a live submission.
+ */
+const classify = (key: string, schema: Schema.Top): Classification => {
+  const options = enumOptions(schema.ast);
+  if (options !== undefined) return { kind: "enum", options };
+  const probed = probeKind(schema);
+  if (probed !== undefined) return { kind: probed };
+  if (isStructured(schema.ast)) return { kind: "structured" };
   throw new Error(
-    `Command.plan: field "${key}" matches no known kind (text/id/number/date/jsonArray) — a boolean or custom codec needs an explicit form-level treatment before it can derive`,
+    `Command.plan: field "${key}" matches no known kind (text/id/number/date/jsonArray/boolean/enum/structured) — a Schema.declare'd type needs an explicit form-level treatment before it can derive`,
   );
 };
 
@@ -133,13 +235,15 @@ export const plan = (create: StructLike, update: StructLike): CommandPlan => {
     const createField = createFields[key];
     const updateField = updateFields[key];
     const probeTarget = (createField ?? updateField) as Schema.Top;
+    const { kind, options } = classify(key, probeTarget);
     return {
       key,
-      kind: classify(key, probeTarget),
+      kind,
       inCreate: createField !== undefined,
       createRequired: createField !== undefined && !decodes(createField, undefined),
       inUpdate: updateField !== undefined,
       updateClearable: updateField !== undefined && decodes(updateField, null),
+      ...(options !== undefined ? { options } : {}),
     };
   });
 
@@ -269,15 +373,51 @@ const coerceDate = (ctx: CoerceContext, raw: string | undefined): unknown => {
   return ctx.clearable ? emptyToNull(value) : emptyToUndefined(value);
 };
 
+/**
+ * Boolean fields: a `<select>`'s value set, not a checkbox — the only truthy
+ * raw value is the literal string `"true"`, everything else (`"false"`,
+ * blank, absent) reads as `false`. Create defaults an absent/blank field to
+ * `false` (never skips); update skips absent/blank unless clearable, in which
+ * case it clears (`null`) instead — the create-defaults / update-skips
+ * asymmetry the Content family already hand-writes.
+ */
+const coerceBoolean = (ctx: CoerceContext, raw: string | undefined): unknown => {
+  const trimmed = raw?.trim();
+  if (trimmed === undefined || trimmed === "") {
+    return ctx.required ? false : ctx.clearable ? null : undefined;
+  }
+  return trimmed === "true";
+};
+
+/**
+ * Parse a JSON-encoded structured document (inline / block ProseKit JSON)
+ * from a multipart field. Blank or absent skips (`undefined`) or, on the
+ * clearable path, clears (`null`); a present value is `JSON.parse`d and
+ * passed through as-is — shape validation is the command's own decode's job,
+ * exactly as {@link jsonRowsFromField} leaves row-shape validation to itself
+ * rather than duplicating it here. `JSON.parse` throws a `SyntaxError` on
+ * malformed JSON, same as {@link jsonRowsFromField} does on a malformed row
+ * list — mapping that onto a framework response is the caller's concern.
+ */
+const structuredFromField = (raw: string | undefined, clearable: boolean): unknown => {
+  const trimmed = raw?.trim();
+  if (trimmed === undefined || trimmed === "") return clearable ? null : undefined;
+  return JSON.parse(trimmed);
+};
+
+/** Build one field's {@link CoerceContext} for one mode. */
+const coerceContextFor = (field: FieldPlan, mode: "create" | "update"): CoerceContext => ({
+  required: mode === "create" && field.createRequired,
+  clearable: mode === "update" && field.updateClearable,
+  trimCreate: mode === "create",
+});
+
 /** The default coercion for one field in one mode. */
 const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undefined): unknown => {
-  const ctx: CoerceContext = {
-    required: mode === "create" && field.createRequired,
-    clearable: mode === "update" && field.updateClearable,
-    trimCreate: mode === "create",
-  };
+  const ctx = coerceContextFor(field, mode);
   switch (field.kind) {
     case "text":
+    case "enum":
       return coerceText(ctx, raw);
     case "id":
       return coerceId(ctx, raw);
@@ -287,6 +427,10 @@ const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undef
       return coerceDate(ctx, raw);
     case "jsonArray":
       return jsonRowsFromField(raw, field.key);
+    case "boolean":
+      return coerceBoolean(ctx, raw);
+    case "structured":
+      return structuredFromField(raw, ctx.clearable);
   }
 };
 
