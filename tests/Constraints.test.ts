@@ -82,7 +82,7 @@ describe("constraintsFromSchema", () => {
     const schema = Schema.Struct({
       multiple: Schema.Finite.check(Schema.isMultipleOf(5)),
       integer: Schema.Int,
-      both: Schema.Finite.check(Schema.isMultipleOf(5), Schema.isInt),
+      both: Schema.Finite.check(Schema.isMultipleOf(5), Schema.isInt()),
     });
     expect(constraintsFromSchema(schema)).toEqual({
       multiple: { required: true, step: 5 },

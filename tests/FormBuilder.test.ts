@@ -7,7 +7,7 @@ import { makeArrayField } from "../src/Field.ts";
 import { fromBuilder } from "../src/Form.ts";
 import { buildSchema, empty, isFormBuilder } from "../src/FormBuilder.ts";
 
-const run = <A>(eff: Effect.Effect<A>) => Effect.runSync(eff);
+const run = <A, E>(eff: Effect.Effect<A, E>) => Effect.runSync(eff);
 
 describe("FormBuilder composition", () => {
   it("accumulates fields via addField (key+schema, def, array) and merge", () => {
