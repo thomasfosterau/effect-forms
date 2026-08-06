@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
-import * as SchemaParser from "effect/SchemaParser";
 import { TestClock } from "effect/testing";
 import { getError } from "../src/Errors.ts";
 import {
@@ -57,16 +56,13 @@ describe("validateValueSync", () => {
   });
 });
 
-describe("schemaIssuesToFormIssues", () => {
-  it("accepts a custom leaf formatter", async () => {
-    const exit = SchemaParser.decodeUnknownExit(Field)("x");
-    // Build issues directly from a fresh failing decode to exercise the formatter.
+describe("validateValue with a custom leaf formatter", () => {
+  it("routes leaf issues through the provided formatter", async () => {
     const result = await Effect.runPromise(validateValue(Field, "x", () => "custom message"));
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(result.issues[0]?.message).toBe("custom message");
     }
-    expect(exit._tag).toBe("Failure");
   });
 });
 
