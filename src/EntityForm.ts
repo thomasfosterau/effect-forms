@@ -50,6 +50,31 @@ export interface ScalarEntry {
   readonly options: TextEntryOptions;
 }
 
+/** Presentation options for a `<select>` entry over a literal-union (`enum` kind) field. */
+export interface SelectEntryOptions {
+  readonly label: MessageThunk;
+  readonly required?: boolean;
+  /**
+   * Per-option render-time label thunks, keyed by the field's derived option
+   * *value* (`Command.FieldPlan.options`, read via `fieldFor` — not declared
+   * here). `defineEntityForm` throws at definition time if a derived value has
+   * no matching thunk.
+   */
+  readonly optionLabels: Readonly<Record<string, MessageThunk>>;
+}
+
+/**
+ * A `<select>` field over a literal-union (`enum` kind) command field. Option
+ * *values* derive from the field's plan; this entry supplies only the
+ * per-option labels — `defineEntityForm` validates the field is `enum`-kind
+ * and that every derived value has a label.
+ */
+export interface SelectEntry {
+  readonly _tag: "select";
+  readonly key: string;
+  readonly options: SelectEntryOptions;
+}
+
 /** Options for a widget entry (picker / rows list). */
 export interface WidgetEntryOptions {
   /** Gate the submit button while this field's value is empty (required pickers). */
@@ -75,7 +100,7 @@ export interface WidgetEntry {
 }
 
 /** One ordered entry in an entity form definition. */
-export type EntityFormEntry = ScalarEntry | WidgetEntry;
+export type EntityFormEntry = ScalarEntry | WidgetEntry | SelectEntry;
 
 /** The per-mode submit labels. */
 export interface SubmitMessages {
@@ -119,6 +144,12 @@ export interface EntryBuilders<K extends string> {
   text(key: K, options: TextEntryOptions): EntityFormEntry;
   /** A scalar field rendered by the shared `TextAreaInputField`. */
   textarea(key: K, options: TextEntryOptions): EntityFormEntry;
+  /**
+   * A `<select>` field over a literal-union (`enum` kind) command field.
+   * Option values are derived from the field's plan; `options.optionLabels`
+   * supplies each derived value's render-time label thunk.
+   */
+  select(key: K, options: SelectEntryOptions): EntityFormEntry;
   /**
    * A bespoke string-valued widget (an FK picker). The renderer supplies
    * `name` / `value` / `onChange` / `errors`; `props()` supplies the rest at
@@ -172,6 +203,7 @@ export interface DefineEntityFormOptions<C extends CommandStructLike, U extends 
 const builders: EntryBuilders<string> = {
   text: (key, options) => ({ _tag: "scalar", key, multiline: false, options }),
   textarea: (key, options) => ({ _tag: "scalar", key, multiline: true, options }),
+  select: (key, options) => ({ _tag: "select", key, options }),
   custom: (key, component, props, options = {}) => ({
     _tag: "widget",
     key,
@@ -188,6 +220,28 @@ const builders: EntryBuilders<string> = {
     props,
     options,
   }),
+};
+
+/**
+ * Validate an `f.select` entry against its plan field at definition time: the
+ * field must be `enum`-kind (the only kind `Command.plan` derives option
+ * values for), and every derived value must have a matching `optionLabels`
+ * thunk.
+ */
+const validateSelectEntry = (entry: SelectEntry, field: Command.FieldPlan): void => {
+  if (field.kind !== "enum") {
+    throw new Error(
+      `defineEntityForm: entry "${entry.key}" is f.select but its command field is "${field.kind}"-kind, not enum`,
+    );
+  }
+  const missingLabels = (field.options ?? []).filter(
+    (value) => !Object.prototype.hasOwnProperty.call(entry.options.optionLabels, value),
+  );
+  if (missingLabels.length > 0) {
+    throw new Error(
+      `defineEntityForm: entry "${entry.key}" is missing optionLabels for: ${missingLabels.join(", ")}`,
+    );
+  }
 };
 
 /**
@@ -213,7 +267,8 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
   const byKey = new Map<string, Command.FieldPlan>(plan.fields.map((field) => [field.key, field]));
   const declared = new Set<string>();
   for (const entry of entries) {
-    if (!byKey.has(entry.key)) {
+    const field = byKey.get(entry.key);
+    if (field === undefined) {
       throw new Error(
         `defineEntityForm: entry "${entry.key}" is not a field of either command struct`,
       );
@@ -222,6 +277,7 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
       throw new Error(`defineEntityForm: entry "${entry.key}" is declared twice`);
     }
     declared.add(entry.key);
+    if (entry._tag === "select") validateSelectEntry(entry, field);
   }
   const missing = plan.fields.filter((field) => !declared.has(field.key)).map((field) => field.key);
   if (missing.length > 0) {

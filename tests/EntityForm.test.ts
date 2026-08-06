@@ -23,6 +23,19 @@ const UpdateThing = Schema.Struct({
   rows: Schema.optional(Schema.Array(Row)),
 });
 
+// A command pair with a literal-union field (the `enum` kind) — f.select's
+// target shape.
+const CreateWithStatus = Schema.Struct({
+  title: Schema.String,
+  status: Schema.Literals(["draft", "published"]),
+});
+const UpdateWithStatus = Schema.Struct({
+  id: Uuid,
+  title: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.Literals(["draft", "published"])),
+});
+const statusOptionLabels = { draft: () => "Draft", published: () => "Published" };
+
 // A stand-in widget: EntityForm only stores the reference, so any function
 // object passes for a Component in unit scope.
 const Picker = (() => {}) as never;
@@ -191,5 +204,67 @@ describe("defineEntityForm", () => {
         ],
       ),
     ).toThrow('entry "rows" is not a field');
+  });
+
+  // ── f.select over the enum kind (#1459) ──────────────────────────────
+
+  it("declares a select entry without deriving option values on the entry itself", () => {
+    const withStatus = defineEntityForm(
+      { create: CreateWithStatus, update: UpdateWithStatus, submit },
+      (f) => [
+        f.text("title", { label: () => "Title" }),
+        f.select("status", { label: () => "Status", optionLabels: statusOptionLabels }),
+      ],
+    );
+    const entry = withStatus.entries.find((e) => e.key === "status");
+    expect(entry?._tag).toBe("select");
+    // Option values live on the plan (derived from the enum kind), not the entry.
+    expect(entry).not.toHaveProperty("values");
+    expect(withStatus.fieldFor("status").kind).toBe("enum");
+    expect(withStatus.fieldFor("status").options).toEqual(["draft", "published"]);
+  });
+
+  it("throws at definition time when f.select targets a non-enum field", () => {
+    expect(() =>
+      defineEntityForm({ create: CreateThing, update: UpdateThing, submit }, (f) => [
+        f.custom("parentId", Picker, () => ({}), { gate: true }),
+        f.select("title", { label: () => "Title", optionLabels: {} }),
+        f.text("note", { label: () => "Note" }),
+        f.rows("rows", RowsWidget, () => ({})),
+      ]),
+    ).toThrow('entry "title" is f.select but its command field is "text"-kind, not enum');
+  });
+
+  it("throws at definition time when optionLabels is missing a derived value", () => {
+    expect(() =>
+      defineEntityForm({ create: CreateWithStatus, update: UpdateWithStatus, submit }, (f) => [
+        f.text("title", { label: () => "Title" }),
+        f.select("status", { label: () => "Status", optionLabels: { draft: () => "Draft" } }),
+      ]),
+    ).toThrow('entry "status" is missing optionLabels for: published');
+  });
+
+  it("treats an inherited Object.prototype key as a missing label, not a declared one", () => {
+    // "toString" and "constructor" resolve via the prototype chain even on a
+    // plain object literal — an `in` check would wrongly accept them as
+    // declared without the definition actually supplying a thunk for them.
+    const CreateWithBuiltinLiteral = Schema.Struct({
+      title: Schema.String,
+      kind: Schema.Literals(["toString", "published"]),
+    });
+    const UpdateWithBuiltinLiteral = Schema.Struct({
+      id: Uuid,
+      title: Schema.optional(Schema.String),
+      kind: Schema.optional(Schema.Literals(["toString", "published"])),
+    });
+    expect(() =>
+      defineEntityForm(
+        { create: CreateWithBuiltinLiteral, update: UpdateWithBuiltinLiteral, submit },
+        (f) => [
+          f.text("title", { label: () => "Title" }),
+          f.select("kind", { label: () => "Kind", optionLabels: { published: () => "Published" } }),
+        ],
+      ),
+    ).toThrow('entry "kind" is missing optionLabels for: toString');
   });
 });
