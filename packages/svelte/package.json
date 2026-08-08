@@ -1,0 +1,24 @@
+{
+  "name": "@thomasfosterau/effect-forms-svelte",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Svelte 5 (runes) bindings for @thomasfosterau/effect-forms — a reactive form store, an enhance action, tainted tracking, and client-side validation.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@thomasfosterau/effect-forms": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/language-service": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  }
+}
