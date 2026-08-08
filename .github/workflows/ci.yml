@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install --no-frozen-lockfile
+
+      # Build first: `packages/svelte` imports `@thomasfosterau/effect-forms`
+      # through its public `exports`, which point at `dist/`. Type-checking and
+      # testing it on a clean checkout both need the sibling's build output.
+      - name: Build
+        run: vp run -r build
+
+      - name: Check (format, lint, types)
+        run: vp check
+
+      - name: Test
+        run: vp run -r test

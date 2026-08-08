@@ -1,17 +1,53 @@
 {
   "name": "@thomasfosterau/effect-forms",
   "version": "0.0.0",
-  "private": true,
   "description": "Framework-neutral, Effect-native form validation and state — schema-driven validation, nested errors, posted-value retention, and native constraints, on Effect Schema.",
+  "keywords": [
+    "effect",
+    "form-validation",
+    "forms",
+    "functional-programming",
+    "schema",
+    "typescript",
+    "validation"
+  ],
+  "homepage": "https://github.com/thomasfosterau/effect-forms/tree/main/packages/forms#readme",
+  "bugs": {
+    "url": "https://github.com/thomasfosterau/effect-forms/issues"
+  },
+  "license": "MIT",
+  "author": "Thomas Foster <me@thomasfoster.au>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thomasfosterau/effect-forms.git",
+    "directory": "packages/forms"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "dependencies": {
-    "effect": "catalog:"
+  "publishConfig": {
+    "access": "public"
   },
-  "devDependencies": {
-    "@effect/language-service": "catalog:",
-    "@types/node": "catalog:"
+  "scripts": {
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0-beta.102"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

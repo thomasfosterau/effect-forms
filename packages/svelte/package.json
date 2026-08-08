@@ -1,24 +1,59 @@
 {
   "name": "@thomasfosterau/effect-forms-svelte",
   "version": "0.0.0",
-  "private": true,
   "description": "Svelte 5 (runes) bindings for @thomasfosterau/effect-forms — a reactive form store, an enhance action, tainted tracking, and client-side validation.",
+  "keywords": [
+    "effect",
+    "form-validation",
+    "forms",
+    "functional-programming",
+    "runes",
+    "svelte",
+    "sveltekit",
+    "typescript"
+  ],
+  "homepage": "https://github.com/thomasfosterau/effect-forms/tree/main/packages/svelte#readme",
+  "bugs": {
+    "url": "https://github.com/thomasfosterau/effect-forms/issues"
+  },
+  "license": "MIT",
+  "author": "Thomas Foster <me@thomasfoster.au>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thomasfosterau/effect-forms.git",
+    "directory": "packages/svelte"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@thomasfosterau/effect-forms": "workspace:*",
-    "effect": "catalog:"
-  },
-  "devDependencies": {
-    "@effect/language-service": "catalog:",
-    "@sveltejs/vite-plugin-svelte": "catalog:",
-    "@types/node": "catalog:",
-    "svelte": "catalog:",
-    "svelte-check": "catalog:"
+    "@thomasfosterau/effect-forms": "workspace:^"
   },
   "peerDependencies": {
-    "svelte": "catalog:"
+    "effect": "^4.0.0-beta.102",
+    "svelte": "^5.40.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

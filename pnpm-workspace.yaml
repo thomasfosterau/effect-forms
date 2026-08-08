@@ -1,0 +1,21 @@
+# pnpm workspace for the effect-forms package family.
+#
+# Two published packages:
+#   - packages/forms   -> @thomasfosterau/effect-forms         (framework-neutral core)
+#   - packages/svelte  -> @thomasfosterau/effect-forms-svelte  (Svelte 5 runes bindings)
+#
+# `effect` and `svelte` are peerDependencies of the published packages and
+# devDependencies at the root, so the workspace resolves exactly one copy of
+# each while consumers bring their own. Two copies of `effect` break Context /
+# Layer / Schema identity at runtime, so the override below pins it.
+packages:
+  - "packages/*"
+
+overrides:
+  effect: "4.0.0-beta.102"
+
+allowBuilds:
+  esbuild: true
+  # Only an optional perf accelerator for msgpackr (pulled in transitively by
+  # the Vite+ toolchain); the pure-JS fallback is used when it isn't built.
+  msgpackr-extract: false
