@@ -1,0 +1,17 @@
+{
+  "name": "@thomasfosterau/effect-forms",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Framework-neutral, Effect-native form validation and state — schema-driven validation, nested errors, posted-value retention, and native constraints, on Effect Schema.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/language-service": "catalog:",
+    "@types/node": "catalog:"
+  }
+}
