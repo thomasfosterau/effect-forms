@@ -50,8 +50,8 @@
     "@thomasfosterau/effect-forms": "workspace:^"
   },
   "peerDependencies": {
-    "effect": "^4.0.0-beta.102",
-    "svelte": "^5.40.0"
+    "effect": "catalog:peers",
+    "svelte": "catalog:peers"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

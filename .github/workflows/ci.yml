@@ -2,30 +2,34 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# No permissions by default; the job grants only read access.
+permissions: {}
 
 jobs:
+  # The job id is the check name; keep it stable.
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          cache: true
-          run-install: false
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: vp install --no-frozen-lockfile
+      # Installs with --frozen-lockfile: a stale pnpm-lock.yaml fails here.
+      - name: Setup toolchain
+        uses: ./.github/actions/setup
 
       # Build first: `packages/svelte` imports `@thomasfosterau/effect-forms`
       # through its public `exports`, which point at `dist/`. Type-checking and

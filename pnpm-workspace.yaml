@@ -4,18 +4,75 @@
 #   - packages/forms   -> @thomasfosterau/effect-forms         (framework-neutral core)
 #   - packages/svelte  -> @thomasfosterau/effect-forms-svelte  (Svelte 5 runes bindings)
 #
-# `effect` and `svelte` are peerDependencies of the published packages and
-# devDependencies at the root, so the workspace resolves exactly one copy of
-# each while consumers bring their own. Two copies of `effect` break Context /
-# Layer / Schema identity at runtime, so the override below pins it.
+# The `catalog:` protocol pins versions that MUST be singletons across the
+# workspace. Effect especially: two copies of `effect` break Context / Layer /
+# Schema identity at runtime, so every package references `catalog:`.
+#
+# EVERY external dependency version lives here — package.json files reference
+# only `catalog:` / `catalog:peers` (or `workspace:^` for internal packages).
+# `catalogMode: strict` makes `pnpm add` enforce this at add time and
+# `pnpm install` reject non-catalog specifiers. After editing this catalog,
+# ALWAYS run `pnpm install` and commit the regenerated pnpm-lock.yaml — CI
+# installs with `--frozen-lockfile`, so a stale lockfile fails it at once.
+#
+# The shape is the library standard (effect-drizzle-ext / effect-jsonapi).
 packages:
   - "packages/*"
 
+catalogMode: strict
+
+catalog:
+  "@changesets/cli": ^3.0.3
+  "@effect/language-service": ^0.87.0
+  "@sveltejs/vite-plugin-svelte": ^7.2.0
+  "@types/node": ^26.1.2
+  # The development copy only. The published packages declare the peer range
+  # under `catalogs.peers` below; moving that floor is its own (major) change.
+  effect: 4.0.0-beta.102
+  happy-dom: ^20.11.1
+  svelte: ^5.56.8
+  svelte-check: ^4.7.3
+  typescript: ^5.9.3
+  # vite-plus pins `oxlint`, `oxfmt` and `vitest` to exact versions; `vite` is
+  # the same release under its aliased core package, and `vitest` must match
+  # vite-plus's exact pin because the `vitest: "catalog:"` override forces
+  # every resolution to the catalog singleton.
+  vite-plus: 0.3.0
+  vite: npm:@voidzero-dev/vite-plus-core@0.3.0
+  vitest: 4.1.11
+
+# Peer ranges the PUBLISHED packages declare. Kept as a named catalog so the
+# strict catalog mode still governs them while they stay ranges. `pnpm
+# publish` replaces `catalog:peers` with these ranges in the published
+# manifest — which is why the release publishes with pnpm, not npm.
+catalogs:
+  peers:
+    effect: ^4.0.0-beta.102
+    svelte: ^5.40.0
+
 overrides:
-  effect: "4.0.0-beta.102"
+  vite: "catalog:"
+  vitest: "catalog:"
+  # `effect` MUST be a singleton (see the header): force every resolution to
+  # the catalog version so a hoisting reshuffle cannot introduce a second copy.
+  effect: "catalog:"
 
 allowBuilds:
   esbuild: true
   # Only an optional perf accelerator for msgpackr (pulled in transitively by
   # the Vite+ toolchain); the pure-JS fallback is used when it isn't built.
   msgpackr-extract: false
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest
+  allowedVersions:
+    vite: "*"
+    vitest: "*"
+
+# Supply-chain delay (owner's policy, gardeneria #1149): hold newly published
+# versions for 1 day (unit: MINUTES) before pnpm will install them.
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  # @thomasfosterau/* is first-party — exempt so our own releases install immediately.
+  - "@thomasfosterau/*"
