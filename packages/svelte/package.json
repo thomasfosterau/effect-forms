@@ -38,6 +38,11 @@
       "types": "./dist/index.d.ts",
       "svelte": "./dist/index.js",
       "import": "./dist/index.js"
+    },
+    "./kit": {
+      "types": "./dist/kit/index.d.ts",
+      "svelte": "./dist/kit/index.js",
+      "import": "./dist/kit/index.js"
     }
   },
   "publishConfig": {
@@ -49,9 +54,23 @@
   "dependencies": {
     "@thomasfosterau/effect-forms": "workspace:^"
   },
+  "devDependencies": {
+    "@sveltejs/kit": "catalog:",
+    "@thomasfosterau/effect-jsonapi": "catalog:"
+  },
   "peerDependencies": {
-    "effect": "^4.0.0-beta.102",
-    "svelte": "^5.40.0"
+    "@sveltejs/kit": "catalog:peers",
+    "@thomasfosterau/effect-jsonapi": "catalog:peers",
+    "effect": "catalog:peers",
+    "svelte": "catalog:peers"
+  },
+  "peerDependenciesMeta": {
+    "@sveltejs/kit": {
+      "optional": true
+    },
+    "@thomasfosterau/effect-jsonapi": {
+      "optional": true
+    }
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
