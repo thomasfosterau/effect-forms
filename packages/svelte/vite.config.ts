@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite-plus";
 
@@ -27,7 +28,12 @@ export default defineConfig({
    * the Svelte compiler relies on to process runes inside published packages.
    */
   pack: {
-    entry: ["src/index.ts"],
+    // `.` is the framework-neutral Svelte bindings; `./kit` is the
+    // SvelteKit-only entry (`$app/forms`, `@sveltejs/kit`).
+    entry: ["src/index.ts", "src/kit/index.ts"],
+    // SvelteKit's virtual modules resolve only inside the consumer's
+    // SvelteKit build; they are never bundled or resolved here.
+    external: [/^\$app\//],
     format: ["esm"],
     platform: "neutral",
     unbundle: true,
@@ -39,6 +45,18 @@ export default defineConfig({
   // `FormStore.svelte.test.ts` (a `.svelte.ts` file is only valid JS once the
   // Svelte compiler has transformed its runes).
   plugins: [svelte()],
+
+  // `$app/forms` is a SvelteKit virtual: tests resolve it to a stub. The
+  // worked examples import this package's `/kit` entry by name, as a
+  // consumer would; it resolves to the sources (tsconfig `paths` agrees).
+  resolve: {
+    alias: {
+      "@thomasfosterau/effect-forms-svelte/kit": fileURLToPath(
+        new URL("./src/kit/index.ts", import.meta.url),
+      ),
+      "$app/forms": fileURLToPath(new URL("./tests/kit/app-forms.stub.ts", import.meta.url)),
+    },
+  },
 
   /** `vp test` (Vitest) */
   test: {
@@ -54,6 +72,11 @@ export default defineConfig({
         "src/ClientValidate.ts",
         "src/EnhanceCore.ts",
         "src/Listeners.ts",
+        "src/kit/ActionRedirect.ts",
+        "src/kit/CommandFailure.ts",
+        "src/kit/FormAction.ts",
+        "src/kit/FormStateReaders.ts",
+        "src/kit/Pointer.ts",
       ],
       exclude: ["**/*.d.ts"],
       thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },

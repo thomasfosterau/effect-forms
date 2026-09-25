@@ -2,7 +2,9 @@
 
 Svelte 5 (runes) bindings for [`@thomasfosterau/effect-forms`](../effect-forms). A reactive form store with progressive-enhancement submission, tainted tracking, lifecycle events, and optional client-side validation against the **same Effect Schema the server uses**.
 
-This package depends only on `svelte` (a peer) and the framework-neutral core — not SvelteKit — so it works in any Svelte 5 app.
+The root entry depends only on `svelte` (a peer) and the framework-neutral core — not SvelteKit — so it works in any Svelte 5 app.
+
+The **`/kit` entry** (`@thomasfosterau/effect-forms-svelte/kit`) is the SvelteKit-only half: `formAction` (a derived page action with JSON:API error routing), `fieldFromPointer`, `idempotentCreate`, `enhanceForm` (on `$app/forms`), the `formStateOf` / `issuesFor` / `rootIssuesOf` / `valueOf` readers, and `withFailureParams`. It needs `@sveltejs/kit` (an optional peer). See [docs/kit.md](../../docs/kit.md).
 
 ## Usage
 

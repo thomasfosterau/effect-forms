@@ -22,13 +22,13 @@ Use `./node_modules/.bin/vp` if the global `vp` CLI is not installed.
 | `packages/forms`  | `@thomasfosterau/effect-forms`        | Framework-neutral core. No framework imports. |
 | `packages/svelte` | `@thomasfosterau/effect-forms-svelte` | Svelte 5 runes bindings.                      |
 
-Each package has a **single entry point** (`.`). Don't add subpath exports without a concrete reason — the barrel is what keeps import sites stable.
+Each package has a **single entry point** (`.`), with one deliberate exception: `effect-forms-svelte/kit`, the SvelteKit-only entry (`@sveltejs/kit` and the `$app/forms` virtual, which the root entry must never import). Don't add other subpath exports without a concrete reason — the barrel is what keeps import sites stable.
 
 `packages/forms` must never import a framework. That constraint is the whole point of the split: the core is usable from any framework (or none), and the Svelte bindings are the only place `svelte` may appear.
 
 ## Peer dependencies
 
-`effect` and `svelte` are **peer** dependencies, never bundled. Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so `pnpm-workspace.yaml` pins a single `effect` via the catalog and an `overrides: effect: "catalog:"` entry.
+`effect` and `svelte` are **peer** dependencies, never bundled. `@sveltejs/kit` and `@thomasfosterau/effect-jsonapi` are **optional** peers of `effect-forms-svelte`, used only by `/kit` (the latter for its types only). Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so `pnpm-workspace.yaml` pins a single `effect` via the catalog and an `overrides: effect: "catalog:"` entry.
 
 **Never edit a version in a `package.json`.** Every external version lives in `pnpm-workspace.yaml` under `catalog:` (the published peer ranges under `catalogs.peers`); manifests carry only `catalog:` / `catalog:peers` / `workspace:^`, and `catalogMode: strict` rejects anything else. After editing the catalog, run `pnpm install` and commit the regenerated `pnpm-lock.yaml` — CI installs with `--frozen-lockfile`.
 
