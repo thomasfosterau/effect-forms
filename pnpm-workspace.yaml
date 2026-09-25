@@ -27,7 +27,7 @@ catalog:
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
   "@sveltejs/kit": 3.0.0-next.27
-  "@sveltejs/vite-plugin-svelte": ^7.2.0
+  "@sveltejs/vite-plugin-svelte": ^7.3.1
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
   # peer). Nothing imports it at runtime.
@@ -37,8 +37,8 @@ catalog:
   # under `catalogs.peers` below; moving that floor is its own (major) change.
   effect: 4.0.0-beta.102
   happy-dom: ^20.11.1
-  svelte: ^5.56.8
-  svelte-check: ^4.7.3
+  svelte: ^5.57.1
+  svelte-check: ^4.7.6
   typescript: ^5.9.3
   # vite-plus pins `oxlint`, `oxfmt` and `vitest` to exact versions; `vite` is
   # the same release under its aliased core package, and `vitest` must match
