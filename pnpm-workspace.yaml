@@ -36,7 +36,7 @@ catalog:
   # The development copy only. The published packages declare the peer range
   # under `catalogs.peers` below; moving that floor is its own (major) change.
   effect: 4.0.0-beta.102
-  happy-dom: ^20.11.1
+  happy-dom: ^20.14.5
   svelte: ^5.57.1
   svelte-check: ^4.7.6
   typescript: ^5.9.3
