@@ -26,7 +26,7 @@ catalog:
   "@effect/language-service": ^0.87.0
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
-  "@sveltejs/kit": 3.0.0-next.27
+  "@sveltejs/kit": 3.0.0-next.29
   "@sveltejs/vite-plugin-svelte": ^7.3.1
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional

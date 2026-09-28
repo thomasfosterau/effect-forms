@@ -13,8 +13,8 @@ catalogs:
       specifier: ^0.87.0
       version: 0.87.1
     '@sveltejs/kit':
-      specifier: 3.0.0-next.27
-      version: 3.0.0-next.27
+      specifier: 3.0.0-next.29
+      version: 3.0.0-next.29
     '@sveltejs/vite-plugin-svelte':
       specifier: ^7.3.1
       version: 7.3.1
@@ -110,7 +110,7 @@ importers:
     devDependencies:
       '@sveltejs/kit':
         specifier: 'catalog:'
-        version: 3.0.0-next.27(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8))(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8)(typescript@5.9.3)
+        version: 3.0.0-next.29(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8))(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8)(typescript@5.9.3)
       '@thomasfosterau/effect-jsonapi':
         specifier: 'catalog:'
         version: 0.15.2(effect@4.0.0-beta.102)
@@ -574,14 +574,14 @@ packages:
     peerDependencies:
       acorn: ^8.9.0
 
-  '@sveltejs/kit@3.0.0-next.27':
-    resolution: {integrity: sha512-m2R6GvcMhiAbYVKhzRf5mzLSvcXEuy/H0Va72XvxfEl1ZglrSC/321GKYa6idDHPojuRzkyh9EB0jBZmAwf6+Q==}
+  '@sveltejs/kit@3.0.0-next.29':
+    resolution: {integrity: sha512-KU7O9qC0ZIJgdw1XK/PmShndkXp1Tnk60HJJbNx35bFKtax/v5wC7BYnP476fGmb2GBiDdhAV+/9PCX0uwmejQ==}
     engines: {node: '>=22.17'}
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
       '@sveltejs/vite-plugin-svelte': ^7.0.0
-      svelte: ^5.56.4
+      svelte: ^5.57.1
       typescript: ^6.0.0
       vite: ^8.0.12
     peerDependenciesMeta:
@@ -1805,13 +1805,13 @@ snapshots:
     dependencies:
       acorn: 8.18.0
 
-  '@sveltejs/kit@3.0.0-next.27(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8))(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8)(typescript@5.9.3)':
+  '@sveltejs/kit@3.0.0-next.29(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8))(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8)(typescript@5.9.3)':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
       '@standard-schema/spec': 1.1.0
       '@sveltejs/vite-plugin-svelte': 7.3.1(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.6.2)(typescript@5.9.3)(yaml@2.9.0))(svelte@5.56.8)
       cookie: 2.0.1
-      devalue: 5.9.0
+      devalue: 5.9.4
       esm-env: 1.2.2
       magic-string: 1.4.2
       mrmime: 2.0.1
