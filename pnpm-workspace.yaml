@@ -23,7 +23,7 @@ catalogMode: strict
 
 catalog:
   "@changesets/cli": ^3.0.3
-  "@effect/language-service": ^0.87.0
+  "@effect/language-service": ^0.87.3
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
   "@sveltejs/kit": 3.0.0-next.29
@@ -35,7 +35,7 @@ catalog:
   "@types/node": ^26.6.2
   # The development copy only. The published packages declare the peer range
   # under `catalogs.peers` below; moving that floor is its own (major) change.
-  effect: 4.0.0-beta.102
+  effect: 4.0.0-rc.118
   happy-dom: ^20.14.5
   svelte: ^5.57.1
   svelte-check: ^4.7.6
