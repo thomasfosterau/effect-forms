@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Client-side validation helpers — validate the whole form or a single field
  * against the same Effect Schema the server uses, returning the nested
  * {@link FormErrors} tree (or one field's messages).
@@ -10,6 +8,7 @@
  * have no decoding-service requirements (the common case for form schemas) so
  * validation can run synchronously in an event handler.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/ClientValidate
  */
 

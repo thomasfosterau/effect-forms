@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * `@thomasfosterau/effect-forms` — framework-neutral, Effect-native form
  * validation and state. A complete form feature set
  * (schema-driven validation, nested errors, posted-value retention, status
@@ -11,6 +9,7 @@
  * Modules are exposed as Effect-style namespaces — `import { Form, State } from
  * "@thomasfosterau/effect-forms"` then `Form.make(...)` / `State.make(...)`.
  *
+ * @copyright Thomas Foster
  * @module effect-forms
  */
 

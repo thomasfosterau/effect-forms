@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Compose a form schema one field at a time, with cross-field refinements.
  *
  * {@link make} (aliased {@link empty}) starts an empty builder;
@@ -21,6 +19,7 @@
  * path — {@link asyncRefinements} exposes them and {@link runAsyncRefinements}
  * runs them into a {@link FormIssue} list.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/FormBuilder
  */
 
@@ -195,8 +194,8 @@ export function asyncRefinements<TFields extends FieldsRecord, R>(
  * Normalise a filter predicate's `Schema.FilterOutput` into a flat list of
  * {@link FormIssue}s (empty on success).
  *
- * @deprecated Use {@link Issues.filterOutputToFormIssues}; this re-export
- * remains only for callers that imported it from `FormBuilder`.
+ * @deprecated Use `Issues.filterOutputToFormIssues`; this re-export remains
+ * only for callers that imported it from `FormBuilder`.
  */
 export const filterOutputToFormIssues: typeof Issues.filterOutputToFormIssues =
   issuesFromFilterOutput;

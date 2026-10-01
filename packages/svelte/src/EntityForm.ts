@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * The typed entity-form definition builder.
  * `defineEntityForm(commands, (f) => [...])` pairs a `Command.plan`
  * derivation (form-input schemas, blank defaults, tri-state adapters — see
@@ -20,6 +18,7 @@
  * e.g. an i18n message function) resolved at render time, never at
  * module scope — module-scope resolution would freeze the import-time locale.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/EntityForm
  */
 

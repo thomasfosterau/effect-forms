@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * {@link make} — the core entry point: bind an Effect Schema to a form and
  * get back a validator and an empty-state factory.
  *
@@ -21,6 +19,7 @@
  * {@link module:effect-forms/Coerce} helpers, …) so a multipart body decodes
  * cleanly.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Form
  */
 

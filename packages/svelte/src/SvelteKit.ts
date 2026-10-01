@@ -1,11 +1,10 @@
 /**
- * @copyright Thomas Foster
- *
  * SvelteKit interop for the form store that needs no SvelteKit import:
  * applying a derived form action's result back to the store. The glue that
  * imports `@sveltejs/kit` or the `$app/forms` virtual lives in the `/kit`
  * entry.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/SvelteKit
  */
 

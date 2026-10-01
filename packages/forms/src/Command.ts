@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Command-struct introspection and form derivation.
  *
  * A host app's write surface is a pair of flat command `Schema.Struct`s per
@@ -28,6 +26,7 @@
  * (a create-time default, an asymmetric coercion) stay expressible via the
  * per-field {@link AdaptOverrides} escape hatch instead of forcing ejection.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Command
  */
 

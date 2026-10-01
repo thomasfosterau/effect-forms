@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Derive a SvelteKit page form action from an `@thomasfosterau/effect-forms`
  * form plus the command it submits to.
  *
@@ -16,6 +14,7 @@
  * {@link CommandFailure.jsonapiFailure} (or a caller's own classifier) and
  * routed onto the form's fields by each JSON:API error's `source.pointer`.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/FormAction
  */
 

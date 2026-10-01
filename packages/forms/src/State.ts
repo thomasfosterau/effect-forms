@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * {@link FormState} — the serialisable snapshot of a form.
  *
  * This is the single object a
@@ -9,6 +7,7 @@
  * boundary, and {@link FormStateSchema} gives it an Effect Schema so it can be
  * decoded back on arrival.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/State
  */
 

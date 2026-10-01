@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Field definitions for the {@link module:effect-forms/FormBuilder}.
  *
  * A {@link FormBuilder} composes a form one field at a time. Each field is
@@ -17,6 +15,7 @@
  * decoded type is the schema's job at validate time (see
  * {@link module:effect-forms/Coerce}).
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Field
  */
 

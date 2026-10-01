@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Low-level validation helpers — decode a value through a schema and get back
  * the {@link FormErrors} tree (or the list of {@link FormIssue}s) instead of a
  * raised failure. `Form.make` is the high-level entry; these are for ad
@@ -17,6 +15,7 @@
  * and interrupting the previous fiber on every new run (see that function's
  * docs for why that alone gives debounce + "latest wins" cancellation).
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Validate
  */
 
