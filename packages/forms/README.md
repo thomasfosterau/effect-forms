@@ -2,11 +2,15 @@
 
 Framework-neutral, **Effect-native** form validation and state — schema-driven validation, nested errors, posted-value retention, status messages, and native input constraints, built on **Effect Schema** with no framework dependency. The Svelte 5 bindings live in [`@thomasfosterau/effect-forms-svelte`](../svelte).
 
-## Why
+## Install
 
-The app validates everything with Effect Schema (Zod is gone). The progressive form libraries in the ecosystem are excellent, but they speak Standard Schema / Zod and bake in a framework. This package keeps the ergonomics — one schema drives validation, errors nest by field, posted values survive a failed submit, native input constraints come for free — while staying on Effect Schema and free of any framework, so the core is testable in isolation and reusable from a Worker, the CLI, or a Svelte route.
+```sh
+pnpm add @thomasfosterau/effect-forms effect
+```
 
-## The shape
+`effect` is a peer dependency; the package never bundles its own copy.
+
+## Usage
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -28,11 +32,12 @@ const state = await Effect.runPromise(signupForm.validate(request));
 // state: { id, valid, posted, data, errors, constraints, message? }
 ```
 
-## Building a form incrementally
+### Building a form incrementally
 
 `Form.make` binds a hand-written `Schema.Struct`. When you'd rather compose a form field by field — reusing field groups, merging them, and attaching whole-form (cross-field) rules — reach for `FormBuilder`:
 
 ```ts
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Field, Form, FormBuilder } from "@thomasfosterau/effect-forms";
 
@@ -57,19 +62,20 @@ Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`, `Erro
 - **`validate(input)`** accepts a `FormData`, `URLSearchParams`, `Request`, or a plain object. It parses the body (nested `author.name` / `tags[0]` / `tags[]` notation), decodes it through the schema collecting **every** field error (`errors: "all"`), and returns a serialisable [`FormState`](src/State.ts) — valid with the decoded data, or invalid with the nested [`FormErrors`](src/Errors.ts) tree and the **posted values preserved** so the form re-renders what the user typed. It is an `Effect`, so a schema that requires decoding services composes naturally; it never fails on the error channel (validation failures live in the returned state).
 - **`empty()`** seeds a blank, unposted form from the defaults — what a `load` returns to render a create form.
 
-## What's in the box
+## API
 
 | Module                              | Purpose                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`Form`](src/Form.ts)               | `make` — bind a schema to a form (validate + empty); `fromBuilder` — bind a `FormBuilder`.                                                                                                                                                                                                                                                                                                                           |
 | [`FormBuilder`](src/FormBuilder.ts) | Compose a form field by field: `addField` / `merge` / `refine` / `refineEffect` / `buildSchema`.                                                                                                                                                                                                                                                                                                                     |
 | [`Field`](src/Field.ts)             | `makeField` / `makeArrayField` field defs + guards, and blank-default derivation from a schema — `defaultValue` / `defaultEncodedValues` for a builder field, `schemaAt` / `defaultItemAt` for any nested path.                                                                                                                                                                                                      |
-| [`State`](src/State.ts)             | `FormState`, `makeFormState`, `setMessage`, `withError`, `FormStateSchema` (transport).                                                                                                                                                                                                                                                                                                                              |
-| [`Errors`](src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors` / `remapIndices`; `FieldValidators` per-source error tracking via `replaceAt` / `setSourceAt` / `clearSourceAt` / `mergeSourced`.                                                                                                                                                                        |
+| [`State`](src/State.ts)             | `FormState`, `make`, `withMessage`, `withError`, `isValid`, `FormStateSchema` (transport).                                                                                                                                                                                                                                                                                                                           |
+| [`Errors`](src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors` / `remapIndices`; `SourcedErrors` per-source tracking via `replaceAt` / `setSourceAt` / `clearSourceAt` / `mergeSourced`.                                                                                                                                                                                |
 | [`Issues`](src/Issues.ts)           | `FormIssue` + the Effect Schema issue-tree walker.                                                                                                                                                                                                                                                                                                                                                                   |
 | [`FormData`](src/FormData.ts)       | `formDataToObject` / `parseFieldPath` — structured parsing of an HTML body.                                                                                                                                                                                                                                                                                                                                          |
 | [`Path`](src/Path.ts)               | `getAt` / `setAt` (immutable) along a `FormPath`, `toString` / `fromString` notation conversion, the type-level `FieldPath<T>` / `PathValue<T, P>` deep-key projections a typed field handle is built on, and the `IndexMap` constructors (`removeAt` / `insertAt` / `swapAt` / `moveAt` / `replaceAt` / `clearAll`) + `remapIndex` / `remapKeyedRecord` for keeping per-index state in sync with an array mutation. |
 | [`Coerce`](src/Coerce.ts)           | Tri-state (value / `null` / `undefined`) coercers for the form boundary.                                                                                                                                                                                                                                                                                                                                             |
+| [`Command`](src/Command.ts)         | Derive form-input schemas, blank defaults and tri-state create / update adapters from a command-struct pair: `plan`, `formInputFields`, `blankDefaults`, `createAdapter`, `updateAdapter`, `jsonRowsFromField`.                                                                                                                                                                                                      |
 | [`Constraints`](src/Constraints.ts) | `constraintsFromSchema` — native input attributes (`required`, `minlength`/`maxlength`, `min`/`max`, `pattern`, `step`) derived from the schema AST, including into array items; `constraintAt` reads one field's leaf out of the derived tree.                                                                                                                                                                      |
 | [`Mode`](src/Mode.ts)               | `FormMode` + `parse` — when a form validates (`onSubmit` / `onBlur` / `onChange`), whether it auto-submits, and when a posted form revalidates (`revalidate`).                                                                                                                                                                                                                                                       |
 | [`Result`](src/Result.ts)           | `FormActionResult` — the framework-neutral submission outcome (success / failure / redirect / error).                                                                                                                                                                                                                                                                                                                |
@@ -79,22 +85,10 @@ Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`, `Erro
 
 - **Coercion is the schema's job.** An HTML body is all strings; build the schema from coercing leaves (`Schema.FiniteFromString`, `Schema.BooleanFromString`, the `Coerce` helpers) so the parsed object decodes cleanly. The parser never guesses types.
 - **Errors nest by field.** Leaf fields are `string[]`; nested objects / array indices nest; a branch's own (cross-field) message lives under `_errors`. The tree is plain JSON — it crosses the SSR boundary unchanged.
-- **Update semantics.** The `Coerce` helpers honour the value / `null` / `undefined` contract (set / clear / carry-forward) the app uses for partial updates.
+- **Update semantics.** The `Coerce` helpers honour the value / `null` / `undefined` contract (set / clear / carry-forward) for partial updates.
 - **Constraint derivation reads schema checks, not just optionality.** `constraintsFromSchema` walks each property's `.check()`s for the `meta` annotation Effect Schema's built-in checks carry (`isMinLength`, `isBetweenLength`, `isPattern`, `isGreaterThanOrEqualTo`, `isBetween`, `isMultipleOf`, `isInt`, …), unwraps `optional` / `NullOr` unions, and descends into struct and array-item shapes. A check with no recognised `meta` tag (a bare `Schema.filter` predicate) derives nothing — there's no attribute to guess at. Anything the walk can't (or shouldn't) infer goes through the `overrides` argument, which always wins on conflict.
 - **Errors have a source.** `Errors.SourcedErrors` keeps a `client` tree (browser-side validation) parallel to a `server` tree (the last submission), merged for display by `mergeSourced`. `Errors.replaceAt` / `setSourceAt` / `clearSourceAt` update one path in one source without disturbing the rest — what a reactive store needs so a server-reported failure survives a client revalidation of some _other_ field, but clears once its own field changes.
 
-## File naming
+## License
 
-Source modules use PascalCase file names, matching Effect's own convention (`effect/Schema`, `effect/SchemaParser`). The package has a single entry point: every module is re-exported from the `.` barrel, so there are no subpaths to import from.
-
-## Development
-
-From the repository root:
-
-```sh
-vp run -r build   # build every package with tsdown
-vp check          # format (Oxfmt), lint (Oxlint), type-check (tsgolint)
-vp run -r test    # unit tests
-```
-
-Or from this directory: `vp test run` / `vp test run --coverage`.
+[MIT](LICENSE)
