@@ -23,7 +23,7 @@ Toolchain differences from the sibling libraries: unit tests are the `test` task
 - **Relative imports carry their `.ts` extension** (`allowImportingTsExtensions` + `rewriteRelativeImportExtensions`, see `tsconfig.json`).
 - **Tests import from `vite-plus/test`**, never `vitest`; `tests/<Module>.test.ts` mirrors `src/<Module>.ts`. A test of a rune module is `*.svelte.test.ts`, so the Svelte compiler transforms it.
 - **Core modules are namespaces** (`export * as Form from "./Form.ts"`); the Svelte root and `/kit` barrels re-export flat (`export *`), except `CommandFailure`.
-- **Every export has a doc comment** whose first sentence stands alone in a hover. `@deprecated` names the replacement with `{@link}`.
+- **Every export has a doc comment** whose first sentence stands alone in a hover. `@deprecated` names the replacement as a backticked name (`` `Issues.filterOutputToFormIssues` ``), not `{@link}`: tsdown renames bundled symbols, so a link in the published `.d.ts` can't resolve.
 
 ## Commands
 

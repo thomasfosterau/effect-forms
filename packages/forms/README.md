@@ -28,6 +28,7 @@ const signupForm = Form.make(Signup, {
 });
 
 // In a server action / load:
+declare const request: Request;
 const state = await Effect.runPromise(signupForm.validate(request));
 // state: { id, valid, posted, data, errors, constraints, message? }
 ```
@@ -52,6 +53,7 @@ const signup = FormBuilder.empty
 
 // Bind it exactly like a schema (defaults are derived when omitted):
 const form = Form.fromBuilder(signup, { id: "signup" });
+declare const request: Request; // the incoming submission
 const state = await Effect.runPromise(form.validate(request));
 ```
 
