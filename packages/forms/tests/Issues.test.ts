@@ -54,3 +54,43 @@ describe("schemaIssuesToFormIssues default messages", () => {
     expect(tags).toEqual(["InvalidType"]);
   });
 });
+
+describe("schemaIssuesToFormIssues shapes", () => {
+  it("renders a union mismatch as one issue at the field", () => {
+    const schema = Schema.Struct({ v: Schema.Union([Schema.String, Schema.Number]) });
+    const issues = schemaIssuesToFormIssues(issueOf(schema, { v: true }));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.path).toEqual(["v"]);
+    expect(issues[0]?.message).not.toContain("[object Object]");
+    expect(issues[0]?.message).not.toBe("");
+  });
+
+  it("carries a nested struct path", () => {
+    const schema = Schema.Struct({
+      author: Schema.Struct({ name: Schema.String.check(Schema.isMinLength(3)) }),
+    });
+    expect(schemaIssuesToFormIssues(issueOf(schema, { author: { name: "x" } }))).toEqual([
+      { path: ["author", "name"], message: "Expected a value with a length of at least 3" },
+    ]);
+  });
+
+  it("renders a pattern failure with the pattern in the message", () => {
+    const schema = Schema.Struct({ slug: Schema.String.check(Schema.isPattern(/^[a-z]+$/)) });
+    const [issue] = schemaIssuesToFormIssues(issueOf(schema, { slug: "A1" }));
+    expect(issue?.path).toEqual(["slug"]);
+    expect(issue?.message).toContain("^[a-z]+$");
+  });
+
+  it("hands a failed check to a custom formatter as the wrapping Filter node", () => {
+    const schema = Schema.String.check(Schema.isMinLength(3));
+    const seen: Array<{ tag: string; inner: string | undefined }> = [];
+    schemaIssuesToFormIssues(issueOf(schema, "x"), (issue) => {
+      seen.push({
+        tag: issue._tag,
+        inner: issue._tag === "Filter" ? issue.issue._tag : undefined,
+      });
+      return "custom";
+    });
+    expect(seen).toEqual([{ tag: "Filter", inner: "InvalidValue" }]);
+  });
+});
