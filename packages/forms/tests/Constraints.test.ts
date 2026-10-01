@@ -44,12 +44,29 @@ describe("constraintsFromSchema", () => {
     });
   });
 
-  it("derives minlength and maxlength together from isLengthBetween", () => {
+  it("derives minlength and maxlength together from isBetweenLength", () => {
     const schema = Schema.Struct({
-      code: Schema.String.check(Schema.isLengthBetween(4, 8)),
+      code: Schema.String.check(Schema.isBetweenLength(4, 8)),
     });
     expect(constraintsFromSchema(schema)).toEqual({
       code: { required: true, minlength: 4, maxlength: 8 },
+    });
+  });
+
+  it("derives minlength=1 and maxlength=5 from a Schema.isBetweenLength(1, 5) check", () => {
+    // The rc.118 representation id is `effect/schema/isBetweenLength`
+    // (`isLengthBetween` before); an unrecognised id derives nothing, silently.
+    const field = Schema.String.check(Schema.isBetweenLength(1, 5));
+    expect(constraintsFromSchema(Schema.Struct({ field }))).toEqual({
+      field: { required: true, minlength: 1, maxlength: 5 },
+    });
+  });
+
+  it("matches the check by its rc.118 representation id", () => {
+    const [filter] = Schema.String.check(Schema.isBetweenLength(1, 5)).ast.checks ?? [];
+    expect(filter?.annotations?.representation).toEqual({
+      id: "effect/schema/isBetweenLength",
+      payload: { minimum: 1, maximum: 5 },
     });
   });
 
