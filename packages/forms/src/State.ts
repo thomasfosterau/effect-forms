@@ -43,11 +43,17 @@ export interface FormState<A, Message = unknown> {
 
 /** Options for {@link make}. */
 export interface MakeFormStateOptions<Message> {
+  /** The form's id, distinguishing several forms on one page. Defaults to `"default"`. */
   readonly id?: string;
+  /** Whether the state is valid. Defaults to `true` exactly when `errors` is empty. */
   readonly valid?: boolean;
+  /** Whether the state comes from a submission. Defaults to `false`. */
   readonly posted?: boolean;
+  /** The nested error tree. Defaults to no errors. */
   readonly errors?: FormErrors;
+  /** A status message to render with the form. Omitted by default. */
   readonly message?: Message;
+  /** Native input constraints. Omitted by default. */
   readonly constraints?: InputConstraints;
 }
 

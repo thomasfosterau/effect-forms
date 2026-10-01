@@ -1,10 +1,10 @@
 /**
  * @copyright Thomas Foster
  *
- * The typed entity-form definition builder — the composition layer of the
- * schema-driven form phase. `defineEntityForm(commands, (f) => [...])` pairs a
- * `Command.plan` derivation (form-input schemas, blank defaults, tri-state
- * adapters — see `effect-forms/Command`) with an ordered list of typed field
+ * The typed entity-form definition builder.
+ * `defineEntityForm(commands, (f) => [...])` pairs a `Command.plan`
+ * derivation (form-input schemas, blank defaults, tri-state adapters — see
+ * `effect-forms/Command`) with an ordered list of typed field
  * entries: shared scalar primitives by kind, and arbitrary widget components
  * for the bespoke fields (pickers, contributor lists). One generic renderer
  * component walks `definition.entries`; per-entity code shrinks to one
@@ -17,7 +17,7 @@
  * breaks the entity's definition module until the form declares it.
  *
  * Labels and other message-bearing props are **thunks** (`() => string`,
- * Paraglide message function references) resolved at render time, never at
+ * e.g. an i18n message function) resolved at render time, never at
  * module scope — module-scope resolution would freeze the import-time locale.
  *
  * @module effect-forms-svelte/EntityForm
@@ -27,7 +27,7 @@ import type { Component } from "svelte";
 import { Command } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
 
-/** A render-time message thunk — pass the Paraglide function itself, uncalled. */
+/** A render-time message thunk — pass the message function itself, uncalled. */
 export type MessageThunk = () => string;
 
 /** Presentation options for a scalar text entry. */
@@ -83,7 +83,7 @@ export interface WidgetEntryOptions {
 
 /**
  * A bespoke widget field. The renderer bridges the store to the widget through
- * the stage-1 wrapper contract — `name`, `value`, `onChange`, `errors` — which
+ * the widget contract — `name`, `value`, `onChange`, `errors` — which
  * are **reserved keys**: the bridge is spread last, so a `props()` thunk or a
  * load-supplied field prop can never silently sever the store binding.
  */

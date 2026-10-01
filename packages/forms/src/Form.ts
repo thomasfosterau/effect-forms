@@ -11,9 +11,8 @@
  *   it through the schema, returning a {@link FormState} — valid with the
  *   decoded data, or invalid with the nested {@link FormErrors} and the posted
  *   values preserved so the form re-renders what the user typed. It is an
- *   `Effect`, so a schema requiring decoding services composes naturally and
- *   the caller stays on the typed error channel — there is none; validation
- *   failures live in the returned state, not the error channel.
+ *   `Effect`, so a schema requiring decoding services composes naturally; it
+ *   has no error channel — validation failures live in the returned state.
  * - `empty()` seeds an unposted, invalid-by-default form from the supplied
  *   defaults — what a `load` returns to render a blank create form.
  *
@@ -88,8 +87,11 @@ const toStructured = (input: FormInput): Effect.Effect<Record<string, unknown> |
 };
 
 /**
- * Bind `schema` to a form. See the module docs for the contract. The returned
- * {@link Form} is stateless and reusable across requests.
+ * Bind `schema` to a form: `validate(input)` decodes a submission into a
+ * {@link FormState} (it never fails — validation failures live in the state;
+ * its requirements are the schema's decoding services) and `empty()` seeds a
+ * blank form from `defaults`. The returned {@link Form} is stateless and
+ * reusable across requests.
  */
 export function make<S extends Schema.Top, Message = unknown>(
   schema: S,

@@ -35,8 +35,9 @@ import type {
   FieldsRecord,
 } from "./Field.ts";
 import { isArrayFieldDef, isFieldDef, makeField } from "./Field.ts";
+import type * as Issues from "./Issues.ts";
 import type { FormIssue } from "./Issues.ts";
-import { filterOutputToFormIssues } from "./Issues.ts";
+import { filterOutputToFormIssues as issuesFromFilterOutput } from "./Issues.ts";
 
 /** Brand for a {@link FormBuilder}. */
 export const TypeId: unique symbol = Symbol.for("@thomasfosterau/effect-forms/FormBuilder");
@@ -190,9 +191,15 @@ export function asyncRefinements<TFields extends FieldsRecord, R>(
     .map((r) => r.fn as never);
 }
 
-// {@link filterOutputToFormIssues} moved to {@link module:effect-forms/Issues}
-// (shared with per-field validators); re-exported here for existing callers.
-export { filterOutputToFormIssues };
+/**
+ * Normalise a filter predicate's `Schema.FilterOutput` into a flat list of
+ * {@link FormIssue}s (empty on success).
+ *
+ * @deprecated Use {@link Issues.filterOutputToFormIssues}; this re-export
+ * remains only for callers that imported it from `FormBuilder`.
+ */
+export const filterOutputToFormIssues: typeof Issues.filterOutputToFormIssues =
+  issuesFromFilterOutput;
 
 /**
  * Run every asynchronous refinement on `self` against `values` and collect
@@ -206,6 +213,6 @@ export function runAsyncRefinements<TFields extends FieldsRecord, R>(
   const refinements = asyncRefinements(self);
   if (refinements.length === 0) return Effect.succeed([]);
   return Effect.forEach(refinements, (fn) => fn(values), { concurrency: "unbounded" }).pipe(
-    Effect.map((outputs) => outputs.flatMap(filterOutputToFormIssues)),
+    Effect.map((outputs) => outputs.flatMap(issuesFromFilterOutput)),
   );
 }

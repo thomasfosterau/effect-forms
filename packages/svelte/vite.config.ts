@@ -66,7 +66,8 @@ export default defineConfig({
       reporter: ["text-summary", "json-summary"],
       reportsDirectory: "./coverage",
       // The reactive store lives in `FormStore.svelte.ts` (rune-compiled,
-      // checked by svelte-check); coverage gates the pure modules.
+      // type-checked as plain TypeScript by `vp check`; no svelte-check gate
+      // yet, #19); coverage gates the pure modules.
       include: [
         "src/Tainted.ts",
         "src/ClientValidate.ts",

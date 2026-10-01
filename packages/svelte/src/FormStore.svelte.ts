@@ -4,7 +4,7 @@
  * The reactive Svelte 5 form store.
  *
  * {@link createForm} binds a schema to a reactive, rune-backed {@link FormStore}.
- * Give it either `{ schema, defaults }` (it wraps the core's `makeForm` to seed
+ * Give it either `{ schema, defaults }` (it wraps the core's `Form.make` to seed
  * an empty form) or a server-produced {@link FormState} to hydrate from. The
  * store exposes mutable `data` (bind inputs to it), typed `errors`
  * (`form.errors.name`), `submitting` / `delayed` / `message` / `valid`, tainted
@@ -1352,7 +1352,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 }
 
-/** A schema plus its blank-form defaults — what {@link createForm} wraps `makeForm` over. */
+/** A schema plus its blank-form defaults — what {@link createForm} wraps `Form.make` over. */
 export interface FormSeed<S extends Schema.Top> {
   readonly schema: S;
   readonly defaults: S["Type"];
@@ -1385,7 +1385,7 @@ export type FormBuilderOptions<TFields extends Field.FieldsRecord, R, Message> =
  * - a {@link FormBuilder} — the schema, blank defaults, and array-item defaults
  *   are all derived from the builder (client validation, including
  *   `refineEffect` refinements, is wired automatically);
- * - `{ schema, defaults }` — seed a blank form (wrapping the core's `makeForm`);
+ * - `{ schema, defaults }` — seed a blank form (wrapping the core's `Form.make`);
  * - a server-produced {@link FormState} — hydrate from it (schema in `options`).
  */
 export function createForm<TFields extends Field.FieldsRecord, R, Message = unknown>(
