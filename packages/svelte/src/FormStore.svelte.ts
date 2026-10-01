@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * The reactive Svelte 5 form store.
  *
  * {@link createForm} binds a schema to a reactive, rune-backed {@link FormStore}.
@@ -40,6 +38,7 @@
  * governs what happens *after* a failed post in `onSubmit` mode: fixing a
  * field re-validates it (clearing its error) without a resubmit.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/FormStore
  */
 
@@ -138,12 +137,10 @@ export class FieldHandle<V> {
   }
 
   /** The field's current value. Assignable — `bind:value={field.value}` works. */
-  // fallow-ignore-next-line unused-class-member -- consumed through the EffectFieldLike structural mirror in packages/components/src/fields/field-types.ts; the components→effect-forms boundary forbids a direct type edge (see docs/decisions/effect-native-form-toolkit.md), so fallow can't trace the interface-typed call site.
   get value(): V {
     return this.#store.valueAt(this.#path) as V;
   }
 
-  // fallow-ignore-next-line unused-class-member -- same structural-mirror consumer as the getter above.
   set value(next: V) {
     this.#store.setValue(this.#path, next);
   }
@@ -154,7 +151,6 @@ export class FieldHandle<V> {
   }
 
   /** This field's messages, gated by the form's validation mode (see {@link FormStore.shouldShowError}). */
-  // fallow-ignore-next-line unused-class-member -- consumed through the EffectFieldLike structural mirror in packages/components/src/fields/field-types.ts; see docs/decisions/effect-native-form-toolkit.md.
   get visibleErrors(): readonly string[] {
     return this.#store.visibleErrorsAt(this.#path);
   }
@@ -165,7 +161,6 @@ export class FieldHandle<V> {
   }
 
   /** This field's {@link FieldMeta}. */
-  // fallow-ignore-next-line unused-class-member -- documented per-field API (see the FieldHandle class doc); no in-repo caller yet, kept per docs/decisions/effect-native-form-toolkit.md.
   get meta(): FieldMeta {
     const isBlurred = this.#store.isTouchedAt(this.#path);
     const isDirty = this.#store.isDirtyAt(this.#path);
@@ -178,7 +173,6 @@ export class FieldHandle<V> {
   }
 
   /** Mark this field blurred — see {@link FormStore.handleBlur}. */
-  // fallow-ignore-next-line unused-class-member -- consumed through the EffectFieldLike structural mirror in packages/components/src/fields/field-types.ts; see docs/decisions/effect-native-form-toolkit.md.
   handleBlur = (): void => {
     this.#store.handleBlur(this.#path);
   };
@@ -404,18 +398,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** The current nested error tree (server errors merged with client errors), typed to the form data's shape. */
   readonly errors: TypedFormErrors<A> = $derived.by(() => mergeSourced(this.#sourced) as never);
   /** Client-side-sourced errors only (schema, per-field validators, `refineEffect`). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   readonly clientErrors: TypedFormErrors<A> = $derived.by(() => this.#sourced.client as never);
   /** Server-sourced errors only (the last submission's response). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   readonly serverErrors: TypedFormErrors<A> = $derived.by(() => this.#sourced.server as never);
   /** Whether any async field validator or `refineEffect` run is currently in flight. */
   readonly isValidating: boolean = $derived(Object.values(this.#validating).some(Boolean));
   /** Whether the form has ever been submitted (attempted). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   readonly isSubmitted: boolean = $derived(this.submissionAttempts > 0);
   /** Whether the most recently *completed* submission succeeded. `false` before any submit completes. */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   readonly isSubmitSuccessful: boolean = $derived(this.#lastSubmitOutcome === "success");
   /**
    * Whether the submit button should be enabled: not mid-submit, not
@@ -423,7 +413,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * form isn't presumptively invalid — the server gets the first look) or the
    * last validation run said valid.
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   readonly canSubmit: boolean = $derived(
     !this.submitting && !this.isValidating && (!this.#hasValidated || this.valid),
   );
@@ -478,7 +467,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * Sets `method="post"` (and `action`, if configured) and attaches the
    * progressive-enhancement submit handler via a Svelte attachment.
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   get props(): Record<string | symbol, unknown> {
     return {
       method: "post",
@@ -498,7 +486,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Whether the async validator(s) at `path` are currently running. */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   isValidatingAt(path: FormPath): boolean {
     const key = Path.toString(path);
     return this.#validating[`${key}:change`] === true || this.#validating[`${key}:blur`] === true;
@@ -509,7 +496,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * of attaching `validators` at {@link createForm} time, for fields that
    * don't exist until later (e.g. an appended array item).
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   setFieldValidators(path: FormPath, validators: FieldValidators<unknown, R>): void {
     this.#fieldValidators = { ...this.#fieldValidators, [Path.toString(path)]: validators };
   }
@@ -702,7 +688,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Append an item to the array at `path` (a blank item is derived when omitted). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   append(path: FormPath, value?: unknown): void {
     const current = this.#arrayAt(path);
     const item = value !== undefined ? value : this.#defaultItem(path);
@@ -718,7 +703,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * items — and their per-index touched flags / errors — up by one. A blank
    * item is derived when `value` is omitted.
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   insertItem(path: FormPath, index: number, value?: unknown): void {
     const current = this.#arrayAt(path);
     const at = Math.max(
@@ -736,7 +720,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * index's own touched flag / errors (they described the old value); other
    * indices are untouched.
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   replaceItem(path: FormPath, index: number, value: unknown): void {
     const current = this.#arrayAt(path);
     if (!inRange(index, current.length)) return;
@@ -748,7 +731,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Remove every item from the array at `path`, dropping all of its per-index state. */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   clearItems(path: FormPath): void {
     this.data = setAt(this.data, path, []);
     this.#markDirty(path);
@@ -760,7 +742,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * items' per-index touched flags / errors down by one so they keep
    * following their row.
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   removeItem(path: FormPath, index: number): void {
     const current = this.#arrayAt(path);
     if (!inRange(index, current.length)) return;
@@ -776,7 +757,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Swap two items in the array at `path`, swapping their per-index touched flags / errors too. */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   swap(path: FormPath, indexA: number, indexB: number): void {
     const current = this.#arrayAt(path);
     if (!inRange(indexA, current.length) || !inRange(indexB, current.length) || indexA === indexB) {
@@ -792,7 +772,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Move the item at `from` to `to` within the array at `path`, carrying its per-index state along. */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   move(path: FormPath, from: number, to: number): void {
     const current = this.#arrayAt(path);
     if (!inRange(from, current.length) || to < 0 || to >= current.length || from === to) return;
@@ -821,7 +800,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Revert `data` to the values sent by the last submission (no-op before any submit). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   revertToLastSubmit(): void {
     if (this.#lastSubmitted === undefined) return;
     // `#lastSubmitted` is `$state`; reading it yields a proxy `structuredClone`
@@ -1060,7 +1038,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * `values` to re-seed that baseline first (e.g. adopting a different
    * entity's values) instead of returning to the original seed.
    */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   reset(values?: A): void {
     if (values !== undefined) this.#initial = structuredClone(values);
     for (const key of Object.keys(this.#fibers)) this.#interruptFiber(key);
@@ -1081,7 +1058,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** A serialisable snapshot for SvelteKit's `snapshot` capture/restore. */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   capture(): FormState<A, Message> {
     return {
       id: this.id,
@@ -1105,7 +1081,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Restore from a {@link capture} snapshot (its merged tree becomes the server tree; the client tree clears). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   restore(snapshot: FormState<A, Message>): void {
     this.data = structuredClone(snapshot.data);
     this.#previousData = this.#detachedData();
@@ -1346,7 +1321,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.enhance(node as HTMLFormElement).destroy;
 
   /** Build a {@link FormData} body from the current data (SPA / manual submit). */
-  // fallow-ignore-next-line unused-class-member -- public library API, no in-repo caller yet; kept per docs/decisions/effect-native-form-toolkit.md.
   toFormData(): FormData {
     return objectToFormData(this.data);
   }
