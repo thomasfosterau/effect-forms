@@ -39,7 +39,7 @@ catalog:
   happy-dom: ^20.14.5
   svelte: ^5.57.1
   svelte-check: ^4.7.6
-  typescript: ^5.9.3
+  typescript: ^7.0.2
   # vite-plus pins `oxlint`, `oxfmt` and `vitest` to exact versions; `vite` is
   # the same release under its aliased core package, and `vitest` must match
   # vite-plus's exact pin because the `vitest: "catalog:"` override forces
