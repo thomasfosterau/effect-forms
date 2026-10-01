@@ -41,12 +41,12 @@ jobs:
       # (via `pnpm run version`). Once that PR is merged (no changesets remain),
       # it runs `pnpm run release`, which builds and publishes with
       # `pnpm publish` — npm OIDC trusted publishing (there is no NPM_TOKEN to
-      # steal; provenance is attached automatically) — and then `changeset
+      # steal; provenance is left to npm) — and then `changeset
       # tag`. The action parses the "New tag:" output, pushes the tags and
       # creates the GitHub releases.
       #
       # `pnpm publish`, not `npm publish`: pnpm 11 supports trusted publishing
-      # (it mints the OIDC token and the provenance statement itself), and it
+      # (it mints the OIDC token itself), and it
       # is what rewrites the `catalog:peers` / `workspace:^` specifiers in
       # package.json into the ranges consumers actually see — npm would publish
       # the literal protocols. It is also why the script runs under `pnpm run`,
@@ -65,4 +65,5 @@ jobs:
           pr-title: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
+          # Don't force provenance; npm attaches it itself when allowed, and an
+          # explicit request fails from a private repository.
