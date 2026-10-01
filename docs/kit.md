@@ -17,7 +17,7 @@ The `/kit` entry holds the SvelteKit glue that website, gardeneria and preferenc
 
 - `@sveltejs/kit` (`^2.20.0 || ^3.0.0-next.27`) is an **optional** peer of the package and **required** by `/kit`. It's tested against `3.0.0-next.27`, the version the applications run.
 - `$app/forms` is a SvelteKit virtual module, not a dependency. It resolves because SvelteKit compiles this package (its `exports` carry the `svelte` condition), so `/kit` only works inside a SvelteKit build.
-- `@thomasfosterau/effect-jsonapi` (`>=0.14.0`) is an **optional** peer used **for its types only**. `CommandFailure.ErrorObject` is `Document.ErrorObject.Type`. At runtime a failure is recognised by its `_tag`, so an application's own `JsonapiError` with the same shape is recognised too.
+- `@thomasfosterau/effect-jsonapi` (`>=0.16.0`) is an **optional** peer used **for its types only**. `CommandFailure.ErrorObject` is `Document.ErrorObject.Type`. At runtime a failure is recognised by its `_tag`, so an application's own `JsonapiError` with the same shape is recognised too.
 
 ## Commands and failures
 

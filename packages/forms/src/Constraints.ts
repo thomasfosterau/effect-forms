@@ -110,7 +110,7 @@ type ConstraintPatch = { -readonly [K in keyof InputConstraint]?: InputConstrain
 interface CheckPayloads {
   readonly "effect/schema/isMinLength": { readonly minLength: number };
   readonly "effect/schema/isMaxLength": { readonly maxLength: number };
-  readonly "effect/schema/isLengthBetween": { readonly minimum: number; readonly maximum: number };
+  readonly "effect/schema/isBetweenLength": { readonly minimum: number; readonly maximum: number };
   readonly "effect/schema/isPattern": { readonly source: string; readonly flags: string };
   readonly "effect/schema/isGreaterThan": { readonly exclusiveMinimum: number };
   readonly "effect/schema/isGreaterThanOrEqualTo": { readonly minimum: number };
@@ -133,7 +133,7 @@ const payloadPatches: {
 } = {
   "effect/schema/isMinLength": (p) => ({ minlength: p.minLength }),
   "effect/schema/isMaxLength": (p) => ({ maxlength: p.maxLength }),
-  "effect/schema/isLengthBetween": (p) => ({ minlength: p.minimum, maxlength: p.maximum }),
+  "effect/schema/isBetweenLength": (p) => ({ minlength: p.minimum, maxlength: p.maximum }),
   "effect/schema/isPattern": (p) => ({ pattern: p.source }),
   "effect/schema/isGreaterThan": (p) => ({ min: p.exclusiveMinimum }),
   "effect/schema/isGreaterThanOrEqualTo": (p) => ({ min: p.minimum }),

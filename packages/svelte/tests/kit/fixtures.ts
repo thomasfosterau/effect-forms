@@ -1,6 +1,6 @@
 /**
  * Command failures shaped as the transports raise them, built with
- * `Schema.TaggedErrorClass` rather than imported from an application:
+ * `Schema.TaggedError` rather than imported from an application:
  *
  * - {@link JsonapiError} — effect-jsonapi's `ServerErrors.JsonapiError` and
  *   the applications' own (`{ _tag, status, errors }`);
@@ -21,12 +21,12 @@ export const ErrorObject = Schema.Struct({
   source: Schema.optionalKey(Schema.Struct({ pointer: Schema.String })),
 });
 
-export class JsonapiError extends Schema.TaggedErrorClass<JsonapiError>()("JsonapiError", {
+export class JsonapiError extends Schema.TaggedError<JsonapiError>()("JsonapiError", {
   status: Schema.Number,
   errors: Schema.Array(ErrorObject),
 }) {}
 
-export class ErrorResponse extends Schema.TaggedErrorClass<ErrorResponse>()("ErrorResponse", {
+export class ErrorResponse extends Schema.TaggedError<ErrorResponse>()("ErrorResponse", {
   status: Schema.Number,
   message: Schema.String,
   document: Schema.Option(Schema.Struct({ errors: Schema.Array(ErrorObject) })),
@@ -42,7 +42,7 @@ export class ApiError extends Error {
   }
 }
 
-export class TestFailure extends Schema.TaggedErrorClass<TestFailure>()("TestFailure", {
+export class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", {
   message: Schema.String,
 }) {}
 

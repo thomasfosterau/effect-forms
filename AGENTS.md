@@ -60,9 +60,9 @@ Never guess at Effect patterns — check the guide first.
 
 ## Effect v4
 
-These packages target **Effect v4 (beta)**: a single `effect` package, pinned to a `4.0.0-beta.x` version.
+These packages target **Effect v4 (release candidate)**: a single `effect` package, developed against `4.0.0-rc.118` and published with a `>=4.0.0-rc.118` peer floor.
 
-- `@effect/platform` does not exist in v4 — HTTP modules live under `effect/unstable/http/*`, and `FileSystem`/`Path` under `effect/*`.
+- `@effect/platform` does not exist in v4 — HTTP modules live under `effect/http/*` (no longer `effect/unstable/*` as of rc.118), and `FileSystem`/`Path` under `effect/*`.
 - `@effect/schema` does not exist in v4 — `Schema`, `SchemaAST`, `SchemaIssue`, `SchemaParser`, and `SchemaRepresentation` are all top-level `effect/*` modules.
 - The v3 → v4 migration maps live in `~/.local/share/effect-solutions/effect/migration/` (start with `v3-to-v4.md`).
 

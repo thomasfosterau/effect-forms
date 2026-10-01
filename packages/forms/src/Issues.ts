@@ -36,15 +36,21 @@ export interface FormIssue {
 }
 
 /**
- * Render one terminal issue leaf into a human-readable message. The default
- * defers to the issue's own `toString`, which Effect Schema renders into a
- * readable sentence (e.g. `Expected string, got 1`). Override it to localise
- * or to map specific leaf `_tag`s to custom copy.
+ * Render one terminal issue into a human-readable message. The default is
+ * Effect Schema's own formatter (`SchemaIssue.makeFormatterDefault`), which
+ * renders a sentence such as `Expected string`. (An issue's `toString` is no
+ * longer a readable rendering as of Effect rc.118: it prints
+ * `[object Object]`.) Override it to localise or to map specific `_tag`s to
+ * custom copy.
+ *
+ * A failed schema check reaches the formatter as the `Filter` node that
+ * wraps its leaf, because the check's own message (e.g. `Expected a value
+ * with a length of at least 2`) lives on the `Filter`, not on the leaf.
  */
 export type LeafFormatter = (issue: SchemaIssue.Issue) => string;
 
-/** The default leaf formatter — Effect Schema's own rendering of the leaf. */
-export const defaultLeafFormatter: LeafFormatter = (issue) => String(issue);
+/** The default leaf formatter — Effect Schema's own rendering of the issue. */
+export const defaultLeafFormatter: LeafFormatter = SchemaIssue.makeFormatterDefault();
 
 /**
  * Normalise a `Pointer.path` segment into a {@link FormPath} segment: integer
@@ -54,6 +60,21 @@ const normaliseSegment = (segment: PropertyKey): string | number => {
   if (typeof segment === "number") return segment;
   if (typeof segment === "symbol") return segment.toString();
   return /^\d+$/.test(segment) ? Number(segment) : segment;
+};
+
+/** Whether `issue` is a terminal leaf: it wraps no further issues. */
+const isTerminal = (issue: SchemaIssue.Issue): boolean => {
+  switch (issue._tag) {
+    case "Pointer":
+    case "Composite":
+    case "Filter":
+    case "Encoding":
+      return false;
+    case "AnyOf":
+      return issue.issues.length === 0;
+    default:
+      return true;
+  }
 };
 
 /**
@@ -85,6 +106,14 @@ export function schemaIssuesToFormIssues(
         for (const child of current.issues) walk(child, path);
         return;
       case "Filter":
+        // A check that fails on the value itself: its message sits on the
+        // `Filter` node, so format that rather than the bare leaf inside.
+        if (isTerminal(current.issue)) {
+          out.push({ path, message: format(current) });
+          return;
+        }
+        walk(current.issue, path);
+        return;
       case "Encoding":
         walk(current.issue, path);
         return;

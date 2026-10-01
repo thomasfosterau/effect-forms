@@ -23,7 +23,7 @@ catalogMode: strict
 
 catalog:
   "@changesets/cli": ^3.0.3
-  "@effect/language-service": ^0.87.0
+  "@effect/language-service": ^0.87.3
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
   "@sveltejs/kit": 3.0.0-next.29
@@ -31,11 +31,11 @@ catalog:
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
   # peer). Nothing imports it at runtime.
-  "@thomasfosterau/effect-jsonapi": ^0.15.2
+  "@thomasfosterau/effect-jsonapi": ^0.16.0
   "@types/node": ^26.6.2
   # The development copy only. The published packages declare the peer range
-  # under `catalogs.peers` below; moving that floor is its own (major) change.
-  effect: 4.0.0-beta.102
+  # under `catalogs.peers` below; the floor is rc.118, so this pin tests it.
+  effect: 4.0.0-rc.118
   happy-dom: ^20.14.5
   svelte: ^5.57.1
   svelte-check: ^4.7.6
@@ -55,8 +55,8 @@ catalog:
 catalogs:
   peers:
     "@sveltejs/kit": ^2.20.0 || ^3.0.0-next.27
-    "@thomasfosterau/effect-jsonapi": ">=0.14.0"
-    effect: ^4.0.0-beta.102
+    "@thomasfosterau/effect-jsonapi": ">=0.16.0"
+    effect: ">=4.0.0-rc.118"
     svelte: ^5.40.0
 
 overrides:
