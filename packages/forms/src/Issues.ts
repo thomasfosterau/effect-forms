@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Form issues — the flat, path-addressed representation of a single
  * validation failure, plus the walker that turns an Effect Schema issue
  * tree into a list of them.
@@ -16,6 +14,7 @@
  * performs — here it stays UI-shaped (`path` + `message`) rather than
  * JSON:API-pointer-shaped.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Issues
  */
 

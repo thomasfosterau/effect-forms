@@ -1,14 +1,22 @@
 # @thomasfosterau/effect-forms-svelte
 
-Svelte 5 (runes) bindings for [`@thomasfosterau/effect-forms`](../effect-forms). A reactive form store with progressive-enhancement submission, tainted tracking, lifecycle events, and optional client-side validation against the **same Effect Schema the server uses**.
+Svelte 5 (runes) bindings for [`@thomasfosterau/effect-forms`](../forms): a reactive form store with progressive-enhancement submission, tainted tracking, lifecycle events, and optional client-side validation against the **same Effect Schema the server uses**.
 
-The root entry depends only on `svelte` (a peer) and the framework-neutral core — not SvelteKit — so it works in any Svelte 5 app.
+The root entry depends only on `svelte` and the framework-neutral core, not SvelteKit, so it works in any Svelte 5 app. The [`/kit` entry](#kit) (`@thomasfosterau/effect-forms-svelte/kit`) is the SvelteKit-only half: derived form actions, JSON:API error routing and `$app/forms` glue.
 
-The **`/kit` entry** (`@thomasfosterau/effect-forms-svelte/kit`) is the SvelteKit-only half: `formAction` (a derived page action with JSON:API error routing), `fieldFromPointer`, `idempotentCreate`, `enhanceForm` (on `$app/forms`), the `formStateOf` / `issuesFor` / `rootIssuesOf` / `valueOf` readers, and `withFailureParams`. It needs `@sveltejs/kit` (an optional peer). See [docs/kit.md](../../docs/kit.md).
+## Install
+
+```sh
+pnpm add @thomasfosterau/effect-forms-svelte @thomasfosterau/effect-forms effect svelte
+# for the /kit entry
+pnpm add @sveltejs/kit
+```
+
+`effect` and `svelte` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`; `@thomasfosterau/effect-jsonapi` is an optional, type-only peer of `/kit`.
 
 ## Usage
 
-Server (`+page.server.ts` or any action) produces a `FormState` with the core's `makeForm`, and returns it to the page. The component hydrates it:
+Server (`+page.server.ts` or any action) produces a `FormState` with the core's `Form.make(schema, …).validate(request)`, and returns it to the page. The component hydrates it:
 
 ```svelte
 <script lang="ts">
@@ -37,7 +45,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
 
 ## The store
 
-`createForm(source, options)` returns a [`FormStore`](src/FormStore.svelte.ts). `source` is a server-produced `FormState`, a `{ schema, defaults }` seed, or a [`FormBuilder`](../effect-forms/src/FormBuilder.ts) — the builder derives its schema, blank defaults, and array-item defaults for you:
+`createForm(source, options)` returns a [`FormStore`](src/FormStore.svelte.ts). `source` is a server-produced `FormState`, a `{ schema, defaults }` seed, or a [`FormBuilder`](../forms/src/FormBuilder.ts) — the builder derives its schema, blank defaults, and array-item defaults for you:
 
 ```ts
 import { createForm } from "@thomasfosterau/effect-forms-svelte";
@@ -70,11 +78,11 @@ const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 
 {#each name.visibleErrors as message}<small>{message}</small>{/each}
 ```
 
-`path` is checked against the form data's shape via `Path.FieldPath<A>` — a typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a compile error, and `field.value` is the leaf's actual type, not `unknown`. This replaced the core's unconsumed `FieldRef` seam.
+`path` is checked against the form data's shape via `Path.FieldPath<A>` — a typo'd segment (`"authr.name"`) or a path into a field that doesn't exist is a compile error, and `field.value` is the leaf's actual type, not `unknown`.
 
 `field.meta` exposes TanStack-style field state: `isBlurred` (lost focus at least once), `isTouched` (`isBlurred || isDirty`), `isDirty` (changed away from the default at some point — **persistent**, unlike `taintedAt` it does not clear on reverting to the default; only `reset()` clears it), and `isDefaultValue` (current value equals the default — flips back on revert). `isDirty` only tracks writes made through `field.value = …` / `setValue` / the array mutators (`append` / `removeItem` / `swap` / `move`) — a form that still binds `bind:value={form.data.x}` directly, bypassing `field()`, never marks that field dirty.
 
-**Validation modes** — the `mode` option (see [`Mode`](../effect-forms/src/Mode.ts)) drives when the form validates: `onSubmit` (default), `onBlur` (call `handleBlur` from an input's blur), or `onChange` (debounced). `onBlur` / `onChange` may `autoSubmit`, turning the form into a live-saving surface. `revalidate` (`"onChange"` default / `"onBlur"` / `"never"`) governs what happens _after_ a failed post in `onSubmit` mode: fixing a field re-validates just that field, clearing its error without a resubmit. Errors are computed for the whole form; gate their display per field with `visibleErrorsAt(path)` (shown only once the field is tainted / touched, or after a submit).
+**Validation modes** — the `mode` option (see [`Mode`](../forms/src/Mode.ts)) drives when the form validates: `onSubmit` (default), `onBlur` (call `handleBlur` from an input's blur), or `onChange` (debounced). `onBlur` / `onChange` may `autoSubmit`, turning the form into a live-saving surface. `revalidate` (`"onChange"` default / `"onBlur"` / `"never"`) governs what happens _after_ a failed post in `onSubmit` mode: fixing a field re-validates just that field, clearing its error without a resubmit. Errors are computed for the whole form; gate their display per field with `visibleErrorsAt(path)` (shown only once the field is tainted / touched, or after a submit).
 
 **Per-field validators** — the `validators` option (or `setFieldValidators`) attaches TanStack-Form-style `{ onChange?, onBlur?, onChangeAsync?, onBlurAsync?, asyncDebounceMs? }` per field, keyed by `Path.toString` (e.g. `"author.name"`, `"tags[0]"`). Sync validators return a `Schema.FilterOutput`; async ones are `Effect`s, run as a fiber per field — a new value interrupts the field's in-flight fiber before forking the next run, which is what gives the debounce + "latest wins" cancellation (no timer bookkeeping needed). Pass `layer` when a validator (or a builder's `refineEffect` refinement) needs services on its `R` channel:
 
@@ -95,23 +103,127 @@ const form = createForm(
 
 **Error sources** — a field's server-reported error (from the last submission) survives a client-side revalidation of some _other_ field; it clears once _that_ field's own value changes (or the server clears it on the next submit). `errors` is the merged view; `clientErrors` / `serverErrors` expose the two trees separately for a UI that wants to style them differently.
 
-**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to `fetch` to the form's action, parsing a JSON [`FormActionResult`](../effect-forms/src/Result.ts) or a bare `FormState`).
+**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to `fetch` to the form's action, parsing a JSON [`FormActionResult`](../forms/src/Result.ts) or a bare `FormState`).
 
-## Layout
+## API
 
-The reactive store lives in `FormStore.svelte.ts` (rune-compiled, checked by `svelte-check`). Its logic is delegated to pure, unit-tested modules:
+Everything below is exported flat from the root entry (`@thomasfosterau/effect-forms-svelte`).
 
-| Module                                    | Purpose                                                                   |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| [`Tainted`](src/Tainted.ts)               | Deep-diff the data to compute the tainted tree.                           |
-| [`ClientValidate`](src/ClientValidate.ts) | Validate the form / one field against the schema.                         |
-| [`EnhanceCore`](src/EnhanceCore.ts)       | Serialise data → form body, parse the response, compute the store update. |
+| Module                                    | Exports                                                                                                                                                                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`FormStore`](src/FormStore.svelte.ts)    | `createForm`, `FormStore`, `FieldHandle`, `FieldMeta`, `FormOptions`, `FormSeed` — the reactive store above.                                                                                    |
+| [`EntityForm`](src/EntityForm.ts)         | `defineEntityForm` — an ordered, key-checked field list over a core `Command.plan`, walked by one generic renderer component; its entry types (`ScalarEntry`, `SelectEntry`, `WidgetEntry`, …). |
+| [`SvelteKit`](src/SvelteKit.ts)           | `applyActionResult` — apply a SvelteKit `ActionResult` (`ServerActionResult`) to a store; returns whether it consumed a validation failure.                                                     |
+| [`Listeners`](src/Listeners.ts)           | `changeEvents` / `dispatchChange` and the `FormListeners` / `FieldListener` types — per-field and form-wide change listeners (linked fields).                                                   |
+| [`Tainted`](src/Tainted.ts)               | Deep-diff the data to compute the tainted tree.                                                                                                                                                 |
+| [`ClientValidate`](src/ClientValidate.ts) | `validateData` / `validateField` — validate the form, or one field, against the schema.                                                                                                         |
+| [`EnhanceCore`](src/EnhanceCore.ts)       | Serialise data → form body, parse the response, compute the store update.                                                                                                                       |
 
-The store itself is mostly exercised only by `svelte-check`, but the submitter-aware enhanced submit path (`enhance` → `#runSubmit` → the posted `FormData`) is directly unit-tested in [`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts) — a `.svelte.ts` rune file needs the Svelte compiler to run at all, hence the `.svelte.test.ts` extension and the `svelte()` plugin in `vite.config.ts` (scoped to a `happy-dom` DOM via a per-file `@vitest-environment` docblock, not the package default).
+The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to the pure, unit-tested modules. The store itself is type-checked as plain TypeScript; its submitter-aware submit path (`enhance` → the posted `FormData`) is unit-tested in [`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts).
 
-## Development
+## /kit
 
-```sh
-vp exec svelte-check --tsconfig ./tsconfig.json   # typecheck (incl. runes)
-vp test run tests                                 # unit tests (pure modules + the submit path)
+`@thomasfosterau/effect-forms-svelte/kit` holds the SvelteKit form-action glue: the derived page action, the JSON:API error routing, the idempotent create retry, the `$app/forms` enhance, the `PageProps["form"]` readers, and failure routing for action-only routes. The root entry (`@thomasfosterau/effect-forms-svelte`) stays framework-neutral Svelte; only `/kit` imports `@sveltejs/kit` and `$app/forms`.
+
+| Export                                                     | What it does                                                                                                         |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `formAction(form, run, locationFor, options?)`             | A page action: validate, run the command, then `redirect(303)`, `fail(status, { form })` or `fail(500, { message })` |
+| `runFormAction(form, request, run, locationFor, options?)` | The same, as a framework-neutral `Result.FormActionResult`                                                           |
+| `fieldFromPointer(pointer)`                                | `/data/attributes/<field>…` → `Option<field>`                                                                        |
+| `idempotentCreate(create, fetchExisting)`                  | A 409 on the caller's own client id resolves as success                                                              |
+| `CommandFailure.*`, `jsonapiFailure`                       | Classify a command failure into routed JSON:API errors or a root message                                             |
+| `enhanceForm(store)`                                       | Spreadable `<form>` props on `$app/forms` `enhance`                                                                  |
+| `formStateOf` / `issuesFor` / `rootIssuesOf` / `valueOf`   | Total readers over `PageProps["form"]`                                                                               |
+| `userFixableMessage` / `withFailureParams`                 | Redirect-with-query failure routing for routes that have no page                                                     |
+
+### Peers
+
+- `@sveltejs/kit` (`^2.20.0 || ^3.0.0-next.27`) is an **optional** peer of the package and **required** by `/kit`. The repository's tests run against the SvelteKit 3 prerelease pinned in its `pnpm-workspace.yaml`.
+- `$app/forms` is a SvelteKit virtual module, not a dependency. It resolves because SvelteKit compiles this package (its `exports` carry the `svelte` condition), so `/kit` only works inside a SvelteKit build.
+- `@thomasfosterau/effect-jsonapi` (`>=0.16.0`) is an **optional** peer used **for its types only**. `CommandFailure.ErrorObject` is `Document.ErrorObject.Type`. At runtime a failure is recognised by its `_tag`, so an application's own `JsonapiError` with the same shape is recognised too.
+
+### Commands and failures
+
+A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command must have no requirements left. Provide them first, e.g. with the application's `ManagedRuntime`. `locationFor(output, input)` builds the redirect.
+
+`jsonapiFailure`, the default classifier, recognises:
+
+- `{ _tag: "JsonapiError", status, errors }`: effect-jsonapi's `ServerErrors.JsonapiError`, or any error of the same shape. Each error object goes to the field its `source.pointer` names, or to the root (`form.errors._errors`), at the cause's own status.
+- `{ _tag: "ErrorResponse", status, message, document }`: effect-jsonapi's client-side decoded error. The document's error objects are routed as above. With no document, the message goes to the root.
+- An `Error` with a numeric `status`, such as a transport's 413: its message goes to the root.
+
+Anything else is unexpected. By default it becomes `fail(500, { message })`. Pass `unrecognised: "throw"` to hand it to `handleError` instead. `classify` replaces the classifier; compose with `CommandFailure.jsonapiFailure` to extend it. `redact` runs on every state echoed back to the browser. `idempotent: { clientId, fetchExisting }` turns on the client-id retry.
+
+### Worked example: a login action
+
+A hand-written sign-in action typically hand-rolls validation, password blanking, 401 → generic message, a rethrow for anything else, and a same-origin redirect. With `/kit` it becomes:
+
+```ts
+// src/routes/login/+page.server.ts
+import { Form, State } from "@thomasfosterau/effect-forms";
+import { CommandFailure, formAction } from "@thomasfosterau/effect-forms-svelte/kit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { SessionCallError } from "$lib/server/api/binding";
+import { safeRedirect } from "$lib/redirects";
+
+const SignInFields = Schema.Struct({
+  email: Schema.String,
+  _password: Schema.String,
+  redirectTo: Schema.optional(Schema.String),
+});
+
+const signInForm = Form.make(SignInFields, {
+  defaults: { email: "", _password: "", redirectTo: undefined },
+  id: "sign-in",
+});
+
+type SignIn = typeof SignInFields.Type;
+
+/** Blank the password before a state is echoed back to the browser. */
+const blankPassword = (state: State.FormState<SignIn>): State.FormState<SignIn> => ({
+  ...state,
+  data: { ...state.data, _password: "" },
+});
+
+/** A 401 → one generic whole-form message (never reveal whether the email exists). */
+const classify: CommandFailure.Classify = (cause) =>
+  cause instanceof SessionCallError && cause.status === 401
+    ? Option.some(CommandFailure.message(401, "Invalid email or password"))
+    : Option.none();
+
+export const actions = {
+  default: formAction(
+    signInForm,
+    (input, { locals }) =>
+      locals.session.signIn({ email: input.email, password: input._password, rememberMe: true }),
+    (_, input) => safeRedirect(input.redirectTo, "/"),
+    { classify, redact: blankPassword, unrecognised: "throw" },
+  ),
+};
 ```
+
+The runnable copy is [`packages/svelte/tests/kit/examples/login.page.server.ts`](tests/kit/examples/login.page.server.ts). [`login.example.test.ts`](tests/kit/login.example.test.ts) runs it against the real `@sveltejs/kit`, covering the success redirect, the off-site `redirectTo` guard, the 401 with a blanked password, and the rethrow.
+
+The page renders server state without a client store:
+
+```svelte
+<script lang="ts">
+  import { formStateOf, issuesFor, rootIssuesOf, valueOf } from "@thomasfosterau/effect-forms-svelte/kit";
+  let { form } = $props();
+  const state = $derived(formStateOf(form));
+</script>
+
+<form method="post">
+  {#each rootIssuesOf(state) as message}<p role="alert">{message}</p>{/each}
+  <input name="email" value={valueOf(state, "email")} />
+  {#each issuesFor(state, "email") as message}<small>{message}</small>{/each}
+  <input name="_password" type="password" />
+</form>
+```
+
+With a client store, spread `enhanceForm(form)` onto the `<form>` instead.
+
+## License
+
+[MIT](LICENSE)

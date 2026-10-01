@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * The nested form-error tree and its operations.
  *
  * {@link FormErrors} is a nested error tree so a UI can read
@@ -18,6 +16,7 @@
  * and the operations here ({@link issuesToErrors}, {@link flattenErrors},
  * {@link setError}, {@link mergeErrors}, …) are pure and return new trees.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Errors
  */
 

@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * HTML input constraints derived from an Effect Schema.
  *
  * Native validation attributes can be read (`required`, `minlength`, …)
@@ -29,6 +27,7 @@
  * walk cannot infer (or should not — a check that's semantically stronger
  * than any HTML attribute).
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Constraints
  */
 

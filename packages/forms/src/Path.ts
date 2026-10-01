@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Nested get / set along a {@link FormPath}.
  *
  * A form's data is a tree, and the reactive bindings address it by path:
@@ -18,6 +16,7 @@
  * convert to and from the flat `author.name` / `tags[0]` notation the HTML
  * body parser ({@link module:effect-forms/FormData}) uses.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Path
  */
 

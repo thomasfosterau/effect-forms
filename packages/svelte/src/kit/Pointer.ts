@@ -1,9 +1,8 @@
 /**
- * @copyright Thomas Foster
- *
  * JSON Pointer → form field routing for a JSON:API error object's
  * `source.pointer`.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/Pointer
  */
 

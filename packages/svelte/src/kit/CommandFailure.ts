@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Classifying what a form action's command failed with.
  *
  * A command (an API client call, an Effect program) fails with whatever its
@@ -16,6 +14,7 @@
  * Causes are recognised structurally by their `_tag`, so an application's
  * own `JsonapiError` with the same shape is recognised too.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/CommandFailure
  */
 

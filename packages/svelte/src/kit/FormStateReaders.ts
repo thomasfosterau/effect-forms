@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Total readers over the form state a failed form action hands back on
  * `PageProps["form"]`.
  *
@@ -19,6 +17,7 @@
  * `undefined` rather than `Option` for "no submission": these are called from
  * Svelte templates, where `Option` has no rendering.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/FormStateReaders
  */
 

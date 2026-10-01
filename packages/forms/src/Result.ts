@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * {@link FormActionResult} — the framework-neutral outcome of a form
  * submission handler.
  *
@@ -10,6 +8,7 @@
  * adapter can interpret it uniformly. A Svelte adapter maps this onto
  * SvelteKit's `ActionResult`; a fetch client reads the JSON shape directly.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Result
  */
 

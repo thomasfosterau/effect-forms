@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * SvelteKit `$app/forms` glue for the form store. {@link enhanceForm}
  * returns spreadable `<form>` props — `<form {...enhanceForm(form)}>` — that
  * post to the page's derived action ({@link formAction}) through SvelteKit's
@@ -11,6 +9,7 @@
  * dependency), never from Node on its own. That is why this lives in the
  * `/kit` entry and nowhere the framework-neutral bindings can reach.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/Enhance
  */
 

@@ -1,12 +1,11 @@
 /**
- * @copyright Thomas Foster
- *
  * Pure plumbing for the `enhance` action: serialise the store's data back into
  * a form body, interpret a server response into a {@link FormActionResult}, and
  * compute the store update a result implies. Kept framework-free and side-
  * effect-free so it is unit-testable in isolation; the rune store
- * (`superForm.svelte.ts`) wires these to the DOM.
+ * (`FormStore.svelte.ts`) wires these to the DOM.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/EnhanceCore
  */
 

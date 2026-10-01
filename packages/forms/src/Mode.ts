@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * When a form validates (and, optionally, auto-submits).
  *
  * A reactive form has to decide *when* to run validation as the user types.
@@ -25,6 +23,7 @@
  * once the form has been posted at least once; `"never"` keeps the classic
  * frozen-until-resubmit behaviour.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Mode
  */
 

@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Field- and form-level listeners — side-effecting hooks that fire as the
  * form's data changes, independent of validation. The model is TanStack
  * Form's listeners guide: a field can react to its own `onChange` / `onBlur`
@@ -25,6 +23,7 @@
  * just produced, so only the fields that actually moved in *that* transition
  * fire again. See `Listeners.test.ts` for the two-pass trace.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/Listeners
  */
 

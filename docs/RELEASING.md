@@ -19,26 +19,11 @@ Publishing uses **npm [Trusted Publishing](https://docs.npmjs.com/trusted-publis
    - Workflow filename: `release.yml`
    - Environment: `release`
 
-   > **First publish of a brand-new package.** npm only lets you add a trusted publisher to a package that **already exists**, so the very first publish of each package (the initial `0.1.0`) can't use OIDC. Bootstrap it once with a short-lived [granular access token](https://docs.npmjs.com/creating-and-viewing-access-tokens):
-   >
-   > ```sh
-   > # 1. Merge the open "Version Packages" PR first, so `main` carries the real
-   > #    version. A fresh clone of `main` is still at 0.0.0, and publishing
-   > #    that puts a placeholder 0.0.0 on the registry forever.
-   > pnpm install --frozen-lockfile
-   > vp run -r build
-   > # 2. `pnpm publish`, NOT `npm publish`: this is a pnpm workspace declared in
-   > #    pnpm-workspace.yaml, and npm's `-w` flag only reads a `workspaces`
-   > #    field in package.json, so `npm publish -w <name>` fails outright here.
-   > cd packages/forms  && pnpm publish --access public --no-git-checks && cd -
-   > cd packages/svelte && pnpm publish --access public --no-git-checks && cd -
-   > ```
-   >
-   > Then add the trusted publisher for each and let OIDC handle every release after. (Tracked upstream in [npm/cli#8544](https://github.com/npm/cli/issues/8544).)
+   > Both packages are already on npm. A **new** package must be published once by hand, because npm only accepts a trusted publisher for a package that already exists: authenticate with a short-lived [granular access token](https://docs.npmjs.com/creating-and-viewing-access-tokens), run `vp run -r build`, then `pnpm publish --access public --no-git-checks` from the package's directory (`pnpm`, not `npm`, so the `catalog:` / `workspace:^` specifiers are rewritten). Then add its trusted publisher.
 
 ## How a release happens
 
-1. **Land changesets.** Every change that should appear in the changelog ships with a changeset — a markdown file in `.changeset/` created by `vp run changeset` (pick the affected package(s) and a bump type). Preview what is pending with `vp exec changeset status`.
+1. **Land changesets.** Every change that should appear in the changelog ships with a changeset — a markdown file in `.changeset/` created by `pnpm changeset` (pick the affected package(s) and a bump type). Preview what is pending with `vp exec changeset status`.
 
 2. **Version Packages PR (automatic).** On every push to `main`, the Release workflow (`changesets/action` v2, after the `release` environment approval) runs `pnpm run version` (`changeset version && pnpm install --lockfile-only && vp fmt`): it consumes the pending changesets, bumps the affected `package.json` versions, and writes each package's `CHANGELOG.md` on the `changeset-release/main` branch, then opens (or updates) a **"Version Packages"** PR. Review it like any other PR.
 

@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * `@thomasfosterau/effect-forms-svelte/kit` — the SvelteKit-only half of the
  * bindings: derived form actions ({@link formAction}), JSON:API error
  * routing ({@link fieldFromPointer}, {@link jsonapiFailure}), the idempotent
@@ -12,6 +10,7 @@
  * entry). The JSON:API error shape is `@thomasfosterau/effect-jsonapi`'s
  * (an optional peer, used for its types only).
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit
  */
 

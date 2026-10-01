@@ -10,12 +10,14 @@ Framework-neutral, **Effect-native** form validation and state, plus Svelte 5 (r
 ## Install
 
 ```sh
-npm install @thomasfosterau/effect-forms effect
+pnpm add @thomasfosterau/effect-forms effect
 # with the Svelte bindings
-npm install @thomasfosterau/effect-forms-svelte
+pnpm add @thomasfosterau/effect-forms-svelte svelte
+# with the SvelteKit `/kit` entry
+pnpm add @sveltejs/kit
 ```
 
-`effect` (and `svelte`, for the bindings) are peer dependencies — the packages never bundle their own copy. Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so a single resolved version matters.
+`effect` (and `svelte`, for the bindings) are peer dependencies — the packages never bundle their own copy. Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so a single resolved version matters. Each package's README is its API reference.
 
 ## Development
 

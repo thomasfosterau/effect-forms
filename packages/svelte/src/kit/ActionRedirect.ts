@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Failure routing for **action-only** routes: a route with no page of its
  * own (a restore, a confirm) always answers a submission with a redirect, so
  * a *user-fixable* command failure rides back to the submitting page as
@@ -8,6 +6,7 @@
  * action route's nonexistent page for a no-JS submitter). Everything else —
  * auth denials, infrastructure faults — stays a hard error at the caller.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/ActionRedirect
  */
 

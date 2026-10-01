@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Tainted-field tracking — which fields the user has changed since the form
  * was seeded.
  *
@@ -10,6 +8,7 @@
  * boolean tree mirroring the data's shape. The reactive store
  * (`superForm.svelte.ts`) re-derives it as the data changes.
  *
+ * @copyright Thomas Foster
  * @module effect-forms-svelte/Tainted
  */
 

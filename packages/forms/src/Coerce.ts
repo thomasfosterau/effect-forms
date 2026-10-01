@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Tri-state coercers for the HTML-form boundary.
  *
  * An HTML form submits every value as a string, and an absent optional field
@@ -14,6 +12,7 @@
  * framework's `error()` helper (validation failures belong on the schema, not
  * in a coercer).
  *
+ * @copyright Thomas Foster
  * @module effect-forms/Coerce
  */
 

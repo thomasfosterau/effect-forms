@@ -2,14 +2,10 @@
 #
 # Provision a checkout for NON-INTERACTIVE use.
 #
-# One file, two callers — the Claude Code SessionStart hook and the
-# devcontainer's `postCreateCommand` (which invokes this file directly) — so a
-# container shell and an agent session are provisioned identically. The two
-# used to be separate pieces of code, and the drift between them stayed
-# invisible until a task failed halfway through. (Copied from the consuming
-# applications via effect-drizzle-ext, the library reference; the `gardeneria
-# #NNN` citations below name the issues there that are the evidence behind a
-# decision, not tickets in this tracker.)
+# Run by the Claude Code SessionStart hook (`.claude/settings.json`). Copied
+# from the consuming applications via effect-drizzle-ext, the library
+# reference; the `gardeneria #NNN` citations below name the issues there that
+# are the evidence behind a decision, not tickets in this tracker.
 #
 # ## The problem it solves
 #
@@ -166,7 +162,7 @@ fi
 # ── 3. Dependencies ──────────────────────────────────────────────────────────
 # Unconditional, not only when node_modules is absent: a prebaked container can
 # carry a tree built from an OLDER lockfile, and stale dependencies masquerade
-# as trunk breakage. `--frozen-lockfile` is a sub-second no-op when in sync.
+# as `main` breakage. `--frozen-lockfile` is a sub-second no-op when in sync.
 if [ -f "$PROJECT_DIR/pnpm-lock.yaml" ]; then
   log "syncing dependencies against the lockfile…"
   (cd "$PROJECT_DIR" && vp install --frozen-lockfile >/dev/null 2>&1) \

@@ -1,6 +1,4 @@
 /**
- * @copyright Thomas Foster
- *
  * Structured parsing of an HTML form body into a plain object the schema can
  * decode.
  *
@@ -16,6 +14,7 @@
  * `File` values pass through untouched; repeated bare keys collapse into an
  * array. The parser is total and never throws.
  *
+ * @copyright Thomas Foster
  * @module effect-forms/FormData
  */
 
