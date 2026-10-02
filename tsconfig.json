@@ -7,6 +7,8 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "verbatimModuleSyntax": true,
+    // TypeScript 6 no longer auto-includes every `@types/*` package.
+    "types": ["node"],
     "noEmit": true,
     "strict": true,
     "exactOptionalPropertyTypes": true,
