@@ -16,7 +16,7 @@
     "test": "vp run -r test",
     "build": "vp run -r build",
     "clean": "vp run -r clean",
-    "prepare": "effect-language-service patch",
+    "prepare": "effect-tsgo patch --typescript --oxlint",
     "changeset": "changeset",
     "version": "changeset version && pnpm install --lockfile-only && vp fmt",
     "release": "vp run -r build && pnpm -r --filter './packages/*' publish --access public --no-git-checks && changeset tag"
@@ -24,8 +24,10 @@
   "devDependencies": {
     "@changesets/cli": "catalog:",
     "@effect/language-service": "catalog:",
+    "@effect/tsgo": "catalog:",
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
     "effect": "catalog:",
     "happy-dom": "catalog:",
     "svelte": "catalog:",

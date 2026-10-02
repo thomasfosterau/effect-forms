@@ -24,6 +24,16 @@ catalogMode: strict
 catalog:
   "@changesets/cli": ^3.0.3
   "@effect/language-service": ^0.87.3
+  # Effect Language Service as a native (TypeScript-Go) binary — the TS7 side
+  # of the 6/7 split. `effect-tsgo patch` overwrites the native `tsc` and the
+  # `oxlint` that vite-plus carries with Effect-patched builds matched by
+  # gitHead / version, so this pins in lockstep with `@typescript/native` and
+  # `vite-plus` below. Each release ships artifacts for an explicit set of
+  # component versions and hard-errors (UnsupportedTargetPackageVersionError)
+  # on anything else, failing `pnpm install` itself. Read the `components`
+  # table in node_modules/@effect/tsgo/dist/effect-tsgo.cjs before bumping
+  # any of the three.
+  "@effect/tsgo": 0.46.1
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
   "@sveltejs/kit": 3.0.0-next.29
@@ -33,19 +43,28 @@ catalog:
   # peer). Nothing imports it at runtime.
   "@thomasfosterau/effect-jsonapi": ^0.16.0
   "@types/node": ^26.6.3
+  # TypeScript 7 (the native Go compiler; bin `tsc`) is the type checker of
+  # record. Pinned exact, alongside the TS6 alias below.
+  "@typescript/native": "npm:typescript@7.0.2"
   # The development copy only. The published packages declare the peer range
   # under `catalogs.peers` below; the floor is rc.118, so this pin tests it.
   effect: 4.0.0-rc.118
   happy-dom: ^20.14.5
   svelte: ^5.57.1
   svelte-check: ^4.7.6
-  typescript: ^5.9.3
+  # TypeScript 6/7 side-by-side: TS7 ships no JavaScript compiler API until
+  # 7.1, so everything that `require("typescript")` — svelte-check, the Effect
+  # language service patch and tsdown's declaration emit — stays on TS6, kept
+  # importable under the `typescript` name through this alias (bin `tsc6`).
+  # `@typescript/native` above is TS7 (bin `tsc`), whose gitHead must match
+  # @effect/tsgo's bundled binary.
+  typescript: "npm:@typescript/typescript6@6.0.2"
   # vite-plus pins `oxlint`, `oxfmt` and `vitest` to exact versions; `vite` is
   # the same release under its aliased core package, and `vitest` must match
   # vite-plus's exact pin because the `vitest: "catalog:"` override forces
   # every resolution to the catalog singleton.
-  vite-plus: 0.3.0
-  vite: npm:@voidzero-dev/vite-plus-core@0.3.0
+  vite-plus: 0.3.2
+  vite: npm:@voidzero-dev/vite-plus-core@0.3.2
   vitest: 4.1.11
 
 # Peer ranges the PUBLISHED packages declare. Kept as a named catalog so the
@@ -78,9 +97,6 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
     vitest: "*"
-    # @sveltejs/kit 3 asks for TypeScript 6; the workspace type-checks on 5.9
-    # and uses kit for its runtime `fail` / `redirect` and its types only.
-    "@sveltejs/kit>typescript": "5"
 
 # Supply-chain delay (owner's policy, gardeneria #1149): hold newly published
 # versions for 1 day (unit: MINUTES) before pnpm will install them.

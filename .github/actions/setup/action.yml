@@ -6,7 +6,7 @@
 #
 # Install scripts: `pnpm install --ignore-scripts` blocks DEPENDENCY lifecycle
 # scripts (a common supply-chain attack vector) from running in CI. The
-# repository's OWN `prepare` script (`effect-language-service patch`) is
+# repository's OWN `prepare` script (`effect-tsgo patch --typescript --oxlint`) is
 # first-party and is run explicitly as the next step, so the exception is
 # visible on its own line rather than smuggled in by dropping the flag.
 #
