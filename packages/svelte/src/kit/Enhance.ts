@@ -15,7 +15,7 @@
 
 /// <reference types="@sveltejs/kit" />
 
-import { applyAction, enhance } from "$app/forms";
+import { enhance } from "$app/forms";
 import { type Attachment, createAttachmentKey } from "svelte/attachments";
 import type { FormStore } from "../FormStore.svelte.ts";
 import { applyActionResult } from "../SvelteKit.ts";
@@ -29,8 +29,9 @@ export interface EnhancedFormProps {
 /**
  * Spreadable `<form>` props wiring SvelteKit's native `enhance` to the store:
  * `method="post"` plus a Svelte attachment that flips `submitting`, applies a
- * validation failure back to the store, and otherwise defers to SvelteKit
- * (`applyAction`) for success / redirect / error.
+ * validation failure back to the store, and otherwise defers to SvelteKit's
+ * default `update` (with `reset: false`) for success / redirect / error, which
+ * applies the result exactly once.
  *
  * @example
  * ```svelte
@@ -57,7 +58,6 @@ export function enhanceForm(
           form.submitting = false;
           if (applyActionResult(form, result)) return;
           await update({ reset: false });
-          await applyAction(result);
         };
       });
       return () => enhanced.destroy();
