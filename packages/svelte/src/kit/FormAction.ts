@@ -182,6 +182,10 @@ const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormStat
  *   `options.unrecognised`).
  *
  * Posted values survive every failure, so the form re-renders what was typed.
+ *
+ * `locationFor` returns the redirect target as-is: `runFormAction` does not
+ * check it. {@link formAction} hands it to SvelteKit's `redirect`, which
+ * accepts only a same-origin location (see there).
  */
 export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
   form: Form.Form<S, Message>,
@@ -238,12 +242,20 @@ export type ActionCommand<I, O> = (
  * Wire it into `export const actions`; the client `createForm` store applies
  * the returned `form` via {@link enhanceForm} (or `applyActionResult`).
  *
+ * `locationFor` must return a same-origin path, such as
+ * `/organisations/${id}`. SvelteKit 3's `redirect` rejects an external
+ * location unless it is passed `{ external }`, and `formAction` never passes
+ * it, so a `locationFor` that returns an absolute URL on another origin (or a
+ * protocol-relative `//host/...`) makes the action throw an `Error` instead of
+ * redirecting, after the command has already run. To send the user off-site,
+ * redirect to a same-origin route that performs the external redirect itself.
+ *
  * @example
  * ```ts
  * // src/routes/organisations/create/+page.server.ts
  * import { formAction } from "@thomasfosterau/effect-forms-svelte/kit";
- * import { organisationForm } from "$lib/forms";
- * import { api } from "$lib/server/api";
+ * import { organisationForm } from "#lib/forms";
+ * import { api } from "#lib/server/api";
  *
  * export const actions = {
  *   default: formAction(

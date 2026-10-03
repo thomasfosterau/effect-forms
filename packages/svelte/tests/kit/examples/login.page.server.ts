@@ -16,7 +16,7 @@ import { CommandFailure, formAction } from "@thomasfosterau/effect-forms-svelte/
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-// ── What the application provides (`$lib/server/...`) ──────────────────
+// ── What the application provides (`#lib/server/...`) ──────────────────
 
 /** The session transport's failure: a status from the auth Worker. */
 export class SessionCallError extends Schema.TaggedError<SessionCallError>()("SessionCallError", {
