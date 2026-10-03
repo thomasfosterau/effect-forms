@@ -10,4 +10,4 @@ Add the `@thomasfosterau/effect-forms-svelte/kit` entry, the SvelteKit form-acti
 - `formStateOf` / `issuesFor` / `rootIssuesOf` / `valueOf`: total readers over `PageProps["form"]`.
 - `userFixableMessage` / `withFailureParams`, for action-only routes.
 
-`@sveltejs/kit` (`^2.20.0 || ^3.0.0-next.27`) and `@thomasfosterau/effect-jsonapi` (`>=0.16.0`) are new optional peers. The root entry is unchanged.
+`@sveltejs/kit` (`^3.0.0`) and `@thomasfosterau/effect-jsonapi` (`>=0.16.0`) are new optional peers. The root entry is unchanged.

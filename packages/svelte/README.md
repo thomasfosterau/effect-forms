@@ -138,7 +138,7 @@ The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to
 
 ### Peers
 
-- `@sveltejs/kit` (`^2.20.0 || ^3.0.0-next.27 || ^3.0.0`) is an **optional** peer of the package and **required** by `/kit`. The repository's tests run against SvelteKit 3.0.0, pinned in its `pnpm-workspace.yaml`; the Kit 2 range is not exercised by CI.
+- `@sveltejs/kit` (`^3.0.0`) is an **optional** peer of the package and **required** by `/kit`. SvelteKit 2 is not supported. The repository's tests run against SvelteKit 3.0.0, pinned in its `pnpm-workspace.yaml`.
 - `$app/forms` is a SvelteKit virtual module, not a dependency. It resolves because SvelteKit compiles this package (its `exports` carry the `svelte` condition), so `/kit` only works inside a SvelteKit build.
 - `@thomasfosterau/effect-jsonapi` (`>=0.16.0`) is an **optional** peer used **for its types only**. `CommandFailure.ErrorObject` is `Document.ErrorObject.Type`. At runtime a failure is recognised by its `_tag`, so an application's own `JsonapiError` with the same shape is recognised too.
 
