@@ -34,7 +34,9 @@ const isFormActionData = (data: unknown): data is FormActionData & { form: FormS
  * Apply a derived form action's result to `form`. On a validation `failure`
  * carrying `{ form }`, repopulate the store's errors + posted values and return
  * `true` (consumed). Otherwise return `false` — the caller should defer to the
- * framework (`applyAction`) for success / redirect / error.
+ * framework for success / redirect / error: inside SvelteKit's `enhance`
+ * callback that is `update`, which applies the result itself, so don't also
+ * call `applyAction`.
  */
 export function applyActionResult(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accepts any concrete store

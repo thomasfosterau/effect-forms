@@ -62,7 +62,8 @@ describe("enhanceForm", () => {
     await after({ result, update });
     expect(store.submitting).toBe(false);
     expect(update).toHaveBeenCalledWith({ reset: false });
-    expect(applyAction).toHaveBeenCalledWith(result);
+    // `update` already applies the result; a second `applyAction` would apply it twice (#31).
+    expect(applyAction).not.toHaveBeenCalled();
     expect(store.setServerState).not.toHaveBeenCalled();
   });
 });
