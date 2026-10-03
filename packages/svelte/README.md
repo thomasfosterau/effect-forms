@@ -21,7 +21,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
 ```svelte
 <script lang="ts">
   import { createForm } from "@thomasfosterau/effect-forms-svelte";
-  import { Signup } from "$lib/schemas";
+  import { Signup } from "#lib/schemas";
 
   let { data } = $props(); // data.form is the server FormState
 
@@ -49,7 +49,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
 
 ```ts
 import { createForm } from "@thomasfosterau/effect-forms-svelte";
-import { signup } from "$lib/forms"; // a FormBuilder
+import { signup } from "#lib/forms"; // a FormBuilder
 
 const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 } });
 ```
@@ -144,7 +144,7 @@ The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to
 
 ### Commands and failures
 
-A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command must have no requirements left. Provide them first, e.g. with the application's `ManagedRuntime`. `locationFor(output, input)` builds the redirect.
+A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command must have no requirements left. Provide them first, e.g. with the application's `ManagedRuntime`. `locationFor(output, input)` builds the redirect, and must return a same-origin path such as `/organisations/${id}`. SvelteKit 3's `redirect` rejects an external location unless it is given `{ external }`, which `formAction` never passes, so an absolute URL on another origin (or a protocol-relative `//host/...`) makes the action throw an `Error` after the command has run. To send the user off-site, redirect to a same-origin route that performs the external redirect itself. `runFormAction` returns the location unchecked.
 
 `jsonapiFailure`, the default classifier, recognises:
 
@@ -164,8 +164,8 @@ import { Form, State } from "@thomasfosterau/effect-forms";
 import { CommandFailure, formAction } from "@thomasfosterau/effect-forms-svelte/kit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { SessionCallError } from "$lib/server/api/binding";
-import { safeRedirect } from "$lib/redirects";
+import { SessionCallError } from "#lib/server/api/binding";
+import { safeRedirect } from "#lib/redirects";
 
 const SignInFields = Schema.Struct({
   email: Schema.String,
