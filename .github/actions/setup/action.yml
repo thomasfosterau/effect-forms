@@ -18,8 +18,10 @@ inputs:
   node-version:
     description: The Node.js version to set up.
     required: false
-    # pnpm 11 refuses to run below Node 22.13.
-    default: 22.x
+    # CI and Release both run on one Node version: the newest
+    # release, via setup-node's `latest` alias. `engines.node` in the published
+    # manifests is a separate, wider support range. pnpm 11 needs Node >= 22.13.
+    default: latest
 runs:
   using: composite
   steps:
