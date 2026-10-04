@@ -11,7 +11,7 @@ Toolchain differences from the sibling libraries: unit tests are the `test` task
 
 ## Common pitfalls
 
-- **Build before checking or testing on a clean checkout.** `packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`. The `test` task declares this (`dependsOn: [{ task: "build", from: "dependencies" }]`), and CI orders the steps build → check → test.
+- **Build before checking or testing on a clean checkout.** `packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`. The `test` and `check` tasks declare this (`dependsOn: [{ task: "build", from: "dependencies" }]`), and CI orders the steps build → check → svelte-check → test.
 - **`packages/forms` never imports a framework.** That constraint is the point of the split: the core is usable from any framework (or none), and the Svelte bindings are the only place `svelte` may appear.
 - **One entry point per package, plus `effect-forms-svelte/kit`.** `/kit` is the SvelteKit-only entry (`@sveltejs/kit` and the `$app/forms` virtual, which the root entry must never import). Add another subpath export only for a concrete reason — the barrel keeps import sites stable.
 - **`effect` and `svelte` are peers, never bundled.** `@sveltejs/kit` and `@thomasfosterau/effect-jsonapi` are optional peers of `effect-forms-svelte`, used only by `/kit` (the latter for its types only). Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so `pnpm-workspace.yaml` pins one `effect` via the catalog and an `overrides: effect: "catalog:"` entry.
