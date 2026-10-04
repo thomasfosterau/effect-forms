@@ -17,6 +17,15 @@ export default defineConfig({
         command: "vp test run",
         dependsOn: [{ task: "build", from: "dependencies" }],
       },
+      // svelte-check type-checks the package (TS6 + Svelte's language
+      // tooling) against `tsconfig.json`. No `--fail-on-warnings`: with no
+      // `.svelte` components here it always warns "No svelte input files
+      // were found", and no option silences that warning alone
+      // (`--threshold error` would hide every warning).
+      check: {
+        command: "svelte-check --tsconfig ./tsconfig.json",
+        dependsOn: [{ task: "build", from: "dependencies" }],
+      },
     },
   },
 
@@ -66,8 +75,8 @@ export default defineConfig({
       reporter: ["text-summary", "json-summary"],
       reportsDirectory: "./coverage",
       // The reactive store lives in `FormStore.svelte.ts` (rune-compiled,
-      // type-checked as plain TypeScript by `vp check`; no svelte-check gate
-      // yet, #19); coverage gates the pure modules.
+      // type-checked by `vp check` and by svelte-check, the `check` task);
+      // coverage gates the pure modules.
       include: [
         "src/Tainted.ts",
         "src/ClientValidate.ts",
