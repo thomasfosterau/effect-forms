@@ -24,10 +24,11 @@ pnpm add @sveltejs/kit
 This repository is managed by [Vite+](https://viteplus.dev) (the `vp` CLI).
 
 ```sh
-vp install        # install dependencies
-vp run -r build   # build every package with tsdown
-vp check          # format (Oxfmt), lint (Oxlint), type-check (tsgolint)
-vp run -r test    # run every package's Vitest suite
+vp install                            # install dependencies
+vp run -r build                       # build every package with tsdown
+vp check                              # format (Oxfmt), lint (Oxlint), type-check (tsgolint)
+vp run --filter './packages/*' check  # svelte-check over packages/svelte
+vp run -r test                        # run every package's Vitest suite
 ```
 
 Build before checking or testing on a clean checkout: `packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`.

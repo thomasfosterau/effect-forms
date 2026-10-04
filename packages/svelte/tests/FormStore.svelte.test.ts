@@ -6,10 +6,12 @@
  * submitter)` / no-JS POST semantics — and the button-less auto-submit path
  * (`onChange`/`onBlur` with `autoSubmit`) must keep posting without one.
  *
- * `FormStore.svelte.ts` is otherwise only type-checked (as plain TypeScript,
- * by `vp check`; a svelte-check gate is #19), not unit-tested — this file only
- * exercises the submit body / event wiring, not the rest of the store
- * (validation, field arrays, snapshots, …).
+ * `FormStore.svelte.ts` is otherwise only type-checked (by `vp check` and by
+ * svelte-check, the `check` task), not unit-tested — this file only exercises
+ * the submit body / event wiring, not the rest of the store (validation, field
+ * arrays, snapshots, …). Importing the store here through the `svelte()`
+ * plugin is also what catches its rune compile errors (`state_invalid_export`,
+ * …), which neither type-checker reports.
  * `.svelte.ts` runes need the Svelte compiler, hence `.svelte.test.ts` (see
  * `vite.config.ts`'s `svelte()` plugin) and a DOM (`happy-dom`, scoped to this
  * file via the `@vitest-environment` docblock) for `HTMLFormElement`/`FormData`.

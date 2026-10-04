@@ -40,5 +40,12 @@ jobs:
       - name: Check (format, lint, types)
         run: vp check
 
+      # Every package's `check` task: svelte-check over `packages/svelte`.
+      # Not `vp run -r check`: `-r` also selects the root `check` script
+      # (`vp check`), which has no build dependency and so runs while the
+      # `check` task's `build` dependency rewrites `packages/forms/dist`.
+      - name: Check (svelte-check)
+        run: vp run --filter './packages/*' check
+
       - name: Test
         run: vp run -r test

@@ -119,7 +119,7 @@ Everything below is exported flat from the root entry (`@thomasfosterau/effect-f
 | [`ClientValidate`](src/ClientValidate.ts) | `validateData` / `validateField` — validate the form, or one field, against the schema.                                                                                                         |
 | [`EnhanceCore`](src/EnhanceCore.ts)       | Serialise data → form body, parse the response, compute the store update.                                                                                                                       |
 
-The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to the pure, unit-tested modules. The store itself is type-checked as plain TypeScript; its submitter-aware submit path (`enhance` → the posted `FormData`) is unit-tested in [`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts).
+The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to the pure, unit-tested modules. The store itself is type-checked (by `vp check` and by `svelte-check`); its submitter-aware submit path (`enhance` → the posted `FormData`) is unit-tested in [`FormStore.svelte.test.ts`](tests/FormStore.svelte.test.ts).
 
 ## /kit
 

@@ -2,7 +2,7 @@
 
 `CLAUDE.md` is a symlink to this file. This repository publishes two npm libraries for Effect-native forms, consumed by the owner's applications (website, gardeneria, preferenceflow). Both were extracted from `thomasfosterau/website` with `git subtree split`, so `git log` / `git blame` reach back through their pre-extraction history.
 
-Toolchain differences from the sibling libraries: unit tests are the `test` task (`vp run -r test`, not `test:unit`); there is no separate `vp run check` type gate, because `vp check` type-checks through tsgolint (`lint.options.typeCheck: true`); there is no docgen and no fallow gate; TypeScript is split 6/7 (`typescript` is the TS6 alias that svelte-check, the language service and tsdown's declaration emit load; `@typescript/native` is TS7, bin `tsc`), and the root `prepare` script runs `effect-tsgo patch --typescript --oxlint` — `@effect/tsgo`, `@typescript/native` and `vite-plus` bump as a set; internal dependencies are `workspace:^`, not `workspace:*` (deliberate, see [docs/RELEASING.md](docs/RELEASING.md) "Version coupling").
+Toolchain differences from the sibling libraries: unit tests are the `test` task (`vp run -r test`, not `test:unit`); `vp check` type-checks through tsgolint (`lint.options.typeCheck: true`), and `vp run --filter './packages/*' check` adds svelte-check over `packages/svelte`; there is no docgen and no fallow gate; TypeScript is split 6/7 (`typescript` is the TS6 alias that svelte-check, the language service and tsdown's declaration emit load; `@typescript/native` is TS7, bin `tsc`), and the root `prepare` script runs `effect-tsgo patch --typescript --oxlint` — `@effect/tsgo`, `@typescript/native` and `vite-plus` bump as a set; internal dependencies are `workspace:^`, not `workspace:*` (deliberate, see [docs/RELEASING.md](docs/RELEASING.md) "Version coupling").
 
 | Package                               | Directory         | Boundary                                                                                                                  |
 | ------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -29,7 +29,8 @@ Toolchain differences from the sibling libraries: unit tests are the `test` task
 
 - `vp install` — install dependencies (delegates to pnpm).
 - `vp run -r build` — build every package with tsdown into `dist/`.
-- `vp check` — format (Oxfmt), lint (Oxlint) and type-check (tsgolint); `--fix` to autofix. It is also the type gate.
+- `vp check` — format (Oxfmt), lint (Oxlint) and type-check (tsgolint); `--fix` to autofix. It is also the main type gate.
+- `vp run --filter './packages/*' check` — every package's `check` task: svelte-check (TS6 + Svelte's language tooling) over `packages/svelte`, after building `packages/forms`. Not `vp run -r check`: `-r` also selects the root `check` script (`vp check`), which runs concurrently with that build and fails with spurious `TS2307` errors whenever the build isn't a cache hit.
 - `vp run -r test` — run every package's Vitest suite.
 - `pnpm changeset` — add a changeset.
 
@@ -41,9 +42,10 @@ Before you report work as done, run the gates below in CI's order and quote each
 
 1. `vp run -r build`
 2. `vp check`
-3. `vp run -r test`
+3. `vp run --filter './packages/*' check`
+4. `vp run -r test`
 
-All three run offline with no credentials. There is no svelte-check gate yet (#19): `vp check` type-checks `FormStore.svelte.ts` as plain TypeScript.
+All four run offline with no credentials. Neither type-checker reports Svelte's rune compile errors in `*.svelte.ts` (`state_invalid_export`, `rune_missing_parentheses`, …); `vp run -r test` does, because `tests/FormStore.svelte.test.ts` imports `FormStore.svelte.ts` through the `svelte()` Vite plugin.
 
 ## Branches and pull requests
 
