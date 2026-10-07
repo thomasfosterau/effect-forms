@@ -17,6 +17,7 @@ Toolchain differences from the sibling libraries: unit tests are the `test` task
 - **`effect` and `svelte` are peers, never bundled.** `@sveltejs/kit` and `@thomasfosterau/effect-jsonapi` are optional peers of `effect-forms-svelte`, used only by `/kit` (the latter for its types only). Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so `pnpm-workspace.yaml` pins one `effect` via the catalog and an `overrides: effect: "catalog:"` entry.
 - **Never edit a version in a `package.json`.** Every external version lives in `pnpm-workspace.yaml` under `catalog:` (the published peer ranges under `catalogs.peers`); manifests carry only `catalog:` / `catalog:peers` / `workspace:^`, and `catalogMode: strict` rejects anything else. After editing the catalog, run `pnpm install` and commit the regenerated `pnpm-lock.yaml` — CI installs with `--frozen-lockfile`.
 - **`vite-plus`, `vite` (its aliased core) and `vitest` bump as a set:** vite-plus pins `vitest` exactly, and the `vitest: "catalog:"` override forces the singleton.
+- **Bump a transitive dependency from the workspace root without `--recursive`:** `pnpm update <pkg> --depth Infinity`. With pnpm 11.18, `--recursive` silently drops the `catalogs.peers` block from the `pnpm-lock.yaml` header and `--frozen-lockfile` still passes, so before committing check that `git diff pnpm-lock.yaml` touches nothing under the header's `catalogs:` section (#46).
 
 ## Conventions
 
