@@ -3,7 +3,7 @@ import { FlatQuery } from "@thomasfosterau/effect-jsonapi";
 import { Constraints } from "@thomasfosterau/effect-forms";
 import { describe, expect, it } from "vite-plus/test";
 
-// `FlatQuery.slug` (effect-jsonapi 0.16.0, the rc.118 build) is built from
+// `FlatQuery.slug` (effect-jsonapi 0.16.3, built against effect 4.0.0) is built from
 // `Schema.isBetweenLength(1, maxLength)` + `Schema.isPattern(SLUG_PATTERN)`.
 // effect-forms keys the HTML attributes on those checks' representation ids
 // (`effect/schema/isBetweenLength`, `effect/schema/isPattern`), so a slug

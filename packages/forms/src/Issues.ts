@@ -37,10 +37,9 @@ export interface FormIssue {
 /**
  * Render one terminal issue into a human-readable message. The default is
  * Effect Schema's own formatter (`SchemaIssue.makeFormatterDefault`), which
- * renders a sentence such as `Expected string`. (An issue's `toString` is no
- * longer a readable rendering as of Effect rc.118: it prints
- * `[object Object]`.) Override it to localise or to map specific `_tag`s to
- * custom copy.
+ * renders a sentence such as `Expected string`. (An issue's `toString` is not
+ * a readable rendering in Effect 4.0.0: it prints `[object Object]`.)
+ * Override it to localise or to map specific `_tag`s to custom copy.
  *
  * A failed schema check reaches the formatter as the `Filter` node that
  * wraps its leaf, because the check's own message (e.g. `Expected a value
