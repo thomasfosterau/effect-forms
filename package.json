@@ -12,7 +12,6 @@
   },
   "type": "module",
   "scripts": {
-    "check": "vp check",
     "test": "vp run -r test",
     "build": "vp run -r build",
     "clean": "vp run -r clean",
