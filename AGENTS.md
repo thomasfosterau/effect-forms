@@ -79,7 +79,7 @@ Never guess at Effect patterns — check the guide first.
 
 ### Effect v4
 
-These packages target **Effect v4**: a single `effect` package. Development runs against the `effect` 4.0.0 release pinned under `catalog:` in `pnpm-workspace.yaml`; the published packages declare the `catalogs.peers` range, `>=4.0.0`, whose floor is that same release so the range claims nothing the suite does not run against.
+These packages target **Effect v4**: a single `effect` package. Development runs against the `effect` 4.0.0 release pinned under `catalog:` in `pnpm-workspace.yaml`; the published packages declare the `catalogs.peers` range, `>=4.0.0`, whose floor is that same release, so the floor is a version the suite actually runs against.
 
 - `@effect/platform` does not exist in v4 — HTTP modules live under `effect/http/*` (there are no `effect/unstable/*` paths in 4.0.0), and `FileSystem` / `Path` under `effect/*`.
 - `@effect/schema` does not exist in v4 — `Schema`, `SchemaAST`, `SchemaIssue`, `SchemaParser` and `SchemaRepresentation` are all top-level `effect/*` modules.

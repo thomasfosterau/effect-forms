@@ -55,8 +55,8 @@ describe("constraintsFromSchema", () => {
 
   it("derives minlength=1 and maxlength=5 from a Schema.isBetweenLength(1, 5) check", () => {
     // The 4.0.0 representation id is `effect/schema/isBetweenLength`
-    // (`isLengthBetween` in earlier v4 prereleases); an unrecognised id derives
-    // nothing, silently.
+    // (`isLengthBetween` in the v4 betas and early release candidates); an
+    // unrecognised id derives nothing, silently.
     const field = Schema.String.check(Schema.isBetweenLength(1, 5));
     expect(constraintsFromSchema(Schema.Struct({ field }))).toEqual({
       field: { required: true, minlength: 1, maxlength: 5 },

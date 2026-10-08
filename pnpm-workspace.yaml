@@ -48,8 +48,7 @@ catalog:
   "@typescript/native": "npm:typescript@7.0.2"
   # The development copy only. The published packages declare the peer range
   # under `catalogs.peers` below; its floor (`>=4.0.0`) is the release this
-  # pin names, so the published range claims nothing the suite does not run
-  # against.
+  # pin names, so the floor is a version the suite runs against.
   effect: 4.0.0
   happy-dom: ^20.14.5
   svelte: ^5.57.1
