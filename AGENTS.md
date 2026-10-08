@@ -61,7 +61,7 @@ GitHub Issues for `thomasfosterau/effect-forms` are the backlog: when you find w
 
 ## Effect Best Practices
 
-Before writing Effect code, read the API you need from the installed package in `node_modules/effect/dist/*.d.ts`, and the `### Effect v4` notes below. Never guess at Effect APIs.
+Before writing Effect code, read the API you need from the installed package in `node_modules/effect/dist/*.d.ts` (subpath modules such as `http` and `cli` are in `node_modules/effect/dist/<module>/*.d.ts`), and the `### Effect v4` notes below. Never guess at Effect APIs.
 
 ### Effect v4
 

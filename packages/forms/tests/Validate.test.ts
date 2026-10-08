@@ -15,9 +15,8 @@ import {
 } from "../src/Validate.ts";
 
 // Local Effect test runner — `@effect/vitest` (`it.effect`, its TestClock
-// wiring) doesn't work against this repo's vitest alias (see
-// `tests/helpers/effect.ts` at the repo root); provide `TestClock.layer()`
-// explicitly per test instead.
+// wiring) doesn't work against this repo's vitest alias; provide
+// `TestClock.layer()` explicitly per test instead.
 const runTest = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => Effect.runPromise(effect);
 
 const Field = Schema.String.check(Schema.isMinLength(3));
