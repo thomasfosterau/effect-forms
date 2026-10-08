@@ -59,23 +59,9 @@ All four run offline with no credentials. Neither type-checker reports Svelte's 
 
 GitHub Issues for `thomasfosterau/effect-forms` are the backlog: when you find work you can't do now, file an issue rather than leaving a TODO. The issue is the spec — read its comments; later comments override the body. Record decisions and findings as issue comments. Stop-and-report is a valid outcome: on a blocker outside the issue's scope, comment the evidence on the issue and stop. Scope cut mid-PR becomes a linked issue before merge.
 
-<!-- effect-solutions:start -->
-
 ## Effect Best Practices
 
-**IMPORTANT:** Always consult effect-solutions before writing Effect code.
-
-1. Run `effect-solutions list` to see available guides
-2. Run `effect-solutions show <topic>...` for relevant patterns (supports multiple topics)
-3. Search `~/.local/share/effect-solutions/effect` for real implementations
-
-Topics: quick-start, project-setup, tsconfig, basics, services-and-layers, data-modeling, error-handling, config, testing, cli.
-
-Never guess at Effect patterns — check the guide first.
-
-<!-- effect-solutions:end -->
-
-`effect-solutions` is not provisioned in this repository yet (#20): neither the CLI nor `~/.local/share/effect-solutions` exists in an agent session. Until it is, read the API from `node_modules/effect/dist/*.d.ts`.
+Before writing Effect code, read the API you need from the installed package in `node_modules/effect/dist/*.d.ts`, and the `### Effect v4` notes below. Never guess at Effect APIs.
 
 ### Effect v4
 
