@@ -37,15 +37,11 @@ jobs:
       - name: Build
         run: vp run -r build
 
-      - name: Check (format, lint, types)
-        run: vp check
-
-      # Every package's `check` task: svelte-check over `packages/svelte`.
-      # Not `vp run -r check`: `-r` also selects the root `check` script
-      # (`vp check`), which has no build dependency and so runs while the
-      # `check` task's `build` dependency rewrites `packages/forms/dist`.
-      - name: Check (svelte-check)
-        run: vp run --filter './packages/*' check
+      # The root `check` task (`vp check`: format, lint, types) plus every
+      # package's `check` task (svelte-check over `packages/svelte`). Both
+      # depend on the packages' `build`, which the Build step left cached.
+      - name: Check (format, lint, types, svelte-check)
+        run: vp run -r check
 
       - name: Test
         run: vp run -r test

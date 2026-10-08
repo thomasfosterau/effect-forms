@@ -24,14 +24,14 @@ pnpm add @sveltejs/kit
 This repository is managed by [Vite+](https://viteplus.dev) (the `vp` CLI).
 
 ```sh
-vp install                            # install dependencies
-vp run -r build                       # build every package with tsdown
-vp check                              # format (Oxfmt), lint (Oxlint), type-check (tsgolint)
-vp run --filter './packages/*' check  # svelte-check over packages/svelte
-vp run -r test                        # run every package's Vitest suite
+vp install        # install dependencies
+vp run -r build   # build every package with tsdown
+vp run -r check   # vp check (format, lint, type-check) + svelte-check over packages/svelte
+vp run -r test    # run every package's Vitest suite
+vp check --fix    # format (Oxfmt), lint (Oxlint), type-check (tsgolint), autofixing
 ```
 
-Build before checking or testing on a clean checkout: `packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`.
+`packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`, so checking or testing it needs that build. `vp run -r check` and `vp run -r test` build first; run `vp run -r build` before a bare `vp check` on a clean checkout. There is no `pnpm check`: the root `check` is a Vite+ task, not a `package.json` script, so use `vp run check` or `vp check`.
 
 Releases are automated with [Changesets](https://github.com/changesets/changesets) — see [docs/RELEASING.md](docs/RELEASING.md).
 

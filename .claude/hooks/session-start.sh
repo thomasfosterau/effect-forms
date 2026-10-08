@@ -49,9 +49,10 @@
 # ## Secrets
 #
 # This hook hydrates NO secrets, and this repository needs none: every gate
-# (`vp run -r build`, `vp check`, `vp run --filter './packages/*' check`,
-# `vp run -r test`) runs offline against the lockfile. Publishing is the release workflow's job and uses npm OIDC trusted
-# publishing (docs/RELEASING.md), so there is no token to hydrate anywhere.
+# (`vp run -r build`, `vp run -r check`, `vp run -r test`) runs offline
+# against the lockfile. Publishing is the release workflow's job and uses npm
+# OIDC trusted publishing (docs/RELEASING.md), so there is no token to
+# hydrate anywhere.
 #
 # ## Contract
 #
