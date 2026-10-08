@@ -36,7 +36,7 @@ catalog:
   "@effect/tsgo": 0.46.1
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
-  "@sveltejs/kit": 3.0.0
+  "@sveltejs/kit": 3.0.1
   "@sveltejs/vite-plugin-svelte": ^7.3.1
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
@@ -51,7 +51,7 @@ catalog:
   # pin names, so the floor is a version the suite runs against.
   effect: 4.0.0
   happy-dom: ^20.14.5
-  svelte: ^5.57.1
+  svelte: ^5.57.2
   svelte-check: ^4.7.6
   # TypeScript 6/7 side-by-side: TS7 ships no JavaScript compiler API until
   # 7.1, so everything that `require("typescript")` — svelte-check, the Effect
