@@ -13,7 +13,7 @@ const issueOf = (schema: Schema.Top, input: unknown): SchemaIssue.Issue => {
   return reason.error.issue;
 };
 
-// As of Effect rc.118 an issue's `toString` prints `[object Object]`, so the
+// In Effect 4.0.0 an issue's `toString` prints `[object Object]`, so the
 // default leaf formatter must render through `SchemaIssue.makeFormatterDefault`.
 describe("schemaIssuesToFormIssues default messages", () => {
   it("renders a type mismatch as a sentence", () => {
