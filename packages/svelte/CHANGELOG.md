@@ -1,5 +1,21 @@
 # @thomasfosterau/effect-forms-svelte
 
+## 0.3.0
+
+### Minor Changes
+
+- 39b96f2: **Breaking:** the `effect` peer floor is now `>=4.0.0` (it was `>=4.0.0-rc.118`). An application still on an `effect` 4.0.0 release candidate must upgrade `effect` to 4.0.0 or later. Nothing else changes.
+
+### Patch Changes
+
+- 598ec6f: `objectToEntries` (and so `objectToFormData` and `FormStore.toFormData()`) now omits `function` and `symbol` values, as `JSON.stringify` omits such object properties; in an array such an item is omitted too, and the remaining items keep their indices. It used to stringify them, so a callback left in form data was sent as its source code and a symbol as `"Symbol(…)"`. `string`, `number`, `boolean` and `bigint` values are still stringified, `null` still becomes `""`, and `undefined` is still skipped.
+- 6807a7b: `objectToFormData` (and so `FormStore.toFormData()`) now keeps `File` and `Blob` values: each is appended as a file, and a `File` keeps its name, so a file held in form data reaches the server and `FormData.formDataToObject` passes it through unchanged. It used to drop them silently. `objectToEntries` still returns string entries only, so it omits a `File` or `Blob` (an array item leaves a gap, and the other items keep their indices).
+
+  `objectToEntries`, `objectToFormData` and `FormStore.toFormData()` now encode a `Date` as the `YYYY-MM-DD` of its UTC calendar day, as `<input type="date">` submits it and `Schema.DateFromString` decodes it back to UTC midnight. The time of day is dropped, and an invalid `Date` is omitted. A `Date` used to be dropped silently. A `Map`, a `Set` and any other object with no own enumerable fields still contribute no entries, which the TSDoc now says.
+
+- Updated dependencies [39b96f2]
+  - @thomasfosterau/effect-forms@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
