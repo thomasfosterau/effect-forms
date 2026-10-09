@@ -109,9 +109,10 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
     expect(await (got as File).text()).toBe("hello");
   });
 
-  it("appends a Blob to FormData as a file with the Blob's content and type", async () => {
+  it('appends a bare Blob to FormData as a File named "blob" with the Blob\'s content and type', async () => {
     const got = objectToFormData({ data: new Blob(["bytes"], { type: "text/plain" }) }).get("data");
-    expect(got).toBeInstanceOf(Blob);
+    expect(got).toBeInstanceOf(File);
+    expect((got as File).name).toBe("blob");
     expect((got as Blob).type).toBe("text/plain");
     expect(await (got as Blob).text()).toBe("bytes");
   });
@@ -129,6 +130,12 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
       ["born", "2026-10-09"],
       ["author.born", "2026-10-09"],
       ["dates[0]", "2026-10-09"],
+    ]);
+  });
+
+  it("encodes a top-level Date passed with a prefix as a single entry", () => {
+    expect(objectToEntries(new Date("2026-10-09T12:00:00Z"), "born")).toEqual([
+      ["born", "2026-10-09"],
     ]);
   });
 

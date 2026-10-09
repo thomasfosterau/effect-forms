@@ -115,9 +115,10 @@ export function objectToEntries(data: unknown, prefix = ""): Array<[string, stri
  * Serialise the store's data into a {@link FormData} body for submission.
  *
  * Names and leaves follow {@link objectToEntries}, except that a `Blob` or
- * `File` leaf is appended as a file (a `File` keeps its name), as an
- * `<input type="file">` would submit it, so it reaches the server's
- * `FormData.formDataToObject` unchanged.
+ * `File` leaf is appended as a file (a `File` keeps its name; a bare `Blob`
+ * arrives as a `File` named `"blob"`, the `FormData` default), as an
+ * `<input type="file">` would submit it, so it reaches the core's
+ * `FormData.formDataToObject` (`@thomasfosterau/effect-forms`) unchanged.
  */
 export function objectToFormData(data: unknown): FormData {
   const formData = new FormData();

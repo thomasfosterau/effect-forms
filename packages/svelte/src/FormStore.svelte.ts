@@ -1323,7 +1323,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /**
    * Build a {@link FormData} body from the current data (SPA / manual submit).
    *
-   * Each value is encoded as {@link objectToFormData} encodes it: a `File` or
+   * Each value is encoded as `objectToFormData` encodes it: a `File` or
    * `Blob` is appended as a file and a `Date` as its UTC `YYYY-MM-DD`.
    */
   toFormData(): FormData {
