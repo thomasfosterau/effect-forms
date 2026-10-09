@@ -1320,7 +1320,12 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly #enhanceAttachment = (node: Element): (() => void) =>
     this.enhance(node as HTMLFormElement).destroy;
 
-  /** Build a {@link FormData} body from the current data (SPA / manual submit). */
+  /**
+   * Build a {@link FormData} body from the current data (SPA / manual submit).
+   *
+   * Each value is encoded as {@link objectToFormData} encodes it: a `File` or
+   * `Blob` is appended as a file and a `Date` as its UTC `YYYY-MM-DD`.
+   */
   toFormData(): FormData {
     return objectToFormData(this.data);
   }

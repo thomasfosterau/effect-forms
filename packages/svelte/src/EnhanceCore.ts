@@ -17,52 +17,111 @@ type FormErrors = Errors.FormErrors;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
 const { failure, success } = Result;
 
-/**
- * Flatten a nested data object into `[name, value]` entries using path notation.
- *
- * Nested objects become dotted names (`author.name`) and array items indexed
- * names (`tags[0]`). A `string`, `number`, `boolean` or `bigint` leaf is
- * stringified and `null` becomes `""`. An `undefined`, `function` or `symbol`
- * leaf is omitted, as `JSON.stringify` omits such object properties, so a
- * callback or symbol left in form data never reaches the form body as
- * `"Symbol(…)"` or function source. An array item of those kinds is omitted
- * too (where `JSON.stringify` would write `null`), so the remaining items
- * keep their indices (`tags[0]`, `tags[2]`).
- */
-export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
-  const out: Array<[string, string]> = [];
-  const push = (key: string, value: unknown): void => {
-    if (value === null) {
-      out.push([key, ""]);
-    } else if (Array.isArray(value)) {
-      value.forEach((item, i) => out.push(...objectToEntries(item, `${key}[${i}]`)));
-    } else if (typeof value === "object") {
-      out.push(...objectToEntries(value, key));
-    } else if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean" ||
-      typeof value === "bigint"
-    ) {
-      out.push([key, String(value)]);
-    }
-    // `undefined`, `function` and `symbol` leaves are omitted.
-  };
+/** A form-body entry: a stringified leaf, or a `Blob` / `File` passed through. */
+type BodyEntry = [string, string | Blob];
 
-  if (data !== null && typeof data === "object" && !Array.isArray(data)) {
-    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-      push(prefix ? `${prefix}.${key}` : key, value);
-    }
-  } else if (prefix) {
-    push(prefix, data);
+/**
+ * Whether a value is a `Blob` (a `File` is one). Guards on `typeof Blob` so
+ * it holds in any runtime, including one without a global `Blob`.
+ */
+const isBlob = (value: unknown): value is Blob =>
+  typeof Blob !== "undefined" && value instanceof Blob;
+
+/**
+ * Encode a `Date` as the `YYYY-MM-DD` of its UTC calendar day, or `undefined`
+ * for an invalid `Date`. The UTC day round-trips: a `YYYY-MM-DD` string
+ * decodes to UTC midnight. Taking everything before the `T` keeps
+ * `toISOString`'s expanded form for a year outside 0000–9999
+ * (`+010000-01-01`), where a fixed 10-character slice would cut it off.
+ */
+const encodeDate = (value: Date): string | undefined => {
+  if (Number.isNaN(value.getTime())) return undefined;
+  const iso = value.toISOString();
+  return iso.slice(0, iso.indexOf("T"));
+};
+
+/** Append the entries for one named value to `out`, recursing into containers. */
+function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void {
+  if (value === null) {
+    out.push([key, ""]);
+  } else if (isBlob(value)) {
+    out.push([key, value]);
+  } else if (value instanceof Date) {
+    const encoded = encodeDate(value);
+    if (encoded !== undefined) out.push([key, encoded]);
+  } else if (Array.isArray(value)) {
+    value.forEach((item, i) => appendEntries(out, `${key}[${i}]`, item));
+  } else if (typeof value === "object") {
+    appendFields(out, value, key);
+  } else if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    out.push([key, String(value)]);
+  }
+  // `undefined`, `function` and `symbol` leaves are omitted.
+}
+
+/** Append an object's own enumerable fields to `out`, as `prefix.key` names. */
+function appendFields(out: Array<BodyEntry>, data: object, prefix: string): void {
+  for (const [key, value] of Object.entries(data)) {
+    appendEntries(out, prefix ? `${prefix}.${key}` : key, value);
+  }
+}
+
+/** Flatten `data` into form-body entries, `Blob` / `File` leaves included. */
+function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
+  const out: Array<BodyEntry> = [];
+  if (prefix) appendEntries(out, prefix, data);
+  else if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+    appendFields(out, data, "");
   }
   return out;
 }
 
-/** Serialise the store's data into a {@link FormData} body for submission. */
+/**
+ * Flatten a nested data object into `[name, value]` string entries using path
+ * notation.
+ *
+ * Nested objects become dotted names (`author.name`) and array items indexed
+ * names (`tags[0]`). Each leaf kind is handled as follows:
+ *
+ * - A `string`, `number`, `boolean` or `bigint` is stringified.
+ * - `null` becomes `""`.
+ * - A `Date` becomes the `YYYY-MM-DD` of its **UTC** calendar day (what
+ *   `<input type="date">` submits, and what `Schema.DateFromString` decodes
+ *   back to UTC midnight); the time of day is dropped, so a datetime needs its
+ *   own string field. An invalid `Date` is omitted.
+ * - A `Blob` or `File` is omitted here, since a string entry can't carry it;
+ *   {@link objectToFormData} keeps it.
+ * - An `undefined`, `function` or `symbol` is omitted, as `JSON.stringify`
+ *   omits such object properties, so a callback or symbol left in form data
+ *   never reaches the form body as `"Symbol(…)"` or function source.
+ * - Any other object contributes its own enumerable fields, so one with none
+ *   (a `Map`, a `Set`, an empty object) contributes no entries.
+ *
+ * An omitted array item leaves a gap (where `JSON.stringify` would write
+ * `null`), so the remaining items keep their indices (`tags[0]`, `tags[2]`).
+ */
+export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
+  return toBodyEntries(data, prefix).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+}
+
+/**
+ * Serialise the store's data into a {@link FormData} body for submission.
+ *
+ * Names and leaves follow {@link objectToEntries}, except that a `Blob` or
+ * `File` leaf is appended as a file (a `File` keeps its name), as an
+ * `<input type="file">` would submit it, so it reaches the server's
+ * `FormData.formDataToObject` unchanged.
+ */
 export function objectToFormData(data: unknown): FormData {
   const formData = new FormData();
-  for (const [key, value] of objectToEntries(data)) formData.append(key, value);
+  for (const [key, value] of toBodyEntries(data, "")) formData.append(key, value);
   return formData;
 }
 
