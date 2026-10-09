@@ -43,7 +43,7 @@ export default defineConfig({
     entry: ["src/index.ts", "src/kit/index.ts"],
     // SvelteKit's virtual modules resolve only inside the consumer's
     // SvelteKit build; they are never bundled or resolved here.
-    external: [/^\$app\//],
+    deps: { neverBundle: [/^\$app\//] },
     format: ["esm"],
     platform: "neutral",
     unbundle: true,
