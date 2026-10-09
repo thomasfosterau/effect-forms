@@ -17,20 +17,34 @@ type FormErrors = Errors.FormErrors;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
 const { failure, success } = Result;
 
-/** Flatten a nested data object into `[name, value]` entries using path notation. */
+/**
+ * Flatten a nested data object into `[name, value]` entries using path notation.
+ *
+ * Nested objects become dotted names (`author.name`) and array items indexed
+ * names (`tags[0]`). A `string`, `number`, `boolean` or `bigint` leaf is
+ * stringified and `null` becomes `""`. An `undefined`, `function` or `symbol`
+ * leaf is omitted, as `JSON.stringify` omits such object properties, so a
+ * callback or symbol left in form data never reaches the form body as
+ * `"Symbol(…)"` or function source.
+ */
 export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   const push = (key: string, value: unknown): void => {
-    if (value === undefined) return;
     if (value === null) {
       out.push([key, ""]);
     } else if (Array.isArray(value)) {
       value.forEach((item, i) => out.push(...objectToEntries(item, `${key}[${i}]`)));
     } else if (typeof value === "object") {
       out.push(...objectToEntries(value, key));
-    } else {
+    } else if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      typeof value === "bigint"
+    ) {
       out.push([key, String(value)]);
     }
+    // `undefined`, `function` and `symbol` leaves are omitted.
   };
 
   if (data !== null && typeof data === "object" && !Array.isArray(data)) {
