@@ -46,9 +46,9 @@ catalog:
   # TypeScript 7 (the native Go compiler; bin `tsc`) is the type checker of
   # record. Pinned exact, alongside the TS6 alias below.
   "@typescript/native": "npm:typescript@7.0.2"
-  # The development copy only. The published packages declare the peer range
-  # under `catalogs.peers` below; its floor (`>=4.0.0`) is the release this
-  # pin names, so the floor is a version the suite runs against.
+  # The development copy only: the suite runs against this pin and nothing
+  # else. The published peer range lives under `catalogs.peers` below, and the
+  # suite does not test that floor.
   effect: 4.0.2
   happy-dom: ^20.14.5
   svelte: ^5.57.2
