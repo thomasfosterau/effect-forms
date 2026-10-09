@@ -25,7 +25,9 @@ const { failure, success } = Result;
  * stringified and `null` becomes `""`. An `undefined`, `function` or `symbol`
  * leaf is omitted, as `JSON.stringify` omits such object properties, so a
  * callback or symbol left in form data never reaches the form body as
- * `"Symbol(…)"` or function source.
+ * `"Symbol(…)"` or function source. An array item of those kinds is omitted
+ * too (where `JSON.stringify` would write `null`), so the remaining items
+ * keep their indices (`tags[0]`, `tags[2]`).
  */
 export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
   const out: Array<[string, string]> = [];
