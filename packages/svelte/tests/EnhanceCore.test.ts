@@ -36,6 +36,43 @@ describe("objectToEntries / objectToFormData", () => {
     ]);
   });
 
+  it("stringifies string, number, boolean and bigint leaves", () => {
+    expect(objectToEntries({ s: "x", n: 1.5, t: true, f: false, big: 12n })).toEqual([
+      ["s", "x"],
+      ["n", "1.5"],
+      ["t", "true"],
+      ["f", "false"],
+      ["big", "12"],
+    ]);
+  });
+
+  it("omits function and symbol leaves at the top level", () => {
+    expect(objectToEntries({ a: () => 1, s: Symbol("x"), n: 1n, b: true, z: null })).toEqual([
+      ["n", "1"],
+      ["b", "true"],
+      ["z", ""],
+    ]);
+  });
+
+  it("omits function and symbol leaves nested in an object", () => {
+    expect(
+      objectToEntries({ author: { name: "Ada", greet: () => "hi", tag: Symbol("t") } }),
+    ).toEqual([["author.name", "Ada"]]);
+  });
+
+  it("omits function and symbol items in an array, keeping the others' indices", () => {
+    expect(objectToEntries({ list: ["a", () => 1, Symbol("x"), null, 2n] })).toEqual([
+      ["list[0]", "a"],
+      ["list[3]", ""],
+      ["list[4]", "2"],
+    ]);
+  });
+
+  it("leaves function and symbol values out of FormData", () => {
+    const fd = objectToFormData({ a: "1", cb: () => 1, sym: Symbol("x") });
+    expect([...fd.keys()]).toEqual(["a"]);
+  });
+
   it("builds FormData", () => {
     const fd = objectToFormData({ a: "1", b: "2" });
     expect(fd.get("a")).toBe("1");
