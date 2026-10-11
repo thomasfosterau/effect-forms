@@ -1,5 +1,11 @@
 # @thomasfosterau/effect-forms
 
+## 0.3.0
+
+### Minor Changes
+
+- 39b96f2: **Breaking:** the `effect` peer floor is now `>=4.0.0` (it was `>=4.0.0-rc.118`). An application still on an `effect` 4.0.0 release candidate must upgrade `effect` to 4.0.0 or later. Nothing else changes.
+
 ## 0.2.0
 
 ### Minor Changes
