@@ -42,7 +42,7 @@ catalog:
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
   # peer). Nothing imports it at runtime.
   "@thomasfosterau/effect-jsonapi": ^0.16.3
-  "@types/node": ^26.6.4
+  "@types/node": ^26.6.5
   # TypeScript 7 (the native Go compiler; bin `tsc`) is the type checker of
   # record. Pinned exact, alongside the TS6 alias below.
   "@typescript/native": "npm:typescript@7.0.2"
