@@ -50,7 +50,7 @@ catalog:
   # else. The published peer range lives under `catalogs.peers` below, and the
   # suite does not test that floor.
   effect: 4.0.5
-  happy-dom: ^20.14.5
+  happy-dom: ^21.0.3
   svelte: ^5.57.2
   svelte-check: ^4.7.6
   # TypeScript 6/7 side-by-side: TS7 ships no JavaScript compiler API until
