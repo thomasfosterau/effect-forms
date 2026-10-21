@@ -23,7 +23,7 @@ catalogMode: strict
 
 catalog:
   "@changesets/cli": ^3.0.3
-  "@effect/language-service": ^0.87.4
+  "@effect/language-service": ^0.87.5
   # Effect Language Service as a native (TypeScript-Go) binary — the TS7 side
   # of the 6/7 split. `effect-tsgo patch` overwrites the native `tsc` and the
   # `oxlint` that vite-plus carries with Effect-patched builds matched by
@@ -49,7 +49,7 @@ catalog:
   # The development copy only: the suite runs against this pin and nothing
   # else. The published peer range lives under `catalogs.peers` below, and the
   # suite does not test that floor.
-  effect: 4.0.2
+  effect: 4.0.5
   happy-dom: ^20.14.5
   svelte: ^5.57.2
   svelte-check: ^4.7.6
