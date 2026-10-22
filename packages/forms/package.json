@@ -11,7 +11,7 @@
     "typescript",
     "validation"
   ],
-  "homepage": "https://github.com/thomasfosterau/effect-forms/tree/main/packages/forms#readme",
+  "homepage": "https://github.com/thomasfosterau/effect-forms/tree/trunk/packages/forms#readme",
   "bugs": {
     "url": "https://github.com/thomasfosterau/effect-forms/issues"
   },

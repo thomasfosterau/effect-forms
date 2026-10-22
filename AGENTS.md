@@ -49,7 +49,7 @@ All three run offline with no credentials. Neither type-checker reports Svelte's
 
 ## Branches and pull requests
 
-- The default branch is `main`. Branch `issue-<n>-<slug>`; PR against `main`; squash-merge. Rebase onto `origin/main` before opening or updating a PR; never merge `main` into your branch (GitHub's Update-branch button merges).
+- The default branch is `trunk`. Branch `issue-<n>-<slug>`; PR against `trunk`; squash-merge. Rebase onto `origin/trunk` before opening or updating a PR; never merge `trunk` into your branch (GitHub's Update-branch button merges).
 - **Every change to a published package's behaviour carries a changeset** (`pnpm changeset`); docs-, CI- and tooling-only changes need none, but TSDoc ships in the published `.d.ts`, so a TSDoc change gets a `patch`. Never publish or version by hand: the Release workflow opens the "Version Packages" PR and the owner merges it. Publishing is npm trusted publishing (OIDC) from the protected `release` environment; there is no `NPM_TOKEN`. See [docs/RELEASING.md](docs/RELEASING.md).
 - Always open a PR once a branch has a pushed commit, watch it to merge or close, and keep its body current.
 - **GitHub writes go to `thomasfosterau/effect-forms` only;** pass `-R thomasfosterau/effect-forms` whenever the cwd might be another checkout. Use the `gh` CLI for GitHub operations, even when GitHub MCP tools are available.

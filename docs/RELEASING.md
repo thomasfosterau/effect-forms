@@ -11,7 +11,7 @@ Publishing uses **npm [Trusted Publishing](https://docs.npmjs.com/trusted-publis
 
 0. **Create the protected `release` environment.** _Settings → Environments → New environment_ named `release`, with **Required reviewers** set. The release job declares `environment: release`, so every version-PR update and every publish waits for that approval.
 
-1. **Allow the Action to open the release PR.** _Settings → Actions → General → Workflow permissions →_ enable **"Allow GitHub Actions to create and approve pull requests."** Without this, the workflow runs `changeset version` and pushes the `changeset-release/main` branch successfully, but fails at the final step with `GitHub Actions is not permitted to create or approve pull requests`, so no "Version Packages" PR is opened.
+1. **Allow the Action to open the release PR.** _Settings → Actions → General → Workflow permissions →_ enable **"Allow GitHub Actions to create and approve pull requests."** Without this, the workflow runs `changeset version` and pushes the `changeset-release/trunk` branch successfully, but fails at the final step with `GitHub Actions is not permitted to create or approve pull requests`, so no "Version Packages" PR is opened.
 
 2. **Configure a trusted publisher for each package on npmjs.com.** For **both** `@thomasfosterau/effect-forms` and `@thomasfosterau/effect-forms-svelte`, go to the package's _Settings → Trusted Publisher_ and add a GitHub Actions publisher:
    - Organization or user: `thomasfosterau`
@@ -25,7 +25,7 @@ Publishing uses **npm [Trusted Publishing](https://docs.npmjs.com/trusted-publis
 
 1. **Land changesets.** Every change that should appear in the changelog ships with a changeset — a markdown file in `.changeset/` created by `pnpm changeset` (pick the affected package(s) and a bump type). Preview what is pending with `vp exec changeset status`.
 
-2. **Version Packages PR (automatic).** On every push to `main`, the Release workflow (`changesets/action` v2, after the `release` environment approval) runs `pnpm run version` (`changeset version && pnpm install --lockfile-only && vp fmt`): it consumes the pending changesets, bumps the affected `package.json` versions, and writes each package's `CHANGELOG.md` on the `changeset-release/main` branch, then opens (or updates) a **"Version Packages"** PR. Review it like any other PR.
+2. **Version Packages PR (automatic).** On every push to `main`, the Release workflow (`changesets/action` v2, after the `release` environment approval) runs `pnpm run version` (`changeset version && pnpm install --lockfile-only && vp fmt`): it consumes the pending changesets, bumps the affected `package.json` versions, and writes each package's `CHANGELOG.md` on the `changeset-release/trunk` branch, then opens (or updates) a **"Version Packages"** PR. Review it like any other PR.
 
 3. **Publish (automatic on merge).** Merging the "Version Packages" PR triggers the workflow's publish step, `pnpm run release` (`vp run -r build && pnpm -r --filter './packages/*' publish … && changeset tag`), which builds every package, publishes the ones whose versions changed to npm — authenticating via OIDC, no token required — and tags them; the action then pushes the tags and creates the GitHub releases. It runs under `pnpm run`, not `vp run`, because `vp run` does not forward the `ACTIONS_ID_TOKEN_REQUEST_*` variables OIDC needs.
 
@@ -35,7 +35,7 @@ Publishing uses **npm [Trusted Publishing](https://docs.npmjs.com/trusted-publis
 
 ## Manual fallback
 
-If the workflow can't open the PR (e.g. setting #1 above is still off), the `changeset-release/main` branch is still pushed with the correct version bump — open the "Version Packages" PR from that branch by hand. You can also run the version step locally:
+If the workflow can't open the PR (e.g. setting #1 above is still off), the `changeset-release/trunk` branch is still pushed with the correct version bump — open the "Version Packages" PR from that branch by hand. You can also run the version step locally:
 
 ```sh
 vp run version          # apply pending changesets -> bumps + CHANGELOGs
