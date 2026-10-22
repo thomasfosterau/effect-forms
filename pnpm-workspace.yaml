@@ -63,9 +63,6 @@ catalog:
   # else. The published peer range lives under `catalogs.peers` below, and the
   # suite does not test that floor.
   effect: 4.0.5
-  # The Effect patterns reference agents consult before writing Effect code
-  # (`vp exec effect-solutions show <topic>`, AGENTS.md "Effect").
-  effect-solutions: ^0.5.3
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.
   fallow: 3.34.1

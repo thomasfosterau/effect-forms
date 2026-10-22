@@ -14,7 +14,7 @@ Package-local invariants and terms live in each package's `CLAUDE.md` (`packages
 ## Common pitfalls
 
 - **Never edit a version in a `package.json`.** Every external version lives in `pnpm-workspace.yaml` under `catalog:` (the published peer ranges under `catalogs.peers`); manifests carry only `catalog:` / `catalog:peers` / `workspace:^`, and `catalogMode: strict` rejects anything else. After editing the catalog, run `pnpm install` and commit the regenerated `pnpm-lock.yaml` — CI installs with `--frozen-lockfile`.
-- **`@effect/tsgo`, `@typescript/native` and `vite-plus` move together** (the root `prepare` script's `effect-tsgo patch --typescript --oxlint` hard-errors at install on an unsupported `tsc` / `oxlint` / `oxlint-tsgolint`), and `vite` (vite-plus's aliased core), `vitest` and `@vitest/coverage-istanbul` move with `vite-plus`, which pins `vitest` exactly. Read the catalog comments first.
+- **`@effect/tsgo`, `@typescript/native` and `vite-plus` move together** (the root `prepare` script's `effect-tsgo patch --typescript --oxlint` hard-errors at install on an unsupported `tsc` / `oxlint` / `oxlint-tsgolint`), and `vite` (vite-plus's aliased core), `vitest` and `@vitest/coverage-istanbul` move with `vite-plus`, which pins `vitest` exactly. Read the catalog comments first. Dependabot's `toolchain` group (`.github/dependabot.yml`) proposes the whole set in one PR. By hand, never by Dependabot: `oxlint`, `oxfmt` and `oxlint-tsgolint` are `vite-plus`'s transitive pins (they move when it does), and the `overrides` (`vite`, `vitest`, `effect`) follow their catalog entries.
 - **Internal dependencies are `workspace:^`, not `workspace:*`** — deliberate, see [PUBLISHING.md](PUBLISHING.md#version-coupling).
 - **`dist/` is the product, and siblings consume it.** `packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`, so its `check`, `test:unit` and `build` tasks take a `{ task: "build", from: "dependencies" }` edge, and the root `check` / `test:coverage` tasks name every package's task explicitly. A bare `tsc` or `vp test` inside `packages/svelte` on a clean checkout fails to resolve the core: go through `vp run`.
 - **`packages/forms` never imports a framework.** That constraint is the point of the split: the core is usable from any framework (or none), and the Svelte bindings are the only place `svelte` may appear. `fallow` enforces the file-level half (zones in `.fallowrc.json`); `unlisted-dependencies` catches a framework import in the core.
@@ -41,7 +41,7 @@ Package-local invariants and terms live in each package's `CLAUDE.md` (`packages
 - `vp run test:coverage` — every package's suite under one Istanbul map at `coverage/coverage-final.json`, which `fallow audit` reads for exact per-function CRAP scores.
 - `pnpm changeset` — add a changeset.
 
-Invoke everything through `vp` (`vp exec` instead of `npx`). Use `./node_modules/.bin/vp` if the global `vp` CLI is not installed. Single-check variants are in [CONTRIBUTING.md](CONTRIBUTING.md#running-individual-checks).
+Invoke everything through `vp` (`vp exec <bin>` for a dev binary), on Node + pnpm only. Use `./node_modules/.bin/vp` if the global `vp` CLI is not installed. Single-check variants are in [CONTRIBUTING.md](CONTRIBUTING.md#running-individual-checks).
 
 ## Verification
 
@@ -71,7 +71,7 @@ GitHub Issues for `thomasfosterau/effect-forms` are the backlog: when you find w
 
 ## Effect
 
-Consult effect-solutions before writing Effect code (`vp exec effect-solutions list`, then `vp exec effect-solutions show <topic>…`), then read the API you need from the installed package in `node_modules/effect/dist/*.d.ts` (subpath modules such as `http` are in `node_modules/effect/dist/<module>/*.d.ts`). Never guess at Effect APIs.
+Before writing Effect code, read the API you need from the installed package: `node_modules/effect/dist/*.d.ts` (subpath modules such as `http` are in `node_modules/effect/dist/<module>/*.d.ts`), the sources under `node_modules/effect/src`, and `node_modules/effect/AGENTS.md` / `ai-docs/` if the pinned version ships them. Never guess at an Effect API. The pinned version is the `effect` entry in `pnpm-workspace.yaml`'s catalog.
 
 These packages target **Effect v4**: a single `effect` package. Development and CI run against the exact `effect` version pinned under `catalog:` in `pnpm-workspace.yaml`, which Dependabot bumps; the published packages declare the separate `catalogs.peers` range, currently `>=4.0.0`. CI exercises only the pin, so a change that relies on an API newer than the published floor must raise the floor with a changeset.
 

@@ -170,7 +170,14 @@ fi
 # as `trunk` breakage. `--frozen-lockfile` is a sub-second no-op when in sync.
 if [ -f "$PROJECT_DIR/pnpm-lock.yaml" ]; then
   log "syncing dependencies against the lockfile…"
-  (cd "$PROJECT_DIR" && vp install --frozen-lockfile >/dev/null 2>&1) \
+  # pnpm (the version `packageManager` pins) via corepack when available,
+  # else whatever pnpm is on PATH.
+  if command -v corepack >/dev/null 2>&1; then
+    PNPM=(corepack pnpm)
+  else
+    PNPM=(pnpm)
+  fi
+  (cd "$PROJECT_DIR" && "${PNPM[@]}" install --frozen-lockfile >/dev/null 2>&1) \
     || (cd "$PROJECT_DIR" && pnpm install --frozen-lockfile >/dev/null 2>&1) \
     || log "dependency install failed; continuing"
   # node_modules/.bin only exists after the install, so re-link what it provides.
