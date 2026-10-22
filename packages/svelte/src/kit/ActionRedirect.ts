@@ -10,18 +10,15 @@
  * @module effect-forms-svelte/kit/ActionRedirect
  */
 
+import * as Arr from "effect/Array";
+import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import { detailOf, jsonapiFailure } from "./CommandFailure.ts";
 
 /** The statuses whose failure the submitter can act on (the form layer's set). */
-const USER_FIXABLE_STATUSES: ReadonlySet<number> = new Set([400, 409, 422]);
-
-interface TaggedLike {
-  readonly _tag?: unknown;
-  readonly status?: unknown;
-  readonly message?: unknown;
-}
+const USER_FIXABLE_STATUSES: HashSet.HashSet<number> = HashSet.make(400, 409, 422);
 
 /**
  * A user-fixable failure's message; `None` takes the hard-error path.
@@ -37,16 +34,23 @@ interface TaggedLike {
  */
 export const userFixableMessage = (cause: unknown, fallback: string): Option.Option<string> => {
   if (!Predicate.isObjectOrArray(cause)) return Option.none();
-  const tagged = cause as TaggedLike;
-  if (tagged._tag === "HttpError") {
-    if (tagged.status !== 400) return Option.none();
-    return Option.some(Predicate.isString(tagged.message) ? tagged.message : fallback);
+  if (Predicate.isTagged(cause, "HttpError")) {
+    if (!Predicate.hasProperty(cause, "status") || cause.status !== 400) return Option.none();
+    return Option.some(
+      Predicate.hasProperty(cause, "message") && Predicate.isString(cause.message)
+        ? cause.message
+        : fallback,
+    );
   }
-  if (tagged._tag !== "JsonapiError" && tagged._tag !== "ErrorResponse") return Option.none();
+  if (!Predicate.isTagged(cause, "JsonapiError") && !Predicate.isTagged(cause, "ErrorResponse")) {
+    return Option.none();
+  }
   return jsonapiFailure(cause).pipe(
-    Option.filter((failure) => USER_FIXABLE_STATUSES.has(failure.status)),
+    Option.filter((failure) => HashSet.has(USER_FIXABLE_STATUSES, failure.status)),
     Option.map((failure) =>
-      failure._tag === "Routed" ? detailOf(failure.errors[0], fallback) : failure.message,
+      Predicate.isTagged(failure, "Routed")
+        ? detailOf(failure.errors[0], fallback)
+        : failure.message,
     ),
   );
 };
@@ -60,6 +64,6 @@ export const withFailureParams = (
   params: Readonly<Record<string, string>>,
 ): string => {
   const url = new URL(target, "http://localhost");
-  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  Arr.forEach(Record.toEntries(params), ([key, value]) => url.searchParams.set(key, value));
   return url.pathname + url.search;
 };

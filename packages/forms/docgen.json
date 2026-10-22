@@ -1,0 +1,33 @@
+{
+  "$schema": "../../node_modules/@effect/docgen/schema.json",
+  "projectHomepage": "https://github.com/thomasfosterau/effect-forms/tree/trunk/packages/forms",
+  "srcLink": "https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/",
+  "runExamples": true,
+  "enforceVersion": false,
+  "parseCompilerOptions": {
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "strict": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "exactOptionalPropertyTypes": true,
+    "types": ["node"]
+  },
+  "examplesCompilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "exactOptionalPropertyTypes": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "types": ["node"]
+  }
+}

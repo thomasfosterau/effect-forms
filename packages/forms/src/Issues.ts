@@ -18,6 +18,9 @@
  * @module effect-forms/Issues
  */
 
+import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import type * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 
@@ -55,25 +58,17 @@ export const defaultLeafFormatter: LeafFormatter = SchemaIssue.makeFormatterDefa
  * keys become numbers (array indices), everything else becomes a string.
  */
 const normaliseSegment = (segment: PropertyKey): string | number => {
-  if (typeof segment === "number") return segment;
-  if (typeof segment === "symbol") return segment.toString();
+  if (Predicate.isNumber(segment)) return segment;
+  if (Predicate.isSymbol(segment)) return segment.toString();
   return /^\d+$/.test(segment) ? Number(segment) : segment;
 };
 
 /** Whether `issue` is a terminal leaf: it wraps no further issues. */
-const isTerminal = (issue: SchemaIssue.Issue): boolean => {
-  switch (issue._tag) {
-    case "Pointer":
-    case "Composite":
-    case "Filter":
-    case "Encoding":
-      return false;
-    case "AnyOf":
-      return issue.issues.length === 0;
-    default:
-      return true;
-  }
-};
+const isTerminal: (issue: SchemaIssue.Issue) => boolean = Match.type<SchemaIssue.Issue>().pipe(
+  Match.tag("Pointer", "Composite", "Filter", "Encoding", () => false),
+  Match.tag("AnyOf", (issue) => Arr.isReadonlyArrayEmpty(issue.issues)),
+  Match.orElse(() => true),
+);
 
 /**
  * Walk an Effect Schema issue tree, emitting one {@link FormIssue} per leaf
@@ -86,43 +81,29 @@ export function schemaIssuesToFormIssues(
   issue: SchemaIssue.Issue,
   format: LeafFormatter = defaultLeafFormatter,
 ): FormIssue[] {
-  const out: FormIssue[] = [];
-
-  const walk = (current: SchemaIssue.Issue, path: Array<string | number>): void => {
-    switch (current._tag) {
-      case "Pointer":
-        walk(current.issue, [...path, ...current.path.map(normaliseSegment)]);
-        return;
-      case "Composite":
-        for (const child of current.issues) walk(child, path);
-        return;
-      case "AnyOf":
-        if (current.issues.length === 0) {
-          out.push({ path, message: format(current) });
-          return;
-        }
-        for (const child of current.issues) walk(child, path);
-        return;
-      case "Filter":
-        // A check that fails on the value itself: its message sits on the
-        // `Filter` node, so format that rather than the bare leaf inside.
-        if (isTerminal(current.issue)) {
-          out.push({ path, message: format(current) });
-          return;
-        }
-        walk(current.issue, path);
-        return;
-      case "Encoding":
-        walk(current.issue, path);
-        return;
-      default:
-        out.push({ path, message: format(current) });
-        return;
-    }
+  const walk = (current: SchemaIssue.Issue, path: Array<string | number>): Array<FormIssue> => {
+    const leaf = (node: SchemaIssue.Issue): Array<FormIssue> => [{ path, message: format(node) }];
+    const walkAll = (children: ReadonlyArray<SchemaIssue.Issue>): Array<FormIssue> =>
+      Arr.flatMap(children, (child) => walk(child, path));
+    return Match.value(current).pipe(
+      Match.tag("Pointer", (pointer) =>
+        walk(pointer.issue, [...path, ...Arr.map(pointer.path, normaliseSegment)]),
+      ),
+      Match.tag("Composite", (composite) => walkAll(composite.issues)),
+      Match.tag("AnyOf", (anyOf) =>
+        Arr.match(anyOf.issues, { onEmpty: () => leaf(anyOf), onNonEmpty: walkAll }),
+      ),
+      // A check that fails on the value itself: its message sits on the
+      // `Filter` node, so format that rather than the bare leaf inside.
+      Match.tag("Filter", (filter) =>
+        isTerminal(filter.issue) ? leaf(filter) : walk(filter.issue, path),
+      ),
+      Match.tag("Encoding", (encoding) => walk(encoding.issue, path)),
+      Match.orElse(leaf),
+    );
   };
 
-  walk(issue, []);
-  return out;
+  return walk(issue, []);
 }
 
 /**
@@ -135,18 +116,22 @@ export function schemaIssuesToFormIssues(
 export function filterOutputToFormIssues(output: Schema.FilterOutput): FormIssue[] {
   if (output === undefined || output === true) return [];
   if (output === false) return [{ path: [], message: "Invalid value" }];
-  if (Array.isArray(output)) return output.flatMap(filterIssueToFormIssues);
-  return filterIssueToFormIssues(output as Schema.FilterIssue);
+  if (isFilterIssueList(output)) return Arr.flatMap(output, filterIssueToFormIssues);
+  return filterIssueToFormIssues(output);
 }
 
+/** `Array.isArray` as a guard that also narrows away a `ReadonlyArray` member. */
+const isFilterIssueList = (
+  output: Schema.FilterIssue | ReadonlyArray<Schema.FilterIssue>,
+): output is ReadonlyArray<Schema.FilterIssue> => Arr.isArray(output);
+
 function filterIssueToFormIssues(issue: Schema.FilterIssue): FormIssue[] {
-  if (typeof issue === "string") return [{ path: [], message: issue }];
+  if (Predicate.isString(issue)) return [{ path: [], message: issue }];
   if ("path" in issue && "issue" in issue) {
-    const prefix = issue.path.map((s) => (typeof s === "symbol" ? s.toString() : s));
-    const inner =
-      typeof issue.issue === "string"
-        ? [{ path: [], message: issue.issue }]
-        : schemaIssuesToFormIssues(issue.issue);
+    const prefix = Arr.map(issue.path, (s) => (Predicate.isSymbol(s) ? s.toString() : s));
+    const inner = Predicate.isString(issue.issue)
+      ? [{ path: [], message: issue.issue }]
+      : schemaIssuesToFormIssues(issue.issue);
     return inner.map((i) => ({ path: [...prefix, ...i.path], message: i.message }));
   }
   return schemaIssuesToFormIssues(issue);

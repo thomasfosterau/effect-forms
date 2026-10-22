@@ -1,6 +1,7 @@
 import { FormData as FormBody, Result, State } from "@thomasfosterau/effect-forms";
-import { Schema } from "effect";
-import { describe, expect, it } from "vite-plus/test";
+import * as DateTime from "effect/DateTime";
+import * as Schema from "effect/Schema";
+import { assert, describe, expect, it, onTestFinished, vi } from "vite-plus/test";
 import {
   computeDataApplication,
   objectToEntries,
@@ -83,38 +84,45 @@ describe("objectToEntries / objectToFormData", () => {
 
 describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objects", () => {
   const file = (): File => new File(["hello"], "avatar.png", { type: "image/png" });
+  // Fixture `Date` values for the encoder under test, built from fixed instants.
+  const utcDate = (input: string | number): Date => DateTime.toDateUtc(DateTime.makeUnsafe(input));
+  const invalidDate = (): Date => {
+    const date = utcDate(0);
+    date.setTime(Number.NaN);
+    return date;
+  };
 
   it("appends a top-level File to FormData as the same File, keeping its name and content", async () => {
     const avatar = file();
     const got = objectToFormData({ avatar }).get("avatar");
-    expect(got).toBeInstanceOf(File);
+    assert.instanceOf(got, File);
     expect(got).toBe(avatar);
-    expect((got as File).name).toBe("avatar.png");
-    expect(await (got as File).text()).toBe("hello");
+    expect(got.name).toBe("avatar.png");
+    expect(await got.text()).toBe("hello");
   });
 
   it("appends a nested File under its dotted name", async () => {
     const got = objectToFormData({ author: { photo: file() } }).get("author.photo");
-    expect(got).toBeInstanceOf(File);
-    expect((got as File).name).toBe("avatar.png");
-    expect(await (got as File).text()).toBe("hello");
+    assert.instanceOf(got, File);
+    expect(got.name).toBe("avatar.png");
+    expect(await got.text()).toBe("hello");
   });
 
   it("appends a File array item under its index", async () => {
     const fd = objectToFormData({ files: ["note", file()] });
     expect(fd.get("files[0]")).toBe("note");
     const got = fd.get("files[1]");
-    expect(got).toBeInstanceOf(File);
-    expect((got as File).name).toBe("avatar.png");
-    expect(await (got as File).text()).toBe("hello");
+    assert.instanceOf(got, File);
+    expect(got.name).toBe("avatar.png");
+    expect(await got.text()).toBe("hello");
   });
 
   it('appends a bare Blob to FormData as a File named "blob" with the Blob\'s content and type', async () => {
     const got = objectToFormData({ data: new Blob(["bytes"], { type: "text/plain" }) }).get("data");
-    expect(got).toBeInstanceOf(File);
-    expect((got as File).name).toBe("blob");
-    expect((got as Blob).type).toBe("text/plain");
-    expect(await (got as Blob).text()).toBe("bytes");
+    assert.instanceOf(got, File);
+    expect(got.name).toBe("blob");
+    expect(got.type).toBe("text/plain");
+    expect(await got.text()).toBe("bytes");
   });
 
   it("omits File and Blob leaves from the string-only objectToEntries, keeping other indices", () => {
@@ -125,7 +133,7 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
   });
 
   it("encodes a Date as its YYYY-MM-DD, top-level, nested and as an array item", () => {
-    const born = new Date("2026-10-09T12:00:00Z");
+    const born = utcDate("2026-10-09T12:00:00Z");
     expect(objectToEntries({ born, author: { born }, dates: [born] })).toEqual([
       ["born", "2026-10-09"],
       ["author.born", "2026-10-09"],
@@ -134,7 +142,7 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
   });
 
   it("encodes a top-level Date passed with a prefix as a single entry", () => {
-    expect(objectToEntries(new Date("2026-10-09T12:00:00Z"), "born")).toEqual([
+    expect(objectToEntries(utcDate("2026-10-09T12:00:00Z"), "born")).toEqual([
       ["born", "2026-10-09"],
     ]);
   });
@@ -142,27 +150,24 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
   it("encodes a Date from its UTC day, not the local one (23:30 at UTC-5 is the next day in UTC)", () => {
     // Pin a zone west of UTC so a local-time encoder would differ even on a
     // UTC host such as CI; Node applies a runtime `TZ` change immediately.
-    const previous = process.env.TZ;
-    process.env.TZ = "America/Chicago";
-    try {
-      const born = new Date("2026-10-09T23:30:00-05:00");
-      expect(born.getDate()).toBe(9); // the local day really is the 9th
-      expect(objectToEntries({ born })).toEqual([["born", "2026-10-10"]]);
-    } finally {
-      if (previous === undefined) delete process.env.TZ;
-      else process.env.TZ = previous;
-    }
+    vi.stubEnv("TZ", "America/Chicago");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const born = utcDate("2026-10-09T23:30:00-05:00");
+    expect(born.getDate()).toBe(9); // the local day really is the 9th
+    expect(objectToEntries({ born })).toEqual([["born", "2026-10-10"]]);
   });
 
   it("keeps the expanded year of a Date outside 0000-9999 rather than cutting it off", () => {
-    expect(objectToEntries({ far: new Date("+010000-01-02T00:00:00Z") })).toEqual([
+    expect(objectToEntries({ far: utcDate("+010000-01-02T00:00:00Z") })).toEqual([
       ["far", "+010000-01-02"],
     ]);
   });
 
   it("omits an invalid Date rather than throwing, keeping other indices", () => {
-    const invalid = new Date("not a date");
-    expect(objectToEntries({ born: invalid, dates: [invalid, new Date(0)] })).toEqual([
+    const invalid = invalidDate();
+    expect(objectToEntries({ born: invalid, dates: [invalid, utcDate(0)] })).toEqual([
       ["dates[1]", "1970-01-01"],
     ]);
   });
@@ -176,14 +181,14 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
   it("round-trips a File and a Date through the core decoder, FormData.formDataToObject", () => {
     const avatar = file();
     const decoded = FormBody.formDataToObject(
-      objectToFormData({ avatar, born: new Date("2026-10-09T23:30:00-05:00") }),
+      objectToFormData({ avatar, born: utcDate("2026-10-09T23:30:00-05:00") }),
     );
     expect(decoded.avatar).toBe(avatar);
     expect(decoded.born).toBe("2026-10-10");
   });
 
   it("decodes the encoded Date back to the same UTC day with Schema.DateFromString", () => {
-    const born = new Date("2026-10-09T23:30:00-05:00");
+    const born = utcDate("2026-10-09T23:30:00-05:00");
     const decoded = FormBody.formDataToObject(objectToFormData({ born }));
     const date = Schema.decodeUnknownSync(Schema.DateFromString)(decoded.born);
     expect(date.toISOString()).toBe("2026-10-10T00:00:00.000Z");
@@ -332,7 +337,8 @@ describe("computeDataApplication", () => {
       resetForm: false,
       autoSubmit: false,
     });
-    const rebasedInitial = applied.rebaseTo!;
+    const rebasedInitial = applied.rebaseTo;
+    assert.isDefined(rebasedInitial);
 
     // The `beforeunload` guard's `isTainted` check now sees no changes.
     expect(isAnyTainted(computeTainted(rebasedInitial, edited))).toBe(false);

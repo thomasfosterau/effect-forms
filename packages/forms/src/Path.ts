@@ -20,6 +20,9 @@
  * @module effect-forms/Path
  */
 
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import { parseFieldPath } from "./FormData.ts";
 import type { FormPath } from "./Issues.ts";
 
@@ -28,12 +31,15 @@ import type { FormPath } from "./Issues.ts";
  * traverses a non-object. The empty path returns the object itself.
  */
 export function getAt(obj: unknown, path: FormPath): unknown {
-  let current = obj;
-  for (const segment of path) {
-    if (current === null || typeof current !== "object") return undefined;
-    current = (current as Record<string | number, unknown>)[segment];
-  }
-  return current;
+  // Once a segment lands on a non-object the accumulator is `undefined`, which
+  // is itself a non-object, so every later segment keeps it `undefined`.
+  // A missing key reads as `undefined` either way, so guarding on `in` first
+  // matches a plain property read on any object or array.
+  return Arr.reduce(path, obj, (current, segment) =>
+    Predicate.isObjectOrArray(current) && Predicate.hasProperty(current, segment)
+      ? current[segment]
+      : undefined,
+  );
 }
 
 /**
@@ -41,39 +47,54 @@ export function getAt(obj: unknown, path: FormPath): unknown {
  * arrays along the path are cloned (structural sharing elsewhere); missing
  * containers are created as arrays for numeric segments and objects otherwise.
  * The empty path returns `value`. Pure — `obj` is never mutated.
+ *
+ * @example
+ * ```ts
+ * import { Path } from "@thomasfosterau/effect-forms"
+ *
+ * const before = { authors: [{ name: "Ada" }] }
+ * const after = Path.setAt(before, ["authors", 0, "name"], "Grace")
+ * console.log(Path.getAt(after, ["authors", 0, "name"])) // "Grace"
+ * console.log(before.authors[0]?.name) // "Ada" — the input is untouched
+ * ```
  */
 export function setAt<T>(obj: T, path: FormPath, value: unknown): T {
-  if (path.length === 0) return value as T;
-
-  const [head, ...rest] = path;
-  const clone = (
-    Array.isArray(obj) ? [...(obj as unknown[])] : { ...(obj as Record<string, unknown>) }
-  ) as Record<string | number, unknown>;
-
-  const child = clone[head];
-  clone[head] =
-    rest.length === 0
-      ? value
-      : setAt(
-          child === null || typeof child !== "object"
-            ? typeof rest[0] === "number"
-              ? []
-              : {}
-            : child,
-          rest,
-          value,
-        );
-
-  return clone as T;
+  return Arr.match(path, {
+    // SAFETY: the empty path addresses the whole tree, so `value` is the new
+    // root; `setAt`'s documented contract is that the caller writes a value of
+    // the shape `T` expects at `path`, which here is `T` itself.
+    onEmpty: () => value as T,
+    onNonEmpty: ([head, ...rest]) => {
+      // `Object(obj)` boxes a primitive root so the spread type-checks; spreading
+      // the box copies exactly what spreading `obj` itself would.
+      // SAFETY: `clone` is a fresh shallow copy — an array or a plain object —
+      // and both accept a read or write under any string or number key.
+      const clone = (Arr.isArray(obj) ? [...obj] : { ...Object(obj) }) as Record<
+        PropertyKey,
+        unknown
+      >;
+      const child = clone[head];
+      clone[head] = Arr.match(rest, {
+        onEmpty: () => value,
+        onNonEmpty: (tail) =>
+          setAt(
+            Predicate.isObjectOrArray(child) ? child : Predicate.isNumber(tail[0]) ? [] : {},
+            tail,
+            value,
+          ),
+      });
+      // SAFETY: `clone` is a shallow copy of `obj` (an array when `obj` is
+      // one, a plain object otherwise) differing only at `head`, where the
+      // caller's `value` (by `setAt`'s contract, of the type `T` holds at
+      // `path`) was written.
+      return clone as T;
+    },
+  });
 }
 
 /** Whether `path` is `root` or nested beneath it. */
 export function isUnder(path: FormPath, root: FormPath): boolean {
-  if (path.length < root.length) return false;
-  for (let i = 0; i < root.length; i++) {
-    if (path[i] !== root[i]) return false;
-  }
-  return true;
+  return path.length >= root.length && Arr.every(root, (segment, i) => path[i] === segment);
 }
 
 /**
@@ -82,12 +103,9 @@ export function isUnder(path: FormPath, root: FormPath): boolean {
  * The inverse of {@link fromString}.
  */
 export function toString(path: FormPath): string {
-  let out = "";
-  for (const segment of path) {
-    if (typeof segment === "number") out += `[${segment}]`;
-    else out += out === "" ? segment : `.${segment}`;
-  }
-  return out;
+  return Arr.reduce(path, "", (out, segment) =>
+    Predicate.isNumber(segment) ? `${out}[${segment}]` : out === "" ? segment : `${out}.${segment}`,
+  );
 }
 
 /**
@@ -224,7 +242,7 @@ export const clearAll: IndexMap = () => null;
 export function remapIndex(path: FormPath, arrayPath: FormPath, map: IndexMap): FormPath | null {
   if (!isUnder(path, arrayPath) || path.length === arrayPath.length) return path;
   const segment = path[arrayPath.length];
-  if (typeof segment !== "number") return path;
+  if (!Predicate.isNumber(segment)) return path;
   const mapped = map(segment);
   if (mapped === null) return null;
   if (mapped === segment) return path;
@@ -241,10 +259,10 @@ export function remapKeyedRecord<T>(
   arrayPath: FormPath,
   map: IndexMap,
 ): Record<string, T> {
-  const out: Record<string, T> = {};
-  for (const key of Object.keys(record)) {
-    const remapped = remapIndex(fromString(key), arrayPath, map);
-    if (remapped !== null) out[toString(remapped)] = record[key] as T;
-  }
-  return out;
+  return Rec.fromEntries(
+    Arr.flatMap(Rec.toEntries(record), ([key, value]) => {
+      const remapped = remapIndex(fromString(key), arrayPath, map);
+      return remapped === null ? [] : [[toString(remapped), value] as const];
+    }),
+  );
 }

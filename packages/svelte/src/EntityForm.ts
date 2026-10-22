@@ -24,6 +24,12 @@
 
 import type { Component } from "svelte";
 import { Command } from "@thomasfosterau/effect-forms";
+import * as Arr from "effect/Array";
+import * as HashMap from "effect/HashMap";
+import * as HashSet from "effect/HashSet";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Schema from "effect/Schema";
 
 /** A render-time message thunk — pass the message function itself, uncalled. */
@@ -207,6 +213,11 @@ const builders: EntryBuilders<string> = {
     _tag: "widget",
     key,
     bridge: "value",
+    // SAFETY: `Component<never>` is the widest component type (every component
+    // is assignable to it); the entry erases its props to `any` because the
+    // renderer only ever mounts it with this entry's own `props()` plus the
+    // widget-contract bridge props, the props the definition module chose
+    // this component for.
     component: component as Component<any>,
     props,
     options,
@@ -215,11 +226,27 @@ const builders: EntryBuilders<string> = {
     _tag: "widget",
     key,
     bridge: "rows",
+    // SAFETY: `Component<never>` is the widest component type (every component
+    // is assignable to it); the entry erases its props to `any` because the
+    // renderer only ever mounts it with this entry's own `props()` plus the
+    // widget-contract bridge props, the props the definition module chose
+    // this component for.
     component: component as Component<any>,
     props,
     options,
   }),
 };
+
+/**
+ * A definition-time error: the entries don't match the command structs. Thrown
+ * synchronously from `defineEntityForm` (and `fieldFor`), never as an Effect
+ * failure — a definition module that doesn't match its commands must fail at
+ * import.
+ */
+class EntityFormDefinitionError extends Schema.TaggedError<
+  EntityFormDefinitionError,
+  { readonly brand: unique symbol }
+>()("EntityFormDefinitionError", { message: Schema.String }) {}
 
 /**
  * Validate an `f.select` entry against its plan field at definition time: the
@@ -229,17 +256,17 @@ const builders: EntryBuilders<string> = {
  */
 const validateSelectEntry = (entry: SelectEntry, field: Command.FieldPlan): void => {
   if (field.kind !== "enum") {
-    throw new Error(
-      `defineEntityForm: entry "${entry.key}" is f.select but its command field is "${field.kind}"-kind, not enum`,
-    );
+    throw new EntityFormDefinitionError({
+      message: `defineEntityForm: entry "${entry.key}" is f.select but its command field is "${field.kind}"-kind, not enum`,
+    });
   }
   const missingLabels = (field.options ?? []).filter(
     (value) => !Object.prototype.hasOwnProperty.call(entry.options.optionLabels, value),
   );
-  if (missingLabels.length > 0) {
-    throw new Error(
-      `defineEntityForm: entry "${entry.key}" is missing optionLabels for: ${missingLabels.join(", ")}`,
-    );
+  if (Arr.isReadonlyArrayNonEmpty(missingLabels)) {
+    throw new EntityFormDefinitionError({
+      message: `defineEntityForm: entry "${entry.key}" is missing optionLabels for: ${missingLabels.join(", ")}`,
+    });
   }
 };
 
@@ -253,58 +280,55 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
   options: DefineEntityFormOptions<C, U>,
   build: (f: EntryBuilders<CommandKeys<C, U>>) => readonly EntityFormEntry[],
 ): EntityFormDefinition => {
-  const omitted = new Set<string>(options.omit ?? []);
-  const withoutOmitted = (struct: CommandStructLike): CommandStructLike => {
-    if (omitted.size === 0) return struct;
-    const fields: Record<string, Schema.Top> = {};
-    for (const key in struct.fields) if (!omitted.has(key)) fields[key] = struct.fields[key];
-    return { fields };
-  };
+  const omitted = HashSet.fromIterable<string>(options.omit ?? []);
+  const withoutOmitted = (struct: CommandStructLike): CommandStructLike =>
+    HashSet.size(omitted) === 0
+      ? struct
+      : { fields: Record.filter(struct.fields, (_, key) => !HashSet.has(omitted, key)) };
   const plan = Command.plan(withoutOmitted(options.create), withoutOmitted(options.update));
-  const entries = build(builders as EntryBuilders<CommandKeys<C, U>>);
+  const entries = build(builders);
 
-  const byKey = new Map<string, Command.FieldPlan>(plan.fields.map((field) => [field.key, field]));
-  const declared = new Set<string>();
-  for (const entry of entries) {
-    const field = byKey.get(entry.key);
-    if (field === undefined) {
-      throw new Error(
-        `defineEntityForm: entry "${entry.key}" is not a field of either command struct`,
-      );
+  const byKey = HashMap.fromIterable(Arr.map(plan.fields, (field) => [field.key, field] as const));
+  const declared = Arr.reduce(entries, HashSet.empty<string>(), (declared, entry) => {
+    const field = HashMap.get(byKey, entry.key);
+    if (Option.isNone(field)) {
+      throw new EntityFormDefinitionError({
+        message: `defineEntityForm: entry "${entry.key}" is not a field of either command struct`,
+      });
     }
-    if (declared.has(entry.key)) {
-      throw new Error(`defineEntityForm: entry "${entry.key}" is declared twice`);
+    if (HashSet.has(declared, entry.key)) {
+      throw new EntityFormDefinitionError({
+        message: `defineEntityForm: entry "${entry.key}" is declared twice`,
+      });
     }
-    declared.add(entry.key);
-    if (entry._tag === "select") validateSelectEntry(entry, field);
-  }
-  const missing = plan.fields.filter((field) => !declared.has(field.key)).map((field) => field.key);
-  if (missing.length > 0) {
-    throw new Error(
-      `defineEntityForm: command fields not declared by any entry: ${missing.join(", ")} — declare or explicitly widget them`,
-    );
+    if (Predicate.isTagged(entry, "select")) validateSelectEntry(entry, field.value);
+    return HashSet.add(declared, entry.key);
+  });
+  const missing = Arr.map(
+    Arr.filter(plan.fields, (field) => !HashSet.has(declared, field.key)),
+    (field) => field.key,
+  );
+  if (Arr.isReadonlyArrayNonEmpty(missing)) {
+    throw new EntityFormDefinitionError({
+      message: `defineEntityForm: command fields not declared by any entry: ${missing.join(", ")} — declare or explicitly widget them`,
+    });
   }
 
   const entriesFor = (mode: "create" | "update") =>
-    entries.filter((entry) => {
-      const field = byKey.get(entry.key);
-      return field !== undefined && (mode === "create" ? field.inCreate : field.inUpdate);
-    });
+    Arr.filter(entries, (entry) =>
+      Option.exists(HashMap.get(byKey, entry.key), (field) =>
+        mode === "create" ? field.inCreate : field.inUpdate,
+      ),
+    );
 
   return {
     plan,
     entries,
     createInput: Schema.Struct(
-      Command.formInputFields(plan, "create", options.inputOverrides?.create) as Record<
-        string,
-        never
-      >,
+      Command.formInputFields(plan, "create", options.inputOverrides?.create),
     ),
     updateInput: Schema.Struct(
-      Command.formInputFields(plan, "update", options.inputOverrides?.update) as Record<
-        string,
-        never
-      >,
+      Command.formInputFields(plan, "update", options.inputOverrides?.update),
     ),
     createDefaults: Command.blankDefaults(plan, "create"),
     updateDefaults: Command.blankDefaults(plan, "update"),
@@ -313,10 +337,13 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
     submit: options.submit,
     clientId: plan.clientId,
     entriesFor,
-    fieldFor: (key: string) => {
-      const field = byKey.get(key);
-      if (field === undefined) throw new Error(`EntityFormDefinition: unknown field "${key}"`);
-      return field;
-    },
+    fieldFor: (key: string) =>
+      Option.getOrThrowWith(
+        HashMap.get(byKey, key),
+        () =>
+          new EntityFormDefinitionError({
+            message: `EntityFormDefinition: unknown field "${key}"`,
+          }),
+      ),
   };
 };

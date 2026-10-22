@@ -10,6 +10,10 @@
  */
 
 import { Errors, Result, State } from "@thomasfosterau/effect-forms";
+import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 
 // Terse local aliases onto the namespaced core exports.
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
@@ -21,11 +25,11 @@ const { failure, success } = Result;
 type BodyEntry = [string, string | Blob];
 
 /**
- * Whether a value is a `Blob` (a `File` is one). Guards on `typeof Blob` so
- * it holds in any runtime, including one without a global `Blob`.
+ * Whether a value is a `Blob` (a `File` is one). Guards on `globalThis.Blob`
+ * so it holds in any runtime, including one without a global `Blob`.
  */
 const isBlob = (value: unknown): value is Blob =>
-  typeof Blob !== "undefined" && value instanceof Blob;
+  !Predicate.isUndefined(globalThis.Blob) && value instanceof Blob;
 
 /**
  * Encode a `Date` as the `YYYY-MM-DD` of its UTC calendar day, or `undefined`
@@ -51,13 +55,13 @@ function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void
     if (encoded !== undefined) out.push([key, encoded]);
   } else if (Array.isArray(value)) {
     value.forEach((item, i) => appendEntries(out, `${key}[${i}]`, item));
-  } else if (typeof value === "object") {
+  } else if (Predicate.isObject(value)) {
     appendFields(out, value, key);
   } else if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "bigint"
+    Predicate.isString(value) ||
+    Predicate.isNumber(value) ||
+    Predicate.isBoolean(value) ||
+    Predicate.isBigInt(value)
   ) {
     out.push([key, String(value)]);
   }
@@ -65,17 +69,21 @@ function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void
 }
 
 /** Append an object's own enumerable fields to `out`, as `prefix.key` names. */
-function appendFields(out: Array<BodyEntry>, data: object, prefix: string): void {
-  for (const [key, value] of Object.entries(data)) {
-    appendEntries(out, prefix ? `${prefix}.${key}` : key, value);
-  }
+function appendFields<V>(
+  out: Array<BodyEntry>,
+  data: Record.ReadonlyRecord<string, V>,
+  prefix: string,
+): void {
+  Arr.forEach(Record.toEntries(data), ([key, value]) =>
+    appendEntries(out, prefix ? `${prefix}.${key}` : key, value),
+  );
 }
 
 /** Flatten `data` into form-body entries, `Blob` / `File` leaves included. */
 function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
   const out: Array<BodyEntry> = [];
   if (prefix) appendEntries(out, prefix, data);
-  else if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+  else if (Predicate.isObject(data)) {
     appendFields(out, data, "");
   }
   return out;
@@ -106,8 +114,8 @@ function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
  * `null`), so the remaining items keep their indices (`tags[0]`, `tags[2]`).
  */
 export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
-  return toBodyEntries(data, prefix).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
+  return toBodyEntries(data, prefix).filter((entry): entry is [string, string] =>
+    Predicate.isString(entry[1]),
   );
 }
 
@@ -122,28 +130,31 @@ export function objectToEntries(data: unknown, prefix = ""): Array<[string, stri
  */
 export function objectToFormData(data: unknown): FormData {
   const formData = new FormData();
-  for (const [key, value] of toBodyEntries(data, "")) formData.append(key, value);
+  Arr.forEach(toBodyEntries(data, ""), ([key, value]) => formData.append(key, value));
   return formData;
 }
 
-/** Whether a value looks like a {@link FormActionResult} (carries a known `_tag`). */
-function isActionResult(value: unknown): value is FormActionResult<unknown, unknown> {
+/**
+ * Whether a value looks like a {@link FormActionResult} (carries a known
+ * `_tag`). Only the tag is checked: `A` / `Message` are the caller's declared
+ * expectation of the server's response, not verified here.
+ */
+function isActionResult<A, Message>(value: unknown): value is FormActionResult<A, Message> {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { _tag?: unknown })._tag === "string" &&
-    ["Success", "Failure", "Redirect", "Error"].includes((value as { _tag: string })._tag)
+    Predicate.isObjectOrArray(value) &&
+    Predicate.hasProperty(value, "_tag") &&
+    Predicate.isString(value._tag) &&
+    ["Success", "Failure", "Redirect", "Error"].includes(value._tag)
   );
 }
 
-/** Whether a value looks like a bare {@link FormState}. */
-function isFormState(value: unknown): value is FormState<unknown, unknown> {
+/**
+ * Whether a value looks like a bare {@link FormState}. Only the keys are
+ * checked: `A` / `Message` are the caller's declared expectation, not verified.
+ */
+function isFormState<A, Message>(value: unknown): value is FormState<A, Message> {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "valid" in value &&
-    "data" in value &&
-    "errors" in value
+    Predicate.isObjectOrArray(value) && "valid" in value && "data" in value && "errors" in value
   );
 }
 
@@ -157,10 +168,9 @@ export function parseActionResult<A, Message>(
   body: unknown,
   status = 200,
 ): FormActionResult<A, Message> {
-  if (isActionResult(body)) return body as FormActionResult<A, Message>;
-  if (isFormState(body)) {
-    const state = body as FormState<A, Message>;
-    return state.valid ? success(state, status) : failure(state, status);
+  if (isActionResult<A, Message>(body)) return body;
+  if (isFormState<A, Message>(body)) {
+    return body.valid ? success(body, status) : failure(body, status);
   }
   return { _tag: "Error", status, message: "Unrecognised form response" };
 }
@@ -183,26 +193,22 @@ export interface FormUpdate<A, Message> {
 export function resultToUpdate<A, Message>(
   result: FormActionResult<A, Message>,
 ): FormUpdate<A, Message> {
-  switch (result._tag) {
-    case "Success":
-      return {
-        data: result.state.data,
-        errors: result.state.errors,
-        message: result.state.message,
-        valid: true,
-      };
-    case "Failure":
-      return {
-        data: result.state.data,
-        errors: result.state.errors,
-        message: result.state.message,
-        valid: false,
-      };
-    case "Redirect":
-      return { redirect: result.location };
-    case "Error":
-      return { error: result.message, valid: false };
-  }
+  return Match.valueTags(result, {
+    Success: ({ state }): FormUpdate<A, Message> => ({
+      data: state.data,
+      errors: state.errors,
+      message: state.message,
+      valid: true,
+    }),
+    Failure: ({ state }): FormUpdate<A, Message> => ({
+      data: state.data,
+      errors: state.errors,
+      message: state.message,
+      valid: false,
+    }),
+    Redirect: ({ location }): FormUpdate<A, Message> => ({ redirect: location }),
+    Error: ({ message }): FormUpdate<A, Message> => ({ error: message, valid: false }),
+  });
 }
 
 /** How a successful/failed submit's data should land on `data` and the tainted baseline. */

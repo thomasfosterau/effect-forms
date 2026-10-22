@@ -18,6 +18,10 @@
  * @module effect-forms/FormData
  */
 
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+
 /** Anything that can be parsed into a structured form object. */
 export type FormBodySource =
   | FormData
@@ -33,26 +37,22 @@ type Container = Record<string, unknown> | unknown[];
  * `"a.b[]"` → `["a","b",""]`.
  */
 export function parseFieldPath(name: string): string[] {
-  const tokens: string[] = [];
-  let buffer = "";
-  let inBracket = false;
-  for (const char of name) {
-    if (char === "[") {
-      if (buffer !== "") tokens.push(buffer);
-      buffer = "";
-      inBracket = true;
-    } else if (char === "]") {
-      tokens.push(buffer);
-      buffer = "";
-      inBracket = false;
-    } else if (char === "." && !inBracket) {
-      if (buffer !== "") tokens.push(buffer);
-      buffer = "";
-    } else {
-      buffer += char;
-    }
-  }
-  if (buffer !== "") tokens.push(buffer);
+  const nonEmpty = (buffer: string): ReadonlyArray<string> => (buffer === "" ? [] : [buffer]);
+  const scanned = Arr.reduce(
+    Arr.fromIterable(name),
+    { tokens: Arr.empty<string>(), buffer: "", inBracket: false },
+    ({ tokens, buffer, inBracket }, char) => {
+      if (char === "[") {
+        return { tokens: [...tokens, ...nonEmpty(buffer)], buffer: "", inBracket: true };
+      }
+      if (char === "]") return { tokens: [...tokens, buffer], buffer: "", inBracket: false };
+      if (char === "." && !inBracket) {
+        return { tokens: [...tokens, ...nonEmpty(buffer)], buffer: "", inBracket };
+      }
+      return { tokens, buffer: buffer + char, inBracket };
+    },
+  );
+  const tokens = [...scanned.tokens, ...nonEmpty(scanned.buffer)];
   // A leading empty token can appear for names like `[0]`; drop it.
   return tokens.length > 1 && tokens[0] === "" ? tokens.slice(1) : tokens;
 }
@@ -63,33 +63,29 @@ const isIndexToken = (token: string): boolean => token === "" || /^\d+$/.test(to
 const makeContainer = (nextToken: string): Container => (isIndexToken(nextToken) ? [] : {});
 
 const setOnContainer = (container: Container, token: string, value: unknown): void => {
-  if (Array.isArray(container)) {
+  if (Arr.isArray(container)) {
     if (token === "") container.push(value);
     else container[Number(token)] = value;
   } else {
-    (container as Record<string, unknown>)[token] = value;
+    container[token] = value;
   }
 };
 
 const getFromContainer = (container: Container, token: string): unknown =>
-  Array.isArray(container)
-    ? container[Number(token)]
-    : (container as Record<string, unknown>)[token];
+  Arr.isArray(container) ? container[Number(token)] : container[token];
 
 /** Assign `value` deep into `root` along `tokens`, creating containers as needed. */
-function assign(root: Container, tokens: string[], value: unknown): void {
-  let node: Container = root;
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const token = tokens[i];
-    const nextToken = tokens[i + 1];
-    let child = token === "" ? undefined : getFromContainer(node, token);
-    if (child === undefined || typeof child !== "object" || child === null) {
-      child = makeContainer(nextToken);
-      setOnContainer(node, token, child);
-    }
-    node = child as Container;
-  }
-  const last = tokens[tokens.length - 1];
+function assign(root: Container, tokens: Arr.NonEmptyReadonlyArray<string>, value: unknown): void {
+  const last = Arr.lastNonEmpty(tokens);
+  // Walk every token but the last, descending into (or creating) the
+  // container each one names; `tokens[i + 1]` is the token after `token`.
+  const node = Arr.reduce(Arr.initNonEmpty(tokens), root, (parent, token, i): Container => {
+    const child = token === "" ? undefined : getFromContainer(parent, token);
+    if (Predicate.isObjectOrArray(child)) return child;
+    const created = makeContainer(tokens[i + 1]);
+    setOnContainer(parent, token, created);
+    return created;
+  });
   // A repeated bare key (no brackets) collapses into an array.
   if (last !== "" && !Array.isArray(node)) {
     const existing = getFromContainer(node, last);
@@ -104,16 +100,9 @@ function assign(root: Container, tokens: string[], value: unknown): void {
 }
 
 /** Normalise a source into `[name, value]` entries. */
-function* entriesOf(source: FormBodySource): Generator<readonly [string, unknown]> {
-  if (
-    typeof (source as Iterable<unknown>)[Symbol.iterator] === "function" &&
-    !(source instanceof FormData) &&
-    !(source instanceof URLSearchParams)
-  ) {
-    yield* source as Iterable<readonly [string, unknown]>;
-    return;
-  }
-  for (const entry of (source as FormData | URLSearchParams).entries()) yield entry;
+function entriesOf(source: FormBodySource): Iterable<readonly [string, unknown]> {
+  if (source instanceof FormData || source instanceof URLSearchParams) return source.entries();
+  return source;
 }
 
 /**
@@ -121,15 +110,26 @@ function* entriesOf(source: FormBodySource): Generator<readonly [string, unknown
  * bracket path notation (see {@link parseFieldPath}); repeated bare keys
  * become arrays; `File` values pass through. The result is ready to hand to
  * `Schema.decodeUnknown` with a schema whose leaves coerce the string inputs.
+ *
+ * @example
+ * ```ts
+ * import { FormData } from "@thomasfosterau/effect-forms"
+ *
+ * const body = new URLSearchParams([
+ *   ["author.name", "Ada"],
+ *   ["tags[]", "math"],
+ *   ["tags[]", "engines"],
+ * ])
+ * console.log(FormData.formDataToObject(body))
+ * // { author: { name: "Ada" }, tags: ["math", "engines"] }
+ * ```
  */
 export function formDataToObject(source: FormBodySource): Record<string, unknown> {
-  const root: Record<string, unknown> = {};
-  for (const [name, value] of entriesOf(source)) {
+  return Arr.reduce(entriesOf(source), Rec.empty<string, unknown>(), (root, [name, value]) => {
     const tokens = parseFieldPath(name);
-    if (tokens.length === 0) continue;
-    assign(root, tokens, value);
-  }
-  return root;
+    if (Arr.isReadonlyArrayNonEmpty(tokens)) assign(root, tokens, value);
+    return root;
+  });
 }
 
 /** Read and parse a `Request`'s form body. Errors (e.g. wrong content-type) reject. */

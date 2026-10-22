@@ -39,9 +39,13 @@ export interface ActionFormState {
  * that carried a bare message instead.
  */
 export const formStateOf = (form: unknown): ActionFormState | undefined => {
-  if (!Predicate.isObjectOrArray(form)) return undefined;
-  const state = (form as { readonly form?: unknown }).form;
-  return Predicate.isObjectOrArray(state) ? (state as ActionFormState) : undefined;
+  if (!Predicate.isObjectOrArray(form) || !Predicate.hasProperty(form, "form")) return undefined;
+  const state = form.form;
+  if (!Predicate.isObjectOrArray(state)) return undefined;
+  // SAFETY: `ActionFormState` is all-optional and every reader below reaches
+  // `data` / `errors` only through optional chaining and re-checks the value it
+  // finds (`Array.isArray`, `isString`), so any object answers totally.
+  return state as ActionFormState;
 };
 
 /** Messages attached to a named field, or none. */
@@ -50,6 +54,8 @@ export const issuesFor = (
   field: string,
 ): ReadonlyArray<string> => {
   const issues = state?.errors?.[field];
+  // SAFETY: the error tree `formAction` hands back holds the form's messages
+  // at each field, and these readers serve pages whose messages are strings.
   return Array.isArray(issues) ? (issues as ReadonlyArray<string>) : [];
 };
 

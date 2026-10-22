@@ -19,21 +19,43 @@ pnpm add @sveltejs/kit
 
 `effect` (and `svelte`, for the bindings) are peer dependencies — the packages never bundle their own copy. Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so a single resolved version matters. Each package's README is its API reference.
 
-## Development
+## Example
 
-This repository is managed by [Vite+](https://viteplus.dev) (the `vp` CLI).
+```ts
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Form } from "@thomasfosterau/effect-forms";
 
-```sh
-vp install        # install dependencies
-vp run -r build   # build every package with tsdown
-vp run -r check   # vp check (format, lint, type-check) + svelte-check over packages/svelte
-vp run -r test    # run every package's Vitest suite
-vp check --fix    # format (Oxfmt), lint (Oxlint), type-check (tsgolint), autofixing
+const Signup = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(2)),
+  age: Schema.optional(Schema.FiniteFromString),
+});
+
+const signupForm = Form.make(Signup, { id: "signup", defaults: { name: "", age: undefined } });
+
+// On the server: decode a submission (FormData, URLSearchParams, Request or a plain object).
+const body = new URLSearchParams({ name: "A", age: "forty" });
+const state = await Effect.runPromise(signupForm.validate(body));
+// state.valid === false; state.errors.name and state.errors.age hold the messages;
+// state.data keeps what was posted, so the form re-renders it.
 ```
 
-`packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`, so checking or testing it needs that build. `vp run -r check` and `vp run -r test` build first; run `vp run -r build` before a bare `vp check` on a clean checkout. There is no `pnpm check`: the root `check` is a Vite+ task, not a `package.json` script, so use `vp run check` or `vp check`.
+In a Svelte 5 component, `createForm(state, { schema: Signup })` from `@thomasfosterau/effect-forms-svelte` turns that state into a reactive store with progressive-enhancement submission and client-side validation against the same schema. See each package's README for the full API.
 
-Releases are automated with [Changesets](https://github.com/changesets/changesets) — see [docs/RELEASING.md](docs/RELEASING.md).
+## Development
+
+This repository is a pnpm workspace managed by [Vite+](https://viteplus.dev) (the `vp` CLI).
+
+```sh
+pnpm install          # dependencies, git hooks, and the @effect/tsgo patch
+vp check              # format (Oxfmt) + lint (Oxlint, with the Effect rules)
+vp run check          # the type gate: native tsc (Effect-patched) + svelte-check
+vp run -r test:unit   # every package's Vitest suite
+vp run -r build       # build every package with tsdown (vp pack)
+vp run docgen         # compile and run the core's doc examples
+```
+
+The full gate list is in [AGENTS.md](AGENTS.md#verification); [CONTRIBUTING.md](CONTRIBUTING.md) covers setup and single checks. Releases are automated with [Changesets](https://github.com/changesets/changesets) — see [PUBLISHING.md](PUBLISHING.md). Security reports: [SECURITY.md](SECURITY.md).
 
 ## License
 

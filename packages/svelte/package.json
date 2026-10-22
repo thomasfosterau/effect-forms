@@ -12,7 +12,7 @@
     "sveltekit",
     "typescript"
   ],
-  "homepage": "https://github.com/thomasfosterau/effect-forms/tree/main/packages/svelte#readme",
+  "homepage": "https://github.com/thomasfosterau/effect-forms/tree/trunk/packages/svelte#readme",
   "bugs": {
     "url": "https://github.com/thomasfosterau/effect-forms/issues"
   },

@@ -1,23 +1,33 @@
-# Dependabot version-update configuration (the library standard's, copied from
-# effect-drizzle-ext, whose grouping and cooldown this mirrors).
+# Dependabot version updates for the pnpm workspace (the `npm` ecosystem at
+# `/` reads pnpm-workspace.yaml's catalogs and the lockfile) and the GitHub
+# Actions, including the local composite setup action's pins.
 #
-# `groups` collect dependencies that MUST move together: the Effect 4 release
-# line is a lockstep-versioned singleton set; the vitest toolchain is pinned to
-# vite-plus's exact versions (see pnpm-workspace.yaml) and is bumped by hand as
-# a set, so its *version* updates are ignored while SECURITY updates stay
-# enabled (the ignore is scoped to the `version-update:semver-*` update types;
-# a bare `dependency-name` ignore would block security updates too).
+# Groups exist so that dependencies which MUST move together arrive in ONE PR.
+# Dependabot puts a dependency in the FIRST group that matches it, so the
+# groups run specific → general, with `exclude-patterns` where a broader
+# pattern would otherwise catch a lockstep member:
 #
-# `@effect/tsgo`, `@typescript/native` (TS7) and `typescript` (the TS6 alias)
-# are one set too: the root `prepare` script's `effect-tsgo patch` matches the
-# native `tsc` and `oxlint` by gitHead / version and hard-errors on any pairing
-# it has no artifact for, so a Dependabot PR moving one of them alone goes red.
-# They move by hand, together with `vite-plus`, after checking the `components`
-# table in `node_modules/@effect/tsgo/dist/effect-tsgo.cjs`. Their *version*
-# updates are ignored the same way (security updates stay enabled), and
-# `@effect/tsgo` is excluded from the `effect` group's `@effect/*` pattern.
+# - `toolchain`: `vite-plus` pins the `vite` core, `vitest`, `oxlint`, `oxfmt`
+#   and `oxlint-tsgolint` it carries (and `@vitest/coverage-istanbul` must equal
+#   that vitest); the root `prepare` script's `effect-tsgo patch` matches the
+#   native `tsc` (`@typescript/native`) and that oxlint / tsgolint by version
+#   and hard-errors on any pairing it has no artifact for; the TS6 alias
+#   (`typescript` → `@typescript/typescript6`) pairs with the TS7 one; the
+#   Effect lint plugin loads into that oxlint. A PR moving one alone goes red,
+#   so every update type (major included) is grouped. Read the catalog
+#   comments in pnpm-workspace.yaml before merging one.
+# - `effect`: the Effect 4 line is lockstep-versioned and a runtime singleton.
+# - `svelte`, `changesets`: their own release families.
+# - `minor-and-patch`: everything else's minor / patch updates in one PR, so
+#   PR volume stays low; majors outside the sets above stay individual.
 #
-# `cooldown` mirrors pnpm-workspace.yaml's `minimumReleaseAge`.
+# Not bumpable here: `oxlint`, `oxfmt` and `oxlint-tsgolint` are transitive
+# pins of `vite-plus` (they move when it does), and the `overrides` entries
+# (`vite`, `vitest`, `effect`) all point at `catalog:`, so they follow their
+# catalog entry. See AGENTS.md "Common pitfalls".
+#
+# `cooldown` mirrors pnpm-workspace.yaml's `minimumReleaseAge` (1 day), with
+# the same `@thomasfosterau/*` exemption as `minimumReleaseAgeExclude`.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -28,70 +38,54 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "chore"
-      prefix-development: "chore"
     cooldown:
       default-days: 1
       exclude:
         - "@thomasfosterau/*"
     groups:
+      toolchain:
+        applies-to: version-updates
+        patterns:
+          - "vite-plus"
+          - "vite"
+          - "vitest"
+          - "@vitest/*"
+          - "oxlint"
+          - "oxfmt"
+          - "oxlint-tsgolint"
+          - "@effect/tsgo"
+          - "@typescript/native"
+          - "typescript"
+          - "@typescript/typescript6"
+          - "@mpsuesser/oxlint-plugin-effect"
+        update-types: ["major", "minor", "patch"]
       effect:
+        applies-to: version-updates
         patterns:
           - "effect"
           - "@effect/*"
         exclude-patterns:
           - "@effect/tsgo"
+        update-types: ["major", "minor", "patch"]
       svelte:
+        applies-to: version-updates
         patterns:
           - "svelte"
-          - "svelte-check"
           - "@sveltejs/*"
-      vitest-toolchain:
+          - "svelte-check"
+          - "svelte2tsx"
+        update-types: ["major", "minor", "patch"]
+      changesets:
+        applies-to: version-updates
         patterns:
-          - "vitest"
-          - "vite-plus"
-    ignore:
-      - dependency-name: "@effect/tsgo"
-        update-types:
-          [
-            "version-update:semver-major",
-            "version-update:semver-minor",
-            "version-update:semver-patch",
-          ]
-      - dependency-name: "typescript"
-        update-types:
-          [
-            "version-update:semver-major",
-            "version-update:semver-minor",
-            "version-update:semver-patch",
-          ]
-      - dependency-name: "@typescript/native"
-        update-types:
-          [
-            "version-update:semver-major",
-            "version-update:semver-minor",
-            "version-update:semver-patch",
-          ]
-      - dependency-name: "vite"
-        update-types:
-          [
-            "version-update:semver-major",
-            "version-update:semver-minor",
-            "version-update:semver-patch",
-          ]
-      - dependency-name: "vitest"
-        update-types:
-          [
-            "version-update:semver-major",
-            "version-update:semver-minor",
-            "version-update:semver-patch",
-          ]
-      - dependency-name: "vite-plus"
-        update-types:
-          [
-            "version-update:semver-major",
-            "version-update:semver-minor",
-            "version-update:semver-patch",
-          ]
+          - "@changesets/*"
+        update-types: ["major", "minor", "patch"]
+      minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: "github-actions"
     # The composite setup action pins actions too; list it explicitly.
     directories:
@@ -102,5 +96,10 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     commit-message:
-      prefix: "ci"
-      include: "scope"
+      prefix: "chore"
+    cooldown:
+      default-days: 1
+    groups:
+      github-actions:
+        patterns:
+          - "*"

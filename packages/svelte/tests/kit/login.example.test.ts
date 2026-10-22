@@ -8,7 +8,8 @@ import { actions, SessionCallError, type SessionTransport } from "./examples/log
 import { post } from "./fixtures.ts";
 
 const event = (body: Record<string, string>, session: SessionTransport) =>
-  ({ request: post(body), locals: { session } }) as unknown as RequestEvent;
+  // SAFETY: formAction reads only `request`; the example's command reads `locals.session`.
+  ({ request: post(body), locals: { session } }) as RequestEvent;
 
 const transport = (signIn: SessionTransport["signIn"]): SessionTransport => ({
   signIn: vi.fn(signIn),

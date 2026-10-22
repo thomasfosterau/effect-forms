@@ -61,8 +61,10 @@ describe("formDataToObject", () => {
     fd.append("authors[0].name", "Ada");
     fd.append("authors[0].role", "lead");
     fd.append("authors[1].name", "Linus");
-    const out = formDataToObject(fd) as { authors: Array<Record<string, string>> };
-    expect(out.authors).toEqual([{ name: "Ada", role: "lead" }, { name: "Linus" }]);
+    expect(formDataToObject(fd).authors).toEqual([
+      { name: "Ada", role: "lead" },
+      { name: "Linus" },
+    ]);
   });
 
   it("accepts entry iterables directly", () => {

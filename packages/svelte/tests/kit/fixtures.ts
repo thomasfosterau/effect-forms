@@ -13,13 +13,15 @@
  */
 import * as Schema from "effect/Schema";
 
-export const ErrorObject = Schema.Struct({
+const ErrorObject = Schema.Struct({
   status: Schema.optionalKey(Schema.String),
   code: Schema.optionalKey(Schema.String),
   title: Schema.optionalKey(Schema.String),
   detail: Schema.optionalKey(Schema.String),
   source: Schema.optionalKey(Schema.Struct({ pointer: Schema.String })),
 });
+
+export type ErrorObject = typeof ErrorObject.Type;
 
 export class JsonapiError extends Schema.TaggedError<JsonapiError>()("JsonapiError", {
   status: Schema.Number,
@@ -42,24 +44,19 @@ export class ApiError extends Error {
   }
 }
 
-export class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", {
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", {
   message: Schema.String,
 }) {}
 
 export const testFailure = (message: string): TestFailure => new TestFailure({ message });
 
-export const conflict409 = (detail?: string): JsonapiError =>
-  new JsonapiError({
+export const conflict409 = (detail?: string): JsonapiError => {
+  const error: ErrorObject = { status: "409", code: "conflict", title: "Conflict" };
+  return new JsonapiError({
     status: 409,
-    errors: [
-      {
-        status: "409",
-        code: "conflict",
-        title: "Conflict",
-        ...(detail !== undefined ? { detail } : {}),
-      },
-    ],
+    errors: [detail === undefined ? error : { ...error, detail }],
   });
+};
 
 export const post = (body: Record<string, string>): Request =>
   new Request("https://example.test/organisations/create", {

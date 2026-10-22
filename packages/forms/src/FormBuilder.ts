@@ -23,7 +23,10 @@
  * @module effect-forms/FormBuilder
  */
 
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type {
   AnyFieldDef,
@@ -33,7 +36,7 @@ import type {
   FieldDef,
   FieldsRecord,
 } from "./Field.ts";
-import { isArrayFieldDef, isFieldDef, makeField } from "./Field.ts";
+import * as Field from "./Field.ts";
 import type * as Issues from "./Issues.ts";
 import type { FormIssue } from "./Issues.ts";
 import { filterOutputToFormIssues as issuesFromFilterOutput } from "./Issues.ts";
@@ -103,14 +106,20 @@ export interface FormBuilder<TFields extends FieldsRecord, R> {
   ): FormBuilder<TFields, R | RD>;
 }
 
+/** `addField`'s overloads as one argument list: a field definition, or a key with its schema. */
+type AddFieldArgs = readonly [field: AnyFieldDef] | readonly [key: string, schema: Schema.Top];
+
+/** Whether `addField` was called with the `(key, schema)` overload — the only one whose first argument is a string. */
+const isKeyedArgs = (args: AddFieldArgs): args is readonly [key: string, schema: Schema.Top] =>
+  Predicate.isString(args[0]);
+
 const proto = {
   [TypeId]: TypeId,
   addField(
     this: FormBuilder<FieldsRecord, unknown>,
-    keyOrField: string | AnyFieldDef,
-    schema?: Schema.Top,
+    ...args: AddFieldArgs
   ): FormBuilder<FieldsRecord, unknown> {
-    const field = typeof keyOrField === "string" ? makeField(keyOrField, schema!) : keyOrField;
+    const field = isKeyedArgs(args) ? Field.makeField(...args) : args[0];
     return build({ ...this.fields, [field.key]: field }, this.refinements);
   },
   merge(
@@ -145,10 +154,13 @@ function build(
 
 /** Whether `u` is a {@link FormBuilder}. */
 export const isFormBuilder = (u: unknown): u is FormBuilder<FieldsRecord, unknown> =>
-  typeof u === "object" && u !== null && TypeId in u;
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, TypeId);
 
 /** The empty builder — the starting point for {@link FormBuilder.addField}. */
-export const make: FormBuilder<Record<never, never>, never> = build({}, []) as never;
+// SAFETY: a builder with no fields and no refinements is exactly
+// `FormBuilder<{}, never>`; `build` merely erases the field-record and `R`
+// types its shared implementation works over.
+export const make = build({}, []) as FormBuilder<Record<never, never>, never>;
 
 /** Alias of {@link make} — the empty builder. */
 export const empty = make;
@@ -161,22 +173,27 @@ export const empty = make;
 export function buildSchema<TFields extends FieldsRecord, R>(
   self: FormBuilder<TFields, R>,
 ): Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R> {
-  const structFields: Record<string, Schema.Top> = {};
-  for (const [key, def] of Object.entries(self.fields)) {
-    if (isArrayFieldDef(def)) structFields[key] = Schema.Array(def.itemSchema);
-    else if (isFieldDef(def)) structFields[key] = def.schema;
-  }
+  const structFields = Rec.fromEntries(
+    Arr.flatMap(Rec.toEntries(self.fields), ([key, def]): Array<readonly [string, Schema.Top]> => {
+      if (Field.isArrayFieldDef(def)) return [[key, Schema.Array(def.itemSchema)]];
+      if (Field.isFieldDef(def)) return [[key, def.schema]];
+      return [];
+    }),
+  );
 
-  let schema: Schema.Top = Schema.Struct(structFields);
-  for (const refinement of self.refinements) {
-    if (refinement._tag === "sync") schema = schema.check(Schema.makeFilter(refinement.fn));
-  }
+  const struct: Schema.Top = Schema.Struct(structFields);
+  const schema = Arr.reduce(self.refinements, struct, (refined, refinement) =>
+    Predicate.isTagged(refinement, "sync")
+      ? refined.check(Schema.makeFilter(refinement.fn))
+      : refined,
+  );
 
-  return schema as unknown as Schema.Codec<
-    DecodedFromFields<TFields>,
-    EncodedFromFields<TFields>,
-    R
-  >;
+  // SAFETY: the struct has exactly one property per entry of `self.fields` —
+  // a scalar field's schema, or an array field's item schema under
+  // `Schema.Array` — which is the shape `DecodedFromFields` /
+  // `EncodedFromFields` compute; checks leave `Type` and `Encoded` unchanged;
+  // and `R` is by construction the union of those schemas' decoding services.
+  return schema as Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>;
 }
 
 /** The asynchronous refinements carried on a builder, as bare predicates. */
@@ -185,9 +202,17 @@ export function asyncRefinements<TFields extends FieldsRecord, R>(
 ): ReadonlyArray<
   (values: DecodedFromFields<TFields>) => Effect.Effect<Schema.FilterOutput, never, R>
 > {
-  return self.refinements
-    .filter((r): r is AsyncRefinement => r._tag === "async")
-    .map((r) => r.fn as never);
+  return Arr.flatMap(self.refinements, (refinement) => {
+    if (!Predicate.isTagged(refinement, "async")) return [];
+    // SAFETY: `refineEffect` stores a predicate typed against this builder's
+    // decoded values, with its requirements folded into `R`; the builder keeps
+    // it as `(values: unknown) => Effect<…, unknown>` only to share one
+    // `Refinement` type across builders, so this restores the original type.
+    const fn = refinement.fn as (
+      values: DecodedFromFields<TFields>,
+    ) => Effect.Effect<Schema.FilterOutput, never, R>;
+    return [fn];
+  });
 }
 
 /**
@@ -209,9 +234,11 @@ export function runAsyncRefinements<TFields extends FieldsRecord, R>(
   self: FormBuilder<TFields, R>,
   values: DecodedFromFields<TFields>,
 ): Effect.Effect<ReadonlyArray<FormIssue>, never, R> {
-  const refinements = asyncRefinements(self);
-  if (refinements.length === 0) return Effect.succeed([]);
-  return Effect.forEach(refinements, (fn) => fn(values), { concurrency: "unbounded" }).pipe(
-    Effect.map((outputs) => outputs.flatMap(issuesFromFilterOutput)),
-  );
+  return Arr.match(asyncRefinements(self), {
+    onEmpty: (): Effect.Effect<ReadonlyArray<FormIssue>, never, R> => Effect.succeed([]),
+    onNonEmpty: (refinements) =>
+      Effect.forEach(refinements, (fn) => fn(values), { concurrency: "unbounded" }).pipe(
+        Effect.map((outputs) => Arr.flatMap(outputs, issuesFromFilterOutput)),
+      ),
+  });
 }

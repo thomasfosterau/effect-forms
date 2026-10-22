@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect, it } from "vite-plus/test";
 import { TestClock } from "effect/testing";
 import { getError } from "../src/Errors.ts";
 import {
@@ -30,9 +30,8 @@ describe("validateValue", () => {
   it("fails with errors and issues", async () => {
     const result = await Effect.runPromise(validateValue(Field, "hi"));
     expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.issues.length).toBeGreaterThan(0);
-    }
+    assert(!result.valid);
+    expect(result.issues.length).toBeGreaterThan(0);
   });
 });
 
@@ -49,9 +48,8 @@ describe("validateValueSync", () => {
   it("reports field errors synchronously", () => {
     const result = validateValueSync(Struct, { email: "x" });
     expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(getError(result.errors, ["email"])).toBeDefined();
-    }
+    assert(!result.valid);
+    expect(getError(result.errors, ["email"])).toBeDefined();
   });
 });
 
@@ -59,9 +57,8 @@ describe("validateValue with a custom leaf formatter", () => {
   it("routes leaf issues through the provided formatter", async () => {
     const result = await Effect.runPromise(validateValue(Field, "x", () => "custom message"));
     expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.issues[0]?.message).toBe("custom message");
-    }
+    assert(!result.valid);
+    expect(result.issues[0]?.message).toBe("custom message");
   });
 });
 

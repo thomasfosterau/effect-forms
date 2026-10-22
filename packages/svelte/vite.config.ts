@@ -2,30 +2,52 @@ import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite-plus";
 
+/**
+ * Input fingerprint for this package's cached tasks: auto tracking minus
+ * node_modules bookkeeping churn (pnpm rewrites `.modules.yaml` on every
+ * install), with the lockfile back explicitly so a dependency upgrade still
+ * invalidates a type-check or a test run.
+ */
+const cacheInputs = [
+  { auto: true },
+  "!node_modules/**",
+  "!coverage/**",
+  { pattern: "!node_modules/**", base: "workspace" as const },
+  { pattern: "pnpm-lock.yaml", base: "workspace" as const },
+];
+
+/**
+ * This package imports `@thomasfosterau/effect-forms`, whose `exports` point
+ * at `dist/` — so the sibling must be built before anything here can resolve
+ * it. `from: "dependencies"` runs `build` in each direct workspace dependency
+ * that defines one.
+ */
+const siblingBuild = { task: "build", from: "dependencies" as const };
+
 export default defineConfig({
   run: {
     tasks: {
-      // This package imports `@thomasfosterau/effect-forms`, whose `exports`
-      // point at `dist/` — so the sibling must be built before anything here
-      // can resolve it. `from: "dependencies"` runs `build` in each direct
-      // workspace dependency that defines one.
       build: {
         command: "vp pack",
-        dependsOn: [{ task: "build", from: "dependencies" }],
+        dependsOn: [siblingBuild],
+        cache: { input: cacheInputs, output: ["dist/**"] },
       },
-      test: {
+      "test:unit": {
         command: "vp test run",
-        dependsOn: [{ task: "build", from: "dependencies" }],
+        dependsOn: [siblingBuild],
+        cache: { env: ["VITEST_MAX_WORKERS", "NODE_OPTIONS"], input: cacheInputs, output: [] },
       },
-      // svelte-check type-checks the package (TS6 + Svelte's language
-      // tooling) against `tsconfig.json`. No `--fail-on-warnings`: with no
-      // `.svelte` components here it always warns "No svelte input files
+      // The native, Effect-patched `tsc` (TS7) over `src`, the tests and this
+      // config, then svelte-check (TS6 + Svelte's language tooling) over the
+      // same `tsconfig.json`. No `--fail-on-warnings`: with no `.svelte`
+      // components here svelte-check always warns "No svelte input files
       // were found", and no option silences that warning alone
-      // (`--threshold error` would hide every warning). `vp run -r check`
-      // runs it alongside the root `check` task (`vp check`).
+      // (`--threshold error` would hide every warning). The root `check`
+      // task depends on it.
       check: {
-        command: "svelte-check --tsconfig ./tsconfig.json",
-        dependsOn: [{ task: "build", from: "dependencies" }],
+        command: "tsc -p tsconfig.json && svelte-check --tsconfig ./tsconfig.json",
+        dependsOn: [siblingBuild],
+        cache: { input: cacheInputs, output: [] },
       },
     },
   },
@@ -60,6 +82,11 @@ export default defineConfig({
   // worked examples import this package's `/kit` entry by name, as a
   // consumer would; it resolves to the sources (tsconfig `paths` agrees).
   resolve: {
+    // Under Vitest, resolve `svelte` to its client runtime (Svelte's documented
+    // Vitest setup): the default `node` condition picks the server build, where
+    // `$effect` never runs, so the store's change watchers and listeners would
+    // be untestable. Builds keep the default conditions.
+    ...(process.env.VITEST ? { conditions: ["browser"] } : {}),
     alias: {
       "@thomasfosterau/effect-forms-svelte/kit": fileURLToPath(
         new URL("./src/kit/index.ts", import.meta.url),
@@ -73,12 +100,13 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     coverage: {
       provider: "istanbul",
-      reporter: ["text-summary", "json-summary"],
+      // `json` writes coverage-final.json, the Istanbul map `fallow audit`
+      // reads for exact per-function CRAP scores.
+      reporter: ["text-summary", "json-summary", "json"],
       reportsDirectory: "./coverage",
       // The reactive store lives in `FormStore.svelte.ts` (rune-compiled,
-      // type-checked by `vp check` and by svelte-check, both run by
-      // `vp run -r check`);
-      // coverage gates the pure modules.
+      // type-checked by `tsc` and svelte-check in this package's `check`
+      // task); coverage gates the pure modules.
       include: [
         "src/Tainted.ts",
         "src/ClientValidate.ts",

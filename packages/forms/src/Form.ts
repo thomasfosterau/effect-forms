@@ -23,6 +23,7 @@
  * @module effect-forms/Form
  */
 
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import type * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
@@ -78,11 +79,18 @@ export interface Form<S extends Schema.Top, Message = unknown> {
 
 const toStructured = (input: FormInput): Effect.Effect<Record<string, unknown> | null> => {
   if (input === null || input === undefined) return Effect.succeed(null);
-  if (input instanceof Request) return Effect.promise(() => requestToObject(input));
+  if (input instanceof Request) {
+    // A body that can't be read as a form (e.g. a wrong content-type) is a
+    // defect, not a validation failure: `validate` never fails, so the
+    // rejection reason dies as-is.
+    return Effect.tryPromise({ try: () => requestToObject(input), catch: (cause) => cause }).pipe(
+      Effect.orDie,
+    );
+  }
   if (input instanceof FormData || input instanceof URLSearchParams) {
     return Effect.succeed(formDataToObject(input));
   }
-  return Effect.succeed(input as Record<string, unknown>);
+  return Effect.succeed(input);
 };
 
 /**
@@ -91,6 +99,22 @@ const toStructured = (input: FormInput): Effect.Effect<Record<string, unknown> |
  * its requirements are the schema's decoding services) and `empty()` seeds a
  * blank form from `defaults`. The returned {@link Form} is stateless and
  * reusable across requests.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect"
+ * import * as Schema from "effect/Schema"
+ * import { Form } from "@thomasfosterau/effect-forms"
+ *
+ * const signup = Form.make(
+ *   Schema.Struct({ name: Schema.String.check(Schema.isMinLength(2)) }),
+ *   { id: "signup", defaults: { name: "" } },
+ * )
+ *
+ * const state = Effect.runSync(signup.validate(new URLSearchParams({ name: "A" })))
+ * console.log(state.valid) // false
+ * console.log(state.data) // { name: "A" } — the posted value, kept for re-render
+ * ```
  */
 export function make<S extends Schema.Top, Message = unknown>(
   schema: S,
@@ -116,9 +140,7 @@ export function make<S extends Schema.Top, Message = unknown>(
     });
 
   const parse: Form<S, Message>["parse"] = (input) =>
-    input instanceof FormData || input instanceof URLSearchParams
-      ? formDataToObject(input)
-      : (input as Record<string, unknown>);
+    input instanceof FormData || input instanceof URLSearchParams ? formDataToObject(input) : input;
 
   const validate: Form<S, Message>["validate"] = (input) =>
     toStructured(input).pipe(
@@ -128,26 +150,30 @@ export function make<S extends Schema.Top, Message = unknown>(
           Effect.matchEffect({
             onSuccess: (data) =>
               Effect.succeed(
-                makeFormState<S["Type"], Message>(data as S["Type"], {
+                makeFormState<S["Type"], Message>(data, {
                   id,
                   valid: true,
                   posted: true,
                   constraints,
                 }),
               ),
-            onFailure: (issue) =>
-              Effect.succeed(
-                makeFormState<S["Type"], Message>(
-                  { ...(defaults as object), ...object } as S["Type"],
-                  {
-                    id,
-                    valid: false,
-                    posted: true,
-                    constraints,
-                    errors: issuesToErrors(schemaIssuesToFormIssues(issue, leafFormatter)),
-                  },
-                ),
-              ),
+            onFailure: (issue) => {
+              // SAFETY: `FormState.data` on a failed decode is, by its documented
+              // contract, the posted values merged over the defaults (so the form
+              // re-renders what the user typed), typed as `S["Type"]` though not
+              // decoded. `defaults` is widened to `object` only so it can be
+              // spread; spreading copies its own enumerable properties either way.
+              const posted = { ...(defaults as object), ...object } as S["Type"];
+              return Effect.succeed(
+                makeFormState<S["Type"], Message>(posted, {
+                  id,
+                  valid: false,
+                  posted: true,
+                  constraints,
+                  errors: issuesToErrors(schemaIssuesToFormIssues(issue, leafFormatter)),
+                }),
+              );
+            },
           }),
         );
       }),
@@ -182,8 +208,12 @@ export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
   options: FromBuilderOptions<TFields> = {},
 ): Form<Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>, Message> {
   const schema = buildSchema(builder);
-  const defaults = (options.defaults ??
-    defaultEncodedValues(builder.fields)) as EncodedFromFields<TFields>;
+  // SAFETY: `defaultEncodedValues` seeds exactly one entry per field of
+  // `builder.fields` — `[]` for an array field, the schema's blank form input
+  // otherwise — the documented "schema-derived encoded blank per field" that
+  // stands in for `EncodedFromFields<TFields>`.
+  const defaults =
+    options.defaults ?? (defaultEncodedValues(builder.fields) as EncodedFromFields<TFields>);
   const base = make<typeof schema, Message>(schema, { ...options, defaults });
 
   const decode = SchemaParser.decodeUnknownEffect(schema, { errors: "all" });
@@ -192,24 +222,33 @@ export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
     toStructured(input).pipe(
       Effect.flatMap((object) => {
         if (object === null) return Effect.succeed(base.empty());
-        const posted = { ...(defaults as object), ...object } as DecodedFromFields<TFields>;
+        // SAFETY: `FormState.data` on a failed validation is, by its documented
+        // contract, the posted values merged over the defaults (so the form
+        // re-renders what the user typed), typed as the decoded type though
+        // not decoded.
+        const posted = { ...defaults, ...object } as DecodedFromFields<TFields>;
         return decode(object).pipe(
           Effect.matchEffect({
             onSuccess: (data) =>
-              runAsyncRefinements(builder, data as DecodedFromFields<TFields>).pipe(
+              runAsyncRefinements(builder, data).pipe(
                 Effect.map((issues) =>
-                  issues.length === 0
-                    ? makeFormState<DecodedFromFields<TFields>, Message>(
-                        data as DecodedFromFields<TFields>,
-                        { id: base.id, valid: true, posted: true, constraints: base.constraints },
-                      )
-                    : makeFormState<DecodedFromFields<TFields>, Message>(posted, {
+                  Arr.match(issues, {
+                    onEmpty: () =>
+                      makeFormState<DecodedFromFields<TFields>, Message>(data, {
+                        id: base.id,
+                        valid: true,
+                        posted: true,
+                        constraints: base.constraints,
+                      }),
+                    onNonEmpty: (failures) =>
+                      makeFormState<DecodedFromFields<TFields>, Message>(posted, {
                         id: base.id,
                         valid: false,
                         posted: true,
                         constraints: base.constraints,
-                        errors: issuesToErrors(issues),
+                        errors: issuesToErrors(failures),
                       }),
+                  }),
                 ),
               ),
             onFailure: (issue) =>
