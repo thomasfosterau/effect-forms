@@ -6,7 +6,9 @@
 # vite-plus's exact versions (see pnpm-workspace.yaml) and is bumped by hand as
 # a set, so its *version* updates are ignored while SECURITY updates stay
 # enabled (the ignore is scoped to the `version-update:semver-*` update types;
-# a bare `dependency-name` ignore would block security updates too).
+# a bare `dependency-name` ignore would block security updates too). The set is
+# `vite-plus`, `vite` (its aliased core), `vitest` and
+# `@vitest/coverage-istanbul`, which must equal the vitest vite-plus bundles.
 #
 # `@effect/tsgo`, `@typescript/native` (TS7) and `typescript` (the TS6 alias)
 # are one set too: the root `prepare` script's `effect-tsgo patch` matches the
@@ -48,7 +50,9 @@ updates:
       vitest-toolchain:
         patterns:
           - "vitest"
+          - "vite"
           - "vite-plus"
+          - "@vitest/*"
     ignore:
       - dependency-name: "@effect/tsgo"
         update-types:
@@ -79,6 +83,13 @@ updates:
             "version-update:semver-patch",
           ]
       - dependency-name: "vitest"
+        update-types:
+          [
+            "version-update:semver-major",
+            "version-update:semver-minor",
+            "version-update:semver-patch",
+          ]
+      - dependency-name: "@vitest/coverage-istanbul"
         update-types:
           [
             "version-update:semver-major",
