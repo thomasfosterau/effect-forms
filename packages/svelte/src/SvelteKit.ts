@@ -8,12 +8,12 @@
  * @module effect-forms-svelte/SvelteKit
  */
 
-import type { Errors, Result, State } from "@thomasfosterau/effect-forms";
+import type { Result, State } from "@thomasfosterau/effect-forms";
+import * as Predicate from "effect/Predicate";
 import type { FormStore } from "./FormStore.svelte.ts";
 
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
-type FormErrors = Errors.FormErrors;
 
 /**
  * The minimal view of SvelteKit's `ActionResult` that {@link applyActionResult}
@@ -25,10 +25,7 @@ export interface ServerActionResult {
 }
 
 const isFormActionData = (data: unknown): data is FormActionData & { form: FormState<unknown> } =>
-  typeof data === "object" &&
-  data !== null &&
-  "form" in data &&
-  Boolean((data as { form?: unknown }).form);
+  Predicate.isObjectOrArray(data) && Predicate.hasProperty(data, "form") && Boolean(data.form);
 
 /**
  * Apply a derived form action's result to `form`. On a validation `failure`
@@ -45,6 +42,6 @@ export function applyActionResult(
 ): boolean {
   if (result.type !== "failure" || !isFormActionData(result.data)) return false;
   const state = result.data.form;
-  form.setServerState(state.data, state.errors as FormErrors);
+  form.setServerState(state.data, state.errors);
   return true;
 }

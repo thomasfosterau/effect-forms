@@ -13,6 +13,9 @@
  */
 
 import type { Issues } from "@thomasfosterau/effect-forms";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 
 type FormPath = Issues.FormPath;
 
@@ -21,8 +24,15 @@ export interface TaintedFields {
   readonly [key: string]: boolean | TaintedFields | undefined;
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+/** An object or array read through its string keys. */
+type Indexable = { readonly [key: string]: unknown };
+
+/** A non-null object or array, indexable by its own string keys. */
+const isObject = (value: unknown): value is Indexable => Predicate.isObjectOrArray(value);
+
+/** The union of both containers' own enumerable keys, `a`'s first. */
+const unionKeys = (a: Indexable, b: Indexable): Array<string> =>
+  Arr.union(Record.keys(a), Record.keys(b));
 
 /** Structural deep equality for plain JSON-ish values. */
 export function deepEqual(a: unknown, b: unknown): boolean {
@@ -31,11 +41,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     return a.length === b.length && a.every((item, i) => deepEqual(item, b[i]));
   }
   if (isObject(a) && isObject(b)) {
-    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-    for (const key of keys) {
-      if (!deepEqual(a[key], b[key])) return false;
-    }
-    return true;
+    return Arr.every(unionKeys(a, b), (key) => deepEqual(a[key], b[key]));
   }
   return false;
 }
@@ -53,41 +59,42 @@ const sameKind = (a: unknown, b: unknown): boolean => Array.isArray(a) === Array
 export function computeTainted(original: unknown, current: unknown): TaintedFields {
   if (!isObject(original) || !isObject(current) || !sameKind(original, current)) return {};
 
-  const out: Record<string, boolean | TaintedFields> = {};
-  const keys = new Set([...Object.keys(original), ...Object.keys(current)]);
-  for (const key of keys) {
-    const before = original[key];
-    const after = current[key];
-    if (isObject(before) && isObject(after) && sameKind(before, after)) {
-      const nested = computeTainted(before, after);
-      if (Object.keys(nested).length > 0) out[key] = nested;
-    } else if (!deepEqual(before, after)) {
-      out[key] = true;
-    }
-  }
-  return out;
+  return Record.fromEntries(
+    Arr.flatMap(
+      unionKeys(original, current),
+      (key): Array<readonly [string, boolean | TaintedFields]> => {
+        const before = original[key];
+        const after = current[key];
+        if (isObject(before) && isObject(after) && sameKind(before, after)) {
+          const nested = computeTainted(before, after);
+          return Record.isEmptyReadonlyRecord(nested) ? [] : [[key, nested]];
+        }
+        return deepEqual(before, after) ? [] : [[key, true]];
+      },
+    ),
+  );
 }
 
 /** Whether anything in the tree is tainted. */
 export function isAnyTainted(tainted: TaintedFields): boolean {
-  for (const key of Object.keys(tainted)) {
-    const value = tainted[key];
-    if (value === true) return true;
-    if (isObject(value) && isAnyTainted(value)) return true;
-  }
-  return false;
+  return Arr.some(
+    Record.values(tainted),
+    (value) => value === true || (isObject(value) && isAnyTainted(value)),
+  );
 }
 
 /** Whether the field at `path` (or anything beneath it) is tainted. */
 export function isTaintedAt(tainted: TaintedFields, path: FormPath): boolean {
-  let node: boolean | TaintedFields | undefined = tainted;
-  for (const segment of path) {
-    if (node === undefined || typeof node === "boolean") return node === true;
-    node = node[String(segment)];
-  }
-  if (node === undefined) return false;
-  if (typeof node === "boolean") return node;
-  return isAnyTainted(node);
+  const go = (node: boolean | TaintedFields | undefined, rest: FormPath): boolean =>
+    Arr.match(rest, {
+      onEmpty: () =>
+        Predicate.isUndefined(node) ? false : Predicate.isBoolean(node) ? node : isAnyTainted(node),
+      onNonEmpty: (segments) =>
+        Predicate.isUndefined(node) || Predicate.isBoolean(node)
+          ? node === true
+          : go(node[String(Arr.headNonEmpty(segments))], Arr.tailNonEmpty(segments)),
+    });
+  return go(tainted, path);
 }
 
 /**
@@ -98,18 +105,14 @@ export function isTaintedAt(tainted: TaintedFields, path: FormPath): boolean {
  * which only says *something* changed).
  */
 export function taintedLeafPaths(tainted: TaintedFields): FormPath[] {
-  const out: FormPath[] = [];
-
-  const walk = (node: TaintedFields, path: Array<string | number>): void => {
-    for (const key of Object.keys(node)) {
-      const value = node[key];
-      if (value === undefined) continue;
+  const walk = (node: TaintedFields, path: Array<string | number>): FormPath[] =>
+    Arr.flatMap(Record.toEntries(node), ([key, value]): FormPath[] => {
+      if (Predicate.isUndefined(value)) return [];
       const segment: string | number = /^\d+$/.test(key) ? Number(key) : key;
-      if (value === true) out.push([...path, segment]);
-      else if (typeof value === "object") walk(value, [...path, segment]);
-    }
-  };
+      if (value === true) return [[...path, segment]];
+      if (isObject(value)) return walk(value, [...path, segment]);
+      return [];
+    });
 
-  walk(tainted, []);
-  return out;
+  return walk(tainted, []);
 }

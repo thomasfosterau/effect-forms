@@ -29,6 +29,7 @@
 
 import type { Issues } from "@thomasfosterau/effect-forms";
 import { Path } from "@thomasfosterau/effect-forms";
+import * as Arr from "effect/Array";
 import type * as Duration from "effect/Duration";
 import { computeTainted, taintedLeafPaths } from "./Tainted.ts";
 
@@ -87,11 +88,11 @@ export function dispatchChange(
   listeners: FormListeners | undefined,
 ): void {
   if (!listeners) return;
-  for (const event of changeEvents(before, after)) {
+  Arr.forEach(changeEvents(before, after), (event) => {
     listeners.onChange?.({ path: event.path, data: after });
     listeners.fields?.[Path.toString(event.path)]?.onChange?.({
       path: event.path,
       value: event.value,
     });
-  }
+  });
 }
