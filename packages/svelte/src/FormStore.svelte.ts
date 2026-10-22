@@ -42,6 +42,9 @@
  * @module effect-forms-svelte/FormStore
  */
 
+// fallow-ignore-file unused-class-member -- `FormStore` / `FieldHandle` members
+// are the published store API, read by consumers' Svelte templates and
+// scripts; nothing inside this repo is meant to call them.
 import {
   Constraints,
   Errors,

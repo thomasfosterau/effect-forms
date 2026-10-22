@@ -65,45 +65,6 @@ export default defineConfig({
       "effect/no-unknown-returns": "warn",
       "effect/no-unsafe-dictionary-type": "warn",
 
-      // ---- Effect preset: ported-code allowances ---------------------------
-      // The modules under packages/*/src predate the Effect oxlint preset.
-      // The rules below sit at `warn` so the code stays committable while each
-      // site stays reported; a new site is a defect, not headroom. Once a
-      // rule's count reaches zero its line is deleted, so it is back at the
-      // preset's `error`.
-      "effect/require-safety-comment-for-type-assertion": "warn",
-      "effect/imperative-loops": "warn",
-      "effect/prefer-effect-is": "warn",
-      "effect/no-runtime-typeof": "warn",
-      "effect/avoid-native-object-helpers": "warn",
-      "effect/avoid-direct-tag-checks": "warn",
-      "effect/no-known-value-widening": "warn",
-      "effect/no-length-comparison": "warn",
-      "effect/prefer-arr-match": "warn",
-      "effect/avoid-expect-in-if": "warn",
-      "effect/avoid-untagged-errors": "warn",
-      "effect/effect-run-in-body": "warn",
-      "effect/use-clock-service": "warn",
-      "effect/no-conditional-empty-object-spread": "warn",
-      "effect/avoid-any": "warn",
-      "effect/avoid-non-null-assertion": "warn",
-      "effect/no-chained-type-assertions": "warn",
-      "effect/prefer-match-over-switch": "warn",
-      "effect/avoid-try-catch": "warn",
-      "effect/avoid-process-env": "warn",
-      "effect/require-is-prefix-for-boolean-schema-field": "warn",
-      "effect/avoid-direct-json": "warn",
-      "effect/avoid-ts-ignore": "warn",
-      "effect/require-filter-metadata": "warn",
-      "effect/no-object-parameters": "warn",
-      "effect/no-barrel-imports": "warn",
-      "effect/avoid-schema-suffix": "warn",
-      "effect/prefer-arr-sort": "warn",
-      "effect/require-schema-type-alias": "warn",
-      "effect/no-service-constructor-imports": "warn",
-      "effect/effect-promise-vs-trypromise": "warn",
-      "effect/avoid-native-fetch": "warn",
-
       "vite-plus/prefer-vite-plus-imports": "error",
     },
     overrides: [
@@ -117,6 +78,77 @@ export default defineConfig({
         rules: {
           "effect/avoid-node-imports": "off",
           "effect/avoid-process-env": "off",
+        },
+      },
+      // Tests are the runtime boundary: `@effect/vitest` is not a dependency,
+      // so a suite runs its Effects with `Effect.runPromise` / `runSync`.
+      {
+        files: ["**/tests/**/*.ts"],
+        rules: {
+          "effect/effect-run-in-body": "off",
+        },
+      },
+      // Its expect-error directives ARE the assertions: each marks a
+      // `FieldPath` / `PathValue` misuse that must fail to compile.
+      {
+        files: ["packages/forms/tests/Path.test.ts"],
+        rules: {
+          "effect/avoid-ts-ignore": "off",
+        },
+      },
+      // Pins that the body encoder drops native `Map` / `Set` values, so the
+      // fixtures must be the native collections.
+      {
+        files: ["packages/svelte/tests/EnhanceCore.test.ts"],
+        rules: {
+          "effect/avoid-native-object-helpers": "off",
+        },
+      },
+      // The store is the browser's runtime boundary: its default submit is the
+      // platform `fetch` (an Effect HttpClient would add runtime weight to every
+      // consumer's bundle), it interrupts its own validator fibers with
+      // `Effect.runFork` from synchronous Svelte event / teardown code, and its
+      // submit wraps a caller's Promise handler in try / finally to reset
+      // `submitting` / `delayed` at exactly the point it does today.
+      {
+        files: ["packages/svelte/src/FormStore.svelte.ts"],
+        rules: {
+          "effect/avoid-native-fetch": "off",
+          "effect/effect-run-in-body": "off",
+          "effect/avoid-try-catch": "off",
+        },
+      },
+      // `validateValueSync` is the published synchronous API; its
+      // `Effect.runSync` is the boundary by design.
+      {
+        files: ["packages/forms/src/Validate.ts"],
+        rules: {
+          "effect/effect-run-in-body": "off",
+        },
+      },
+      // `structuredFromField`'s contract (tested) is to throw the platform
+      // `SyntaxError` on malformed JSON, which only `JSON.parse` produces.
+      {
+        files: ["packages/forms/src/Command.ts"],
+        rules: {
+          "effect/avoid-direct-json": "off",
+        },
+      },
+      // `valid` / `posted` are fields of the published `FormState` wire
+      // format (`FormStateSchema`); renaming them breaks every consumer.
+      {
+        files: ["packages/forms/src/State.ts"],
+        rules: {
+          "effect/require-is-prefix-for-boolean-schema-field": "off",
+        },
+      },
+      // A builder `refine` becomes an anonymous, per-form filter; an
+      // `identifier` / `title` / `description` would surface as JSON Schema
+      // annotations in the caller's own schema.
+      {
+        files: ["packages/forms/src/FormBuilder.ts"],
+        rules: {
+          "effect/require-filter-metadata": "off",
         },
       },
     ],

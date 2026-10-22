@@ -99,6 +99,22 @@ const toStructured = (input: FormInput): Effect.Effect<Record<string, unknown> |
  * its requirements are the schema's decoding services) and `empty()` seeds a
  * blank form from `defaults`. The returned {@link Form} is stateless and
  * reusable across requests.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect"
+ * import * as Schema from "effect/Schema"
+ * import { Form } from "@thomasfosterau/effect-forms"
+ *
+ * const signup = Form.make(
+ *   Schema.Struct({ name: Schema.String.check(Schema.isMinLength(2)) }),
+ *   { id: "signup", defaults: { name: "" } },
+ * )
+ *
+ * const state = Effect.runSync(signup.validate(new URLSearchParams({ name: "A" })))
+ * console.log(state.valid) // false
+ * console.log(state.data) // { name: "A" } — the posted value, kept for re-render
+ * ```
  */
 export function make<S extends Schema.Top, Message = unknown>(
   schema: S,

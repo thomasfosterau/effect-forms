@@ -269,6 +269,19 @@ function mergeConstraints(base: InputConstraints, overrides: InputConstraints): 
  * Derive the {@link InputConstraints} for a struct schema. Non-struct schemas
  * yield an empty tree. `overrides` (deep-merged over the derived tree, and
  * winning on conflict) is the seam for anything the AST walk does not infer.
+ *
+ * @example
+ * ```ts
+ * import * as Schema from "effect/Schema"
+ * import { Constraints } from "@thomasfosterau/effect-forms"
+ *
+ * const Signup = Schema.Struct({
+ *   name: Schema.String.check(Schema.isMinLength(2)),
+ *   nickname: Schema.optional(Schema.String),
+ * })
+ * console.log(Constraints.constraintsFromSchema(Signup))
+ * // { name: { required: true, minlength: 2 }, nickname: { required: false } }
+ * ```
  */
 export function constraintsFromSchema(
   schema: Schema.Top,

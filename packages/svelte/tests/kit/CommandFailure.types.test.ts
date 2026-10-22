@@ -16,6 +16,6 @@ describe("CommandFailure.ErrorObject", () => {
   });
 
   it("accepts what the test fixtures raise", () => {
-    expectTypeOf<typeof FixtureErrorObject.Type>().toExtend<CommandFailure.ErrorObject>();
+    expectTypeOf<FixtureErrorObject>().toExtend<CommandFailure.ErrorObject>();
   });
 });

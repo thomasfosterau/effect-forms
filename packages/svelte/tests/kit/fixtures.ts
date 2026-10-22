@@ -13,7 +13,7 @@
  */
 import * as Schema from "effect/Schema";
 
-export const ErrorObject = Schema.Struct({
+const ErrorObject = Schema.Struct({
   status: Schema.optionalKey(Schema.String),
   code: Schema.optionalKey(Schema.String),
   title: Schema.optionalKey(Schema.String),
@@ -44,7 +44,7 @@ export class ApiError extends Error {
   }
 }
 
-export class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", {
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", {
   message: Schema.String,
 }) {}
 

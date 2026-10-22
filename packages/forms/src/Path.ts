@@ -47,6 +47,16 @@ export function getAt(obj: unknown, path: FormPath): unknown {
  * arrays along the path are cloned (structural sharing elsewhere); missing
  * containers are created as arrays for numeric segments and objects otherwise.
  * The empty path returns `value`. Pure — `obj` is never mutated.
+ *
+ * @example
+ * ```ts
+ * import { Path } from "@thomasfosterau/effect-forms"
+ *
+ * const before = { authors: [{ name: "Ada" }] }
+ * const after = Path.setAt(before, ["authors", 0, "name"], "Grace")
+ * console.log(Path.getAt(after, ["authors", 0, "name"])) // "Grace"
+ * console.log(before.authors[0]?.name) // "Ada" — the input is untouched
+ * ```
  */
 export function setAt<T>(obj: T, path: FormPath, value: unknown): T {
   return Arr.match(path, {

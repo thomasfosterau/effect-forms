@@ -110,6 +110,19 @@ function entriesOf(source: FormBodySource): Iterable<readonly [string, unknown]>
  * bracket path notation (see {@link parseFieldPath}); repeated bare keys
  * become arrays; `File` values pass through. The result is ready to hand to
  * `Schema.decodeUnknown` with a schema whose leaves coerce the string inputs.
+ *
+ * @example
+ * ```ts
+ * import { FormData } from "@thomasfosterau/effect-forms"
+ *
+ * const body = new URLSearchParams([
+ *   ["author.name", "Ada"],
+ *   ["tags[]", "math"],
+ *   ["tags[]", "engines"],
+ * ])
+ * console.log(FormData.formDataToObject(body))
+ * // { author: { name: "Ada" }, tags: ["math", "engines"] }
+ * ```
  */
 export function formDataToObject(source: FormBodySource): Record<string, unknown> {
   return Arr.reduce(entriesOf(source), Rec.empty<string, unknown>(), (root, [name, value]) => {
