@@ -30,8 +30,14 @@
  * @module effect-forms/Command
  */
 
+import * as Arr from "effect/Array";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaParser from "effect/SchemaParser";
 import {
   emptyToNull,
   emptyToUndefined,
@@ -86,6 +92,20 @@ export type AdaptOverrides = Readonly<Record<string, (raw: string | undefined) =
 /** A validated all-string multipart input, as the Form-Input schemas produce it. */
 export type FormInputRecord = Readonly<Record<string, string | undefined>>;
 
+// ── errors ────────────────────────────────────────────────────────────
+
+/** A command field {@link plan} cannot classify into any {@link FieldKind}. */
+class UnclassifiableFieldError extends Schema.TaggedError<UnclassifiableFieldError>()(
+  "UnclassifiableFieldError",
+  { message: Schema.String },
+) {}
+
+/** A malformed `jsonArray` field payload, as {@link jsonRowsFromField} rejects it. */
+class InvalidJsonRowsError extends Schema.TaggedError<InvalidJsonRowsError>()(
+  "InvalidJsonRowsError",
+  { message: Schema.String },
+) {}
+
 // ── probes ────────────────────────────────────────────────────────────
 
 /**
@@ -93,19 +113,18 @@ export type FormInputRecord = Readonly<Record<string, string | undefined>>;
  * value for instance checks (the date probe needs to see a `Date` come out,
  * not just a successful decode).
  */
-const probe = (
-  schema: Schema.Top,
-  input: unknown,
-): { readonly ok: boolean; readonly value?: unknown } => {
-  try {
-    return { ok: true, value: Schema.decodeUnknownSync(schema as Schema.Codec<unknown>)(input) };
-  } catch {
-    return { ok: false };
-  }
+const probe = (schema: Schema.Top, input: unknown): Exit.Exit<unknown, unknown> => {
+  // SAFETY: the cast only drops `schema`'s decoding-service requirement. The
+  // decode runs to an `Exit`, so a schema that does need a service (or decodes
+  // asynchronously, or throws) yields a failed `Exit` — which a probe reads as
+  // "does not decode", exactly as it reads an ordinary schema issue.
+  const decoder = schema as Schema.Codec<unknown>;
+  return SchemaParser.decodeUnknownExit(decoder)(input);
 };
 
-/** True when a schema decodes the given input without throwing. */
-const decodes = (schema: Schema.Top, input: unknown): boolean => probe(schema, input).ok;
+/** True when a schema decodes the given input without failing. */
+const decodes = (schema: Schema.Top, input: unknown): boolean =>
+  Exit.isSuccess(probe(schema, input));
 
 /** A syntactically valid UUID no other field kind accepts as non-text. */
 const PROBE_UUID = "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f";
@@ -122,13 +141,10 @@ const PROBE_UUID = "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f";
  * `enumOptions` below needs the full literal set, not just one branch of it.
  */
 function unwrapWrapperUnion(ast: SchemaAST.AST): SchemaAST.AST {
-  let current = ast;
-  while (SchemaAST.isUnion(current)) {
-    const real = current.types.filter((t) => !SchemaAST.isUndefined(t) && !SchemaAST.isNull(t));
-    if (real.length !== 1 || real.length === current.types.length) break;
-    current = real[0];
-  }
-  return current;
+  if (!SchemaAST.isUnion(ast)) return ast;
+  const real = Arr.filter(ast.types, (t) => !SchemaAST.isUndefined(t) && !SchemaAST.isNull(t));
+  if (real.length !== 1 || real.length === ast.types.length) return ast;
+  return unwrapWrapperUnion(real[0]);
 }
 
 /**
@@ -142,9 +158,9 @@ function enumOptions(ast: SchemaAST.AST): readonly string[] | undefined {
   const inner = unwrapWrapperUnion(ast);
   if (SchemaAST.isLiteral(inner)) return [String(inner.literal)];
   if (SchemaAST.isUnion(inner)) {
-    const literals = inner.types.filter(SchemaAST.isLiteral);
-    if (literals.length === inner.types.length && literals.length > 0) {
-      return literals.map((literal) => String(literal.literal));
+    const literals = Arr.filter(inner.types, SchemaAST.isLiteral);
+    if (Arr.isReadonlyArrayNonEmpty(literals) && literals.length === inner.types.length) {
+      return Arr.map(literals, (literal) => String(literal.literal));
     }
   }
   return undefined;
@@ -180,7 +196,7 @@ const probeKind = (schema: Schema.Top): FieldKind | undefined => {
   if (decodes(schema, true)) return "boolean";
   if (decodes(schema, 42)) return "number";
   const date = probe(schema, "2024-01-02T03:04:05.000Z");
-  if (date.ok && date.value instanceof Date) return "date";
+  if (Exit.isSuccess(date) && date.value instanceof Date) return "date";
   if (decodes(schema, PROBE_UUID) && !decodes(schema, "not-a-uuid")) return "id";
   if (decodes(schema, "plain text")) return "text";
   return undefined;
@@ -206,9 +222,9 @@ const classify = (key: string, schema: Schema.Top): Classification => {
   const probed = probeKind(schema);
   if (probed !== undefined) return { kind: probed };
   if (isStructured(schema.ast)) return { kind: "structured" };
-  throw new Error(
-    `Command.plan: field "${key}" matches no known kind (text/id/number/date/jsonArray/boolean/enum/structured) — a Schema.declare'd type needs an explicit form-level treatment before it can derive`,
-  );
+  throw new UnclassifiableFieldError({
+    message: `Command.plan: field "${key}" matches no known kind (text/id/number/date/jsonArray/boolean/enum/structured) — a Schema.declare'd type needs an explicit form-level treatment before it can derive`,
+  });
 };
 
 // ── plan ──────────────────────────────────────────────────────────────
@@ -226,24 +242,24 @@ interface StructLike {
 export const plan = (create: StructLike, update: StructLike): CommandPlan => {
   const createFields = create.fields;
   const updateFields = update.fields;
-  const keys: string[] = [];
-  for (const key in updateFields) if (key !== "id") keys.push(key);
-  for (const key in createFields) if (key !== "id" && !(key in updateFields)) keys.push(key);
+  const keys = [
+    ...Arr.filter(Rec.keys(updateFields), (key) => key !== "id"),
+    ...Arr.filter(Rec.keys(createFields), (key) => key !== "id" && !(key in updateFields)),
+  ];
 
-  const fields = keys.map((key): FieldPlan => {
+  const fields = Arr.map(keys, (key): FieldPlan => {
     const createField = createFields[key];
     const updateField = updateFields[key];
-    const probeTarget = (createField ?? updateField) as Schema.Top;
-    const { kind, options } = classify(key, probeTarget);
-    return {
+    const { kind, options } = classify(key, createField ?? updateField);
+    const fieldPlan: FieldPlan = {
       key,
       kind,
       inCreate: createField !== undefined,
       createRequired: createField !== undefined && !decodes(createField, undefined),
       inUpdate: updateField !== undefined,
       updateClearable: updateField !== undefined && decodes(updateField, null),
-      ...(options !== undefined ? { options } : {}),
     };
+    return options === undefined ? fieldPlan : { ...fieldPlan, options };
   });
 
   return { fields, clientId: "id" in createFields };
@@ -263,17 +279,28 @@ export const formInputFields = (
   mode: "create" | "update",
   overrides: Readonly<Record<string, Schema.Top>> = {},
 ): Record<string, Schema.Top> => {
-  const fields: Record<string, Schema.Top> = {};
-  if (mode === "create" && commandPlan.clientId) fields.id = Schema.optional(Schema.String);
-  if (mode === "update") fields.id = Schema.String.check(Schema.isUUID());
-  for (const field of commandPlan.fields) {
-    if (mode === "create" ? !field.inCreate : !field.inUpdate) continue;
-    fields[field.key] =
-      mode === "create" && field.createRequired
-        ? Schema.String.check(Schema.isMinLength(1))
-        : Schema.optional(Schema.String);
-  }
-  return { ...fields, ...overrides };
+  const idField: Array<readonly [string, Schema.Top]> =
+    mode === "update"
+      ? [["id", Schema.String.check(Schema.isUUID())]]
+      : commandPlan.clientId
+        ? [["id", Schema.optional(Schema.String)]]
+        : [];
+  const planFields = Arr.flatMap(
+    commandPlan.fields,
+    (field): Array<readonly [string, Schema.Top]> => {
+      if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
+      return [
+        [
+          field.key,
+          mode === "create" && field.createRequired
+            ? Schema.String.check(Schema.isMinLength(1))
+            : Schema.optional(Schema.String),
+        ],
+      ];
+    },
+  );
+  // Overrides come last, so an override replaces a derived field in place.
+  return Rec.fromEntries([...idField, ...planFields, ...Rec.toEntries(overrides)]);
 };
 
 /**
@@ -285,13 +312,13 @@ export const blankDefaults = (
   commandPlan: CommandPlan,
   mode: "create" | "update",
 ): Record<string, string> => {
-  const defaults: Record<string, string> = {};
-  if (mode === "update" || commandPlan.clientId) defaults.id = "";
-  for (const field of commandPlan.fields) {
-    if (mode === "create" ? !field.inCreate : !field.inUpdate) continue;
-    defaults[field.key] = "";
-  }
-  return defaults;
+  const keys = [
+    ...(mode === "update" || commandPlan.clientId ? ["id"] : []),
+    ...Arr.flatMap(commandPlan.fields, (field) =>
+      (mode === "create" ? field.inCreate : field.inUpdate) ? [field.key] : [],
+    ),
+  ];
+  return Rec.fromEntries(Arr.map(keys, (key) => [key, ""] as const));
 };
 
 // ── adapters ──────────────────────────────────────────────────────────
@@ -316,31 +343,41 @@ export const jsonRowsFromField = (
     }[]
   | undefined => {
   if (raw === undefined || raw.trim() === "") return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`Invalid ${label} payload — expected JSON array`);
+  const decoded = decodeJson(raw);
+  if (Exit.isFailure(decoded)) {
+    throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected JSON array` });
   }
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Invalid ${label} payload — expected array`);
+  const parsed = decoded.value;
+  if (!Arr.isArray(parsed)) {
+    throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected array` });
   }
-  return parsed.map((row, index) => {
-    if (typeof row !== "object" || row === null) {
-      throw new Error(`Invalid ${label} entry at index ${index}`);
+  return Arr.map(parsed, (row, index) => {
+    if (!Predicate.isObjectOrArray(row)) {
+      throw new InvalidJsonRowsError({ message: `Invalid ${label} entry at index ${index}` });
     }
-    const r = row as Record<string, unknown>;
-    if (typeof r.agentId !== "string") {
-      throw new Error(`${label} entry at index ${index} missing agentId`);
+    // `row[key]`, `undefined` when absent — what a plain property read gives.
+    const propertyOf = (key: string): unknown =>
+      Predicate.hasProperty(row, key) ? row[key] : undefined;
+    const agentId = propertyOf("agentId");
+    if (!Predicate.isString(agentId)) {
+      throw new InvalidJsonRowsError({
+        message: `${label} entry at index ${index} missing agentId`,
+      });
     }
+    const id = propertyOf("id");
+    const creditedName = propertyOf("creditedName");
+    const orderingPosition = propertyOf("orderingPosition");
     return {
-      id: typeof r.id === "string" ? r.id : undefined,
-      agentId: r.agentId,
-      creditedName: typeof r.creditedName === "string" ? r.creditedName : undefined,
-      orderingPosition: typeof r.orderingPosition === "number" ? r.orderingPosition : index,
+      id: Predicate.isString(id) ? id : undefined,
+      agentId,
+      creditedName: Predicate.isString(creditedName) ? creditedName : undefined,
+      orderingPosition: Predicate.isNumber(orderingPosition) ? orderingPosition : index,
     };
   });
 };
+
+/** Parse a JSON text (`JSON.parse` semantics) to a success or a failed `Exit`. */
+const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
 /** Coercion context for one field in one mode. */
 interface CoerceContext {
@@ -414,24 +451,35 @@ const coerceContextFor = (field: FieldPlan, mode: "create" | "update"): CoerceCo
 /** The default coercion for one field in one mode. */
 const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undefined): unknown => {
   const ctx = coerceContextFor(field, mode);
-  switch (field.kind) {
-    case "text":
-    case "enum":
-      return coerceText(ctx, raw);
-    case "id":
-      return coerceId(ctx, raw);
-    case "number":
-      return coerceNumber(ctx, raw);
-    case "date":
-      return coerceDate(ctx, raw);
-    case "jsonArray":
-      return jsonRowsFromField(raw, field.key);
-    case "boolean":
-      return coerceBoolean(ctx, raw);
-    case "structured":
-      return structuredFromField(raw, ctx.clearable);
-  }
+  return Match.value(field.kind).pipe(
+    Match.when(Match.is("text", "enum"), () => coerceText(ctx, raw)),
+    Match.when("id", () => coerceId(ctx, raw)),
+    Match.when("number", () => coerceNumber(ctx, raw)),
+    Match.when("date", () => coerceDate(ctx, raw)),
+    Match.when("jsonArray", () => jsonRowsFromField(raw, field.key)),
+    Match.when("boolean", () => coerceBoolean(ctx, raw)),
+    Match.when("structured", () => structuredFromField(raw, ctx.clearable)),
+    Match.exhaustive,
+  );
 };
+
+/**
+ * Adapt every field of `commandPlan` present in `mode`, in plan order, to a
+ * `[key, value]` entry: through the field's override when it has one, else
+ * the default {@link coerce}.
+ */
+const adaptFields = (
+  commandPlan: CommandPlan,
+  overrides: AdaptOverrides,
+  mode: "create" | "update",
+  input: FormInputRecord,
+): Array<readonly [string, unknown]> =>
+  Arr.flatMap(commandPlan.fields, (field): Array<readonly [string, unknown]> => {
+    if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
+    const override = overrides[field.key];
+    const raw = input[field.key];
+    return [[field.key, override ? override(raw) : coerce(field, mode, raw)]];
+  });
 
 /**
  * Derive the create adapter: validated all-string input → encoded create
@@ -440,18 +488,11 @@ const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undef
  */
 export const createAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
-  (input: FormInputRecord): Record<string, unknown> => {
-    const out: Record<string, unknown> = {};
-    if (commandPlan.clientId) out.id = trimToUndefined(input.id);
-    for (const field of commandPlan.fields) {
-      if (!field.inCreate) continue;
-      const override = overrides[field.key];
-      out[field.key] = override
-        ? override(input[field.key])
-        : coerce(field, "create", input[field.key]);
-    }
-    return out;
-  };
+  (input: FormInputRecord): Record<string, unknown> =>
+    Rec.fromEntries([
+      ...(commandPlan.clientId ? [["id", trimToUndefined(input.id)] as const] : []),
+      ...adaptFields(commandPlan, overrides, "create", input),
+    ]);
 
 /**
  * Derive the update adapter: validated all-string input → encoded update
@@ -461,14 +502,8 @@ export const createAdapter =
  */
 export const updateAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
-  (input: FormInputRecord): Record<string, unknown> => {
-    const out: Record<string, unknown> = { id: input.id };
-    for (const field of commandPlan.fields) {
-      if (!field.inUpdate) continue;
-      const override = overrides[field.key];
-      out[field.key] = override
-        ? override(input[field.key])
-        : coerce(field, "update", input[field.key]);
-    }
-    return out;
-  };
+  (input: FormInputRecord): Record<string, unknown> =>
+    Rec.fromEntries([
+      ["id", input.id] as const,
+      ...adaptFields(commandPlan, overrides, "update", input),
+    ]);

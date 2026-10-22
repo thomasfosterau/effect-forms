@@ -60,7 +60,7 @@ export function numberFromField(
   { nullable }: { nullable: boolean },
 ): number | null | undefined {
   const coerced = nullable ? emptyToNull(raw) : emptyToUndefined(raw);
-  return typeof coerced === "string" ? Number(coerced) : coerced;
+  return coerced === undefined || coerced === null ? coerced : Number(coerced);
 }
 
 /**

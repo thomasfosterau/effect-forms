@@ -20,6 +20,9 @@
  * @module effect-forms/Errors
  */
 
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import type { FormIssue, FormPath } from "./Issues.ts";
 import { type IndexMap, remapIndex } from "./Path.ts";
 
@@ -53,10 +56,12 @@ export type TypedFormErrors<A> = [NonNullable<A>] extends [ReadonlyArray<infer E
     : readonly string[];
 
 /** Mutable mirror of {@link FormErrors} used while building a tree. */
-type MutableNode = { [key: string]: string[] | MutableNode | undefined };
+interface MutableNode {
+  [key: string]: string[] | MutableNode | undefined;
+}
 
-const isMessageList = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every((v) => typeof v === "string");
+const isMessageList = <T>(value: T): value is Extract<T, readonly string[]> =>
+  Arr.isArray(value) && Arr.every(value, Predicate.isString);
 
 const ownErrors = (node: MutableNode): string[] => {
   const existing = node[ROOT_ERROR_KEY];
@@ -67,15 +72,26 @@ const ownErrors = (node: MutableNode): string[] => {
 };
 
 /**
- * If `node[key]` is a leaf's message list, convert it in place into a branch
- * carrying those same messages as its own {@link ROOT_ERROR_KEY} (a path used
- * as a leaf is now needed as a branch too) — a no-op when `node[key]` is
- * already a branch or absent. Shared by {@link insert} and {@link setLeaf}'s
- * path-descent, the one piece of their branch-walking that's identical.
+ * Return the branch at `node[key]`, making one in place if needed: an absent
+ * key gets a new empty branch, and a leaf's message list is converted into a
+ * branch carrying those same messages as its own {@link ROOT_ERROR_KEY} (a
+ * path used as a leaf is now needed as a branch too). Shared by {@link insert}
+ * and {@link setLeaf}'s path-descent, the one piece of their branch-walking
+ * that's identical.
  */
-const promoteLeafToBranch = (node: MutableNode, key: string): void => {
+const branchAt = (node: MutableNode, key: string): MutableNode => {
   const existing = node[key];
-  if (isMessageList(existing)) node[key] = { [ROOT_ERROR_KEY]: existing };
+  if (existing === undefined) {
+    const created: MutableNode = {};
+    node[key] = created;
+    return created;
+  }
+  if (isMessageList(existing)) {
+    const promoted: MutableNode = { [ROOT_ERROR_KEY]: existing };
+    node[key] = promoted;
+    return promoted;
+  }
+  return existing;
 };
 
 /**
@@ -86,20 +102,16 @@ const promoteLeafToBranch = (node: MutableNode, key: string): void => {
  * tree root's {@link ROOT_ERROR_KEY}.
  */
 const insert = (root: MutableNode, path: FormPath, message: string): void => {
-  if (path.length === 0) {
+  if (!Arr.isReadonlyArrayNonEmpty(path)) {
     ownErrors(root).push(message);
     return;
   }
 
-  let node = root;
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = String(path[i]);
-    if (node[key] === undefined) node[key] = {};
-    else promoteLeafToBranch(node, key);
-    node = node[key] as MutableNode;
-  }
+  const node = Arr.reduce(Arr.initNonEmpty(path), root, (parent, segment) =>
+    branchAt(parent, String(segment)),
+  );
 
-  const last = String(path[path.length - 1]);
+  const last = String(Arr.lastNonEmpty(path));
   const existing = node[last];
   if (existing === undefined) {
     node[last] = [message];
@@ -114,7 +126,7 @@ const insert = (root: MutableNode, path: FormPath, message: string): void => {
 /** Build a nested {@link FormErrors} tree from a flat list of {@link FormIssue}s. */
 export function issuesToErrors(issues: ReadonlyArray<FormIssue>): FormErrors {
   const root: MutableNode = {};
-  for (const issue of issues) insert(root, issue.path, issue.message);
+  Arr.forEach(issues, (issue) => insert(root, issue.path, issue.message));
   return root;
 }
 
@@ -124,32 +136,26 @@ export function issuesToErrors(issues: ReadonlyArray<FormIssue>): FormErrors {
  * ordering within a single field).
  */
 export function flattenErrors(errors: FormErrors): FormIssue[] {
-  const out: FormIssue[] = [];
-
-  const walk = (node: FormErrors, path: Array<string | number>): void => {
-    for (const key of Object.keys(node)) {
-      const value = node[key];
-      if (value === undefined) continue;
+  const walk = (node: FormErrors, path: Array<string | number>): Array<FormIssue> =>
+    Arr.flatMap(Rec.keys<string, FormErrors[string]>(node), (key): Array<FormIssue> => {
       if (key === ROOT_ERROR_KEY) {
-        for (const message of value as readonly string[]) out.push({ path, message });
-        continue;
+        return Arr.map(node[ROOT_ERROR_KEY] ?? [], (message) => ({ path, message }));
       }
+      const value = node[key];
+      if (value === undefined) return [];
       const segment: string | number = /^\d+$/.test(key) ? Number(key) : key;
       if (isMessageList(value)) {
-        for (const message of value) out.push({ path: [...path, segment], message });
-      } else {
-        walk(value, [...path, segment]);
+        return Arr.map(value, (message) => ({ path: [...path, segment], message }));
       }
-    }
-  };
+      return walk(value, [...path, segment]);
+    });
 
-  walk(errors, []);
-  return out;
+  return walk(errors, []);
 }
 
 /** Whether the tree carries any message anywhere. */
 export function hasErrors(errors: FormErrors): boolean {
-  return flattenErrors(errors).length > 0;
+  return Arr.isReadonlyArrayNonEmpty(flattenErrors(errors));
 }
 
 /**
@@ -158,11 +164,14 @@ export function hasErrors(errors: FormErrors): boolean {
  * messages.
  */
 export function getError(errors: FormErrors, path: FormPath): readonly string[] | undefined {
-  let node: FormErrors | readonly string[] | undefined = errors;
-  for (const segment of path) {
-    if (node === undefined || isMessageList(node)) return undefined;
-    node = node[String(segment)];
-  }
+  // Once the walk leaves the tree (an absent key, or a leaf with path left
+  // over) the accumulator is `undefined`, and stays so for every later segment.
+  const node = Arr.reduce<string | number, FormErrors | readonly string[] | undefined>(
+    path,
+    errors,
+    (current, segment) =>
+      current === undefined || isMessageList(current) ? undefined : current[String(segment)],
+  );
   if (node === undefined) return undefined;
   if (isMessageList(node)) return node;
   return node[ROOT_ERROR_KEY];
@@ -170,7 +179,10 @@ export function getError(errors: FormErrors, path: FormPath): readonly string[] 
 
 /** Return a new tree with `message` added at `path`. Pure. */
 export function setError(errors: FormErrors, path: FormPath, message: string): FormErrors {
-  const next = structuredClone(errors) as unknown as MutableNode;
+  // SAFETY: `structuredClone` returns a fresh deep copy that nothing else
+  // references, and `MutableNode` is `FormErrors` minus `readonly`, so
+  // mutating the copy in place cannot be observed through `errors`.
+  const next = structuredClone(errors) as MutableNode;
   insert(next, path, message);
   return next;
 }
@@ -190,12 +202,12 @@ export const noErrors: FormErrors = {};
  * Messages whose index maps to `null` are dropped. Pure.
  */
 export function remapIndices(errors: FormErrors, arrayPath: FormPath, map: IndexMap): FormErrors {
-  const remapped: FormIssue[] = [];
-  for (const issue of flattenErrors(errors)) {
-    const path = remapIndex(issue.path, arrayPath, map);
-    if (path !== null) remapped.push({ path, message: issue.message });
-  }
-  return issuesToErrors(remapped);
+  return issuesToErrors(
+    Arr.flatMap(flattenErrors(errors), (issue) => {
+      const path = remapIndex(issue.path, arrayPath, map);
+      return path === null ? [] : [{ path, message: issue.message }];
+    }),
+  );
 }
 
 /**
@@ -212,68 +224,66 @@ export function replaceAt(
   path: FormPath,
   messages: readonly string[],
 ): FormErrors {
-  const next = structuredClone(errors) as unknown as MutableNode;
+  // SAFETY: `structuredClone` returns a fresh deep copy that nothing else
+  // references, and `MutableNode` is `FormErrors` minus `readonly`, so
+  // mutating the copy in place cannot be observed through `errors`.
+  const next = structuredClone(errors) as MutableNode;
   setLeaf(next, path, messages);
   return next;
 }
 
 const setLeaf = (root: MutableNode, path: FormPath, messages: readonly string[]): void => {
-  if (path.length === 0) {
+  if (!Arr.isReadonlyArrayNonEmpty(path)) {
     setOwnMessages(root, messages);
     return;
   }
-  const parent = descendClearing(root, path, messages);
+  const parent = descendClearing(root, Arr.initNonEmpty(path), messages);
   if (parent === undefined) return; // an absent branch on the clearing path — nothing to clear
-  setLeafMessages(parent, String(path[path.length - 1]), messages);
+  setLeafMessages(parent, String(Arr.lastNonEmpty(path)), messages);
 };
 
 /** Set or clear a node's own {@link ROOT_ERROR_KEY} messages. */
 const setOwnMessages = (node: MutableNode, messages: readonly string[]): void => {
-  if (messages.length === 0) delete node[ROOT_ERROR_KEY];
+  if (Arr.isReadonlyArrayEmpty(messages)) delete node[ROOT_ERROR_KEY];
   else node[ROOT_ERROR_KEY] = [...messages];
 };
 
 /**
- * Walk to `path`'s parent branch, creating branches as needed. When
+ * Walk down the `parents` segments (a path minus its last segment) to the
+ * leaf's parent branch, creating branches as needed. When
  * `messages` is empty (a clear, not a set) a missing branch means there is
  * nothing to clear — descent stops early and returns `undefined` rather than
  * creating empty branches just to immediately no-op inside them.
  */
 const descendClearing = (
   root: MutableNode,
-  path: FormPath,
+  parents: FormPath,
   messages: readonly string[],
-): MutableNode | undefined => {
-  let node = root;
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = String(path[i]);
-    if (node[key] === undefined) {
-      if (messages.length === 0) return undefined;
-      node[key] = {};
-    } else {
-      promoteLeafToBranch(node, key);
-    }
-    node = node[key] as MutableNode;
-  }
-  return node;
-};
+): MutableNode | undefined =>
+  // Once a clear meets an absent branch the accumulator is `undefined`, and
+  // every later segment leaves the tree untouched.
+  Arr.reduce<string | number, MutableNode | undefined>(parents, root, (node, segment) => {
+    if (node === undefined) return undefined;
+    const key = String(segment);
+    if (node[key] === undefined && Arr.isReadonlyArrayEmpty(messages)) return undefined;
+    return branchAt(node, key);
+  });
 
 /** Set or clear `node[key]`'s messages — a leaf's list, or (if it's already a branch) its own {@link ROOT_ERROR_KEY}. */
 const setLeafMessages = (node: MutableNode, key: string, messages: readonly string[]): void => {
   const existing = node[key];
   if (existing === undefined) {
-    if (messages.length > 0) node[key] = [...messages];
+    if (Arr.isReadonlyArrayNonEmpty(messages)) node[key] = [...messages];
     return;
   }
   if (isMessageList(existing)) {
-    if (messages.length === 0) delete node[key];
+    if (Arr.isReadonlyArrayEmpty(messages)) delete node[key];
     else node[key] = [...messages];
     return;
   }
   // Already a branch (has nested children) — replace its own messages,
   // preserving the children.
-  if (messages.length === 0) delete existing[ROOT_ERROR_KEY];
-  else existing[ROOT_ERROR_KEY] = [...messages];
+  setOwnMessages(existing, messages);
 };
 
 /**

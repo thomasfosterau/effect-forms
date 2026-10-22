@@ -31,6 +31,10 @@
  * @module effect-forms/Constraints
  */
 
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as SchemaRepresentation from "effect/SchemaRepresentation";
@@ -75,26 +79,20 @@ const isOptional = (type: SchemaAST.AST): boolean => type.context?.isOptional ==
  */
 function unwrapOptional(type: SchemaAST.AST): SchemaAST.AST {
   if (!SchemaAST.isUnion(type)) return type;
-  for (const member of type.types) {
-    if (SchemaAST.isUndefined(member) || SchemaAST.isNull(member)) continue;
-    return unwrapOptional(member);
-  }
-  return type;
+  return Arr.findFirst(
+    type.types,
+    (member) => !SchemaAST.isUndefined(member) && !SchemaAST.isNull(member),
+  ).pipe(Option.match({ onNone: () => type, onSome: unwrapOptional }));
 }
 
 /** Flatten a `Checks` array (recursing into `FilterGroup`s) into individual filters. */
 function flattenChecks(
-  checks: SchemaAST.Checks | undefined,
-  out: Array<SchemaAST.Filter<unknown>>,
-): void {
-  if (!checks) return;
-  for (const check of checks) {
-    if (check._tag === "FilterGroup") {
-      flattenChecks(check.checks as SchemaAST.Checks, out);
-    } else {
-      out.push(check as SchemaAST.Filter<unknown>);
-    }
-  }
+  checks: ReadonlyArray<SchemaAST.Check<never>> | undefined,
+): Array<SchemaAST.Filter<never>> {
+  if (checks === undefined) return [];
+  return Arr.flatMap(checks, (check) =>
+    Predicate.isTagged(check, "FilterGroup") ? flattenChecks(check.checks) : [check],
+  );
 }
 
 /** A same-shape, mutable patch of {@link InputConstraint} fields. */
@@ -127,9 +125,7 @@ interface CheckPayloads {
  * `step` as a fallback when nothing more specific already did, so it's
  * handled separately in {@link constraintFromChecks}.
  */
-const payloadPatches: {
-  readonly [K in keyof CheckPayloads]: (payload: CheckPayloads[K]) => ConstraintPatch;
-} = {
+const payloadPatches = {
   "effect/schema/isMinLength": (p) => ({ minlength: p.minLength }),
   "effect/schema/isMaxLength": (p) => ({ maxlength: p.maxLength }),
   "effect/schema/isBetweenLength": (p) => ({ minlength: p.minimum, maxlength: p.maximum }),
@@ -140,7 +136,13 @@ const payloadPatches: {
   "effect/schema/isLessThanOrEqualTo": (p) => ({ max: p.maximum }),
   "effect/schema/isBetween": (p) => ({ min: p.minimum, max: p.maximum }),
   "effect/schema/isMultipleOf": (p) => ({ step: p.divisor }),
+} satisfies {
+  readonly [K in keyof CheckPayloads]: (payload: CheckPayloads[K]) => ConstraintPatch;
 };
+
+/** Whether `id` names a check {@link payloadPatches} has a patch for (an own key, never an inherited one). */
+const isPatchedCheckId = (id: string): id is keyof CheckPayloads =>
+  Rec.has<string, unknown>(payloadPatches, id);
 
 /**
  * Look up and apply `payloadPatches[representation.id]`. The cast is sound:
@@ -150,10 +152,14 @@ const payloadPatches: {
 function applyPayloadPatch(
   representation: SchemaRepresentation.RepresentationAnnotation,
 ): ConstraintPatch | undefined {
-  const patch = payloadPatches[representation.id as keyof CheckPayloads] as
-    | ((payload: Schema.Json) => ConstraintPatch)
-    | undefined;
-  return patch?.(representation.payload);
+  const id = representation.id;
+  if (!isPatchedCheckId(id)) return undefined;
+  // SAFETY: every `effect/schema/is*` id in `CheckPayloads` is the
+  // representation id of one of Effect's built-in checks, which publishes its
+  // `payload` in exactly the shape `CheckPayloads` records for that id — so
+  // the patch for `id` accepts this representation's payload.
+  const patch = payloadPatches[id] as (payload: Schema.Json) => ConstraintPatch;
+  return patch(representation.payload);
 }
 
 /**
@@ -165,24 +171,25 @@ function applyPayloadPatch(
  * filter) is skipped: there is no attribute to derive from it.
  */
 function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): InputConstraint {
-  const filters: Array<SchemaAST.Filter<unknown>> = [];
-  flattenChecks(outer.checks, filters);
-  if (inner !== outer) flattenChecks(inner.checks, filters);
-
-  let out: ConstraintPatch = {};
-  let hasIntCheck = false;
-  for (const filter of filters) {
+  const filters =
+    inner === outer
+      ? flattenChecks(outer.checks)
+      : [...flattenChecks(outer.checks), ...flattenChecks(inner.checks)];
+  const representations = Arr.flatMap(filters, (filter) => {
     const representation = filter.annotations?.representation;
-    if (!representation) continue;
-    if (representation.id === "effect/schema/isInt") {
-      hasIntCheck = true;
-      continue;
-    }
-    out = { ...out, ...applyPayloadPatch(representation) };
-  }
-  if (hasIntCheck && out.step === undefined) out.step = 1;
+    return representation === undefined ? [] : [representation];
+  });
 
-  return out;
+  const isIntCheck = (representation: SchemaRepresentation.RepresentationAnnotation): boolean =>
+    representation.id === "effect/schema/isInt";
+  const empty: ConstraintPatch = {};
+  const patched = Arr.reduce(representations, empty, (out, representation) =>
+    isIntCheck(representation) ? out : { ...out, ...applyPayloadPatch(representation) },
+  );
+
+  return Arr.some(representations, isIntCheck) && patched.step === undefined
+    ? { ...patched, step: 1 }
+    : patched;
 }
 
 /**
@@ -196,9 +203,10 @@ function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): Input
 function homogeneousItem(ast: SchemaAST.Arrays): SchemaAST.AST | undefined {
   if (ast.rest.length !== 1) return undefined;
   const [item] = ast.rest;
-  if (ast.elements.length === 0) return item;
-  if (ast.elements.length === 1 && ast.elements[0] === item) return item;
-  return undefined;
+  return Arr.match(ast.elements, {
+    onEmpty: () => item,
+    onNonEmpty: (elements) => (elements.length === 1 && elements[0] === item ? item : undefined),
+  });
 }
 
 /**
@@ -229,29 +237,32 @@ function constraintsForType(type: SchemaAST.AST): InputConstraint | InputConstra
 
 /** Build the constraint tree for one object AST node. */
 function constraintsForObjects(ast: SchemaAST.Objects): InputConstraints {
-  const out: Record<string, InputConstraint | InputConstraints> = {};
-  for (const ps of ast.propertySignatures) {
-    out[String(ps.name)] = constraintsForType(ps.type);
-  }
-  return out;
+  return Rec.fromEntries(
+    Arr.map(
+      ast.propertySignatures,
+      (ps) => [String(ps.name), constraintsForType(ps.type)] as const,
+    ),
+  );
 }
 
 /** Deep-merge constraint overrides over a derived tree. */
 function mergeConstraints(base: InputConstraints, overrides: InputConstraints): InputConstraints {
-  const out: Record<string, InputConstraint | InputConstraints | undefined> = { ...base };
-  for (const key of Object.keys(overrides)) {
-    const override = overrides[key];
-    if (override === undefined) continue;
-    const existing = out[key];
-    if (existing !== undefined && !isLeafConstraint(existing) && !isLeafConstraint(override)) {
-      out[key] = mergeConstraints(existing, override);
-    } else if (existing !== undefined && isLeafConstraint(existing) && isLeafConstraint(override)) {
-      out[key] = { ...existing, ...override };
-    } else {
-      out[key] = override;
-    }
-  }
-  return out;
+  const merged = Arr.flatMap(
+    Rec.keys<string, InputConstraints[string]>(overrides),
+    (key): Array<readonly [string, InputConstraint | InputConstraints]> => {
+      const override = overrides[key];
+      if (override === undefined) return [];
+      const existing = base[key];
+      if (existing !== undefined && !isLeafConstraint(existing) && !isLeafConstraint(override)) {
+        return [[key, mergeConstraints(existing, override)]];
+      }
+      if (existing !== undefined && isLeafConstraint(existing) && isLeafConstraint(override)) {
+        return [[key, { ...existing, ...override }]];
+      }
+      return [[key, override]];
+    },
+  );
+  return { ...base, ...Rec.fromEntries(merged) };
 }
 
 /**
@@ -279,11 +290,17 @@ export function constraintsFromSchema(
  * skips the index and resolves straight to `label`'s derived constraint.
  */
 export function constraintAt(constraints: InputConstraints, path: FormPath): InputConstraint {
-  let node: InputConstraint | InputConstraints | undefined = constraints;
-  for (const segment of path) {
-    if (typeof segment === "number") continue;
-    if (node === undefined || isLeafConstraint(node)) return {};
-    node = node[segment];
-  }
+  // Index segments are skipped (a list's items share one constraint). Once a
+  // string segment runs past a leaf or off the tree the accumulator is
+  // `undefined`, and stays so for every later segment.
+  const node = Arr.reduce<string | number, InputConstraint | InputConstraints | undefined>(
+    path,
+    constraints,
+    (current, segment) => {
+      if (Predicate.isNumber(segment)) return current;
+      if (current === undefined || isLeafConstraint(current)) return undefined;
+      return current[segment];
+    },
+  );
   return node !== undefined && isLeafConstraint(node) ? node : {};
 }

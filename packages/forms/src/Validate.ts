@@ -73,10 +73,10 @@ export function validateValueSync<S extends Schema.Top>(
   input: unknown,
   format?: LeafFormatter,
 ): ValidationResult<S["Type"]> {
-  // `validateValue` never fails on the error channel; the cast drops the
-  // decoding-service requirement, which the caller asserts is `never` (the
-  // common case for plain form schemas — a service-requiring schema must use
-  // the async {@link validateValue}).
+  // SAFETY: `validateValue` never fails on the error channel; the cast drops
+  // the decoding-service requirement, which this function's documented
+  // contract has the caller assert is `never` (the common case for plain form
+  // schemas — a service-requiring schema must use the async {@link validateValue}).
   return Effect.runSync(
     validateValue(schema, input, format) as Effect.Effect<ValidationResult<S["Type"]>>,
   );

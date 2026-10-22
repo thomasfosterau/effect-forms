@@ -12,6 +12,7 @@
  */
 
 import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
 import type { InputConstraints } from "./Constraints.ts";
 import { type FormErrors, hasErrors, noErrors, setError } from "./Errors.ts";
 import type { FormPath } from "./Issues.ts";
@@ -62,15 +63,16 @@ export function make<A, Message = unknown>(
   options: MakeFormStateOptions<Message> = {},
 ): FormState<A, Message> {
   const errors = options.errors ?? noErrors;
-  return {
+  const state: Types.Mutable<FormState<A, Message>> = {
     id: options.id ?? "default",
     valid: options.valid ?? !hasErrors(errors),
     posted: options.posted ?? false,
     data,
     errors,
-    ...(options.message !== undefined ? { message: options.message } : {}),
-    ...(options.constraints !== undefined ? { constraints: options.constraints } : {}),
   };
+  if (options.message !== undefined) state.message = options.message;
+  if (options.constraints !== undefined) state.constraints = options.constraints;
+  return state;
 }
 
 /** Return a new state carrying `message` (and not otherwise changed). */

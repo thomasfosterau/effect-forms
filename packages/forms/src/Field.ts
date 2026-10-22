@@ -19,6 +19,10 @@
  * @module effect-forms/Field
  */
 
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type { FormPath } from "./Issues.ts";
@@ -45,11 +49,11 @@ export type FieldsRecord = Record<string, AnyFieldDef>;
 
 /** Whether `def` is an {@link ArrayFieldDef}. */
 export const isArrayFieldDef = (def: AnyFieldDef): def is ArrayFieldDef<string, Schema.Top> =>
-  def._tag === "array";
+  Predicate.isTagged(def, "array");
 
 /** Whether `def` is a scalar {@link FieldDef}. */
 export const isFieldDef = (def: AnyFieldDef): def is FieldDef<string, Schema.Top> =>
-  def._tag === "field";
+  Predicate.isTagged(def, "field");
 
 /** Construct a scalar {@link FieldDef}. */
 export const makeField = <K extends string, S extends Schema.Top>(
@@ -99,19 +103,28 @@ export function defaultValue(schema: Schema.Top): unknown {
  */
 function unwrapToStructured(ast: SchemaAST.AST): SchemaAST.AST {
   if (!SchemaAST.isUnion(ast)) return ast;
-  for (const member of ast.types) {
+  return Arr.findFirst(ast.types, (member) => {
     const inner = unwrapToStructured(member);
-    if (SchemaAST.isObjects(inner) || SchemaAST.isArrays(inner)) return inner;
-  }
-  return ast;
+    return SchemaAST.isObjects(inner) || SchemaAST.isArrays(inner)
+      ? Option.some(inner)
+      : Option.none();
+  }).pipe(Option.getOrElse(() => ast));
 }
 
-function fromAst(ast: SchemaAST.AST): unknown {
+/** A seeded blank value: `""` for a leaf, `[]` for an array, a struct of blanks for a struct. */
+type BlankValue = "" | Array<never> | BlankStruct;
+
+/** A struct of {@link BlankValue}s, one per property. */
+interface BlankStruct {
+  readonly [key: string]: BlankValue;
+}
+
+function fromAst(ast: SchemaAST.AST): BlankValue {
   const unwrapped = unwrapToStructured(ast);
   if (SchemaAST.isObjects(unwrapped)) {
-    const out: Record<string, unknown> = {};
-    for (const ps of unwrapped.propertySignatures) out[String(ps.name)] = fromAst(ps.type);
-    return out;
+    return Rec.fromEntries(
+      Arr.map(unwrapped.propertySignatures, (ps) => [String(ps.name), fromAst(ps.type)] as const),
+    );
   }
   if (SchemaAST.isArrays(unwrapped)) return [];
   return "";
@@ -144,12 +157,18 @@ function stepIntoStruct(ast: SchemaAST.AST, key: string): SchemaAST.AST | undefi
  * schemas built directly with `Form.make` (no builder involved).
  */
 export function schemaAt(schema: Schema.Top, path: FormPath): SchemaAST.AST | undefined {
-  let ast: SchemaAST.AST | undefined = unwrapToStructured(schema.ast);
-  for (const segment of path) {
-    if (ast === undefined) return undefined;
-    ast = typeof segment === "number" ? stepIntoArray(ast) : stepIntoStruct(ast, segment);
-  }
-  return ast;
+  // Once a step finds no matching AST the accumulator is `undefined`, and
+  // stays so for every later segment.
+  return Arr.reduce<string | number, SchemaAST.AST | undefined>(
+    path,
+    unwrapToStructured(schema.ast),
+    (ast, segment) =>
+      ast === undefined
+        ? undefined
+        : Predicate.isNumber(segment)
+          ? stepIntoArray(ast)
+          : stepIntoStruct(ast, segment),
+  );
 }
 
 /**
@@ -159,16 +178,11 @@ export function schemaAt(schema: Schema.Top, path: FormPath): SchemaAST.AST | un
  */
 export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
   const ast = schemaAt(schema, path);
-  if (ast === undefined || !SchemaAST.isArrays(ast)) return "";
-  const item = arrayElementAst(ast);
+  const item = ast !== undefined && SchemaAST.isArrays(ast) ? arrayElementAst(ast) : undefined;
   return item === undefined ? "" : fromAst(item);
 }
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */
 export function defaultEncodedValues(fields: FieldsRecord): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, def] of Object.entries(fields)) {
-    out[key] = isArrayFieldDef(def) ? [] : defaultValue(def.schema);
-  }
-  return out;
+  return Rec.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
 }
