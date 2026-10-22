@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "packages/forms/src/index.ts",
+    "packages/svelte/src/index.ts",
+    "packages/svelte/src/kit/index.ts",
+    "packages/*/tests/**/*.test.ts",
+    "**/vite.config.ts",
+    "packages/svelte/svelte.config.js"
+  ],
+  "ignorePatterns": ["**/dist/**", "**/docs/**", "**/coverage/**"],
+  "ignoreDependencies": [
+    "@types/node",
+    "effect-solutions",
+    "@effect/docgen",
+    "@effect/tsgo",
+    "@effect/language-service",
+    "@typescript/native",
+    "typescript",
+    "tsx",
+    "vite",
+    "vitest",
+    "vite-plus",
+    "svelte-check",
+    "happy-dom",
+    "@changesets/cli",
+    "@vitest/coverage-istanbul",
+    "fallow"
+  ],
+  "rules": {
+    "unused-files": "error",
+    "unused-exports": "error",
+    "unused-types": "error",
+    "unused-dependencies": "error",
+    "unused-dev-dependencies": "warn",
+    "unused-enum-members": "error",
+    "unused-class-members": "warn",
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "duplicate-exports": "off",
+    "circular-dependencies": "error",
+    "boundary-violation": "error",
+    "stale-suppressions": "warn"
+  },
+  "boundaries": {
+    "zones": [
+      {
+        "name": "forms",
+        "patterns": ["packages/forms/src/**"]
+      },
+      {
+        "name": "kit",
+        "patterns": ["packages/svelte/src/kit/**"]
+      },
+      {
+        "name": "svelte",
+        "patterns": ["packages/svelte/src/**"]
+      }
+    ],
+    "rules": [
+      {
+        "from": "forms",
+        "allow": []
+      },
+      {
+        "from": "svelte",
+        "allow": ["forms"]
+      },
+      {
+        "from": "kit",
+        "allow": ["svelte", "forms"]
+      }
+    ]
+  },
+  "health": {
+    "maxCyclomatic": 20,
+    "maxCognitive": 15,
+    "maxCrap": 30,
+    "coverage": "coverage/coverage-final.json"
+  }
+}

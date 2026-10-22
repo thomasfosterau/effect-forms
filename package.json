@@ -27,8 +27,6 @@
     "@effect/tsgo": "catalog:",
     "@mpsuesser/oxlint-plugin-effect": "catalog:",
     "@sveltejs/vite-plugin-svelte": "catalog:",
-    "@thomasfosterau/effect-forms": "workspace:^",
-    "@thomasfosterau/effect-forms-svelte": "workspace:^",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",
     "@vitest/coverage-istanbul": "catalog:",
@@ -45,7 +43,8 @@
     "vitest": "catalog:"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0",
+    "pnpm": ">=11"
   },
   "packageManager": "pnpm@11.18.0"
 }
