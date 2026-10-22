@@ -1,5 +1,7 @@
 {
   "$schema": "../../node_modules/@effect/docgen/schema.json",
+  "projectHomepage": "https://github.com/thomasfosterau/effect-forms/tree/trunk/packages/forms",
+  "srcLink": "https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/",
   "runExamples": true,
   "enforceVersion": false,
   "parseCompilerOptions": {
