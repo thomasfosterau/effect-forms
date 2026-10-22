@@ -29,7 +29,16 @@
     "noImplicitReturns": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "plugins": [{ "name": "@effect/language-service" }]
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // Effect warnings stay visible in the editor and in the `check` task's
+        // output, but a "warning" fails the patched tsc by default; this flag
+        // keeps them non-blocking in the type gate, as across the library
+        // family. Errors still fail it.
+        "ignoreEffectWarningsInTscExitCode": true
+      }
+    ]
   },
   "include": ["vite.config.ts"],
   "exclude": ["node_modules", "**/dist"]
