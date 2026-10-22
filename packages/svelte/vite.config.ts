@@ -82,6 +82,11 @@ export default defineConfig({
   // worked examples import this package's `/kit` entry by name, as a
   // consumer would; it resolves to the sources (tsconfig `paths` agrees).
   resolve: {
+    // Under Vitest, resolve `svelte` to its client runtime (Svelte's documented
+    // Vitest setup): the default `node` condition picks the server build, where
+    // `$effect` never runs, so the store's change watchers and listeners would
+    // be untestable. Builds keep the default conditions.
+    ...(process.env.VITEST ? { conditions: ["browser"] } : {}),
     alias: {
       "@thomasfosterau/effect-forms-svelte/kit": fileURLToPath(
         new URL("./src/kit/index.ts", import.meta.url),

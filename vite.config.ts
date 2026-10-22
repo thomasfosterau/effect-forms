@@ -78,6 +78,9 @@ export default defineConfig({
         rules: {
           "effect/avoid-node-imports": "off",
           "effect/avoid-process-env": "off",
+          // `...(process.env.X ? { x } : {})` is how a Vite option is left
+          // unset under `exactOptionalPropertyTypes`.
+          "effect/no-conditional-empty-object-spread": "off",
         },
       },
       // Tests are the runtime boundary: `@effect/vitest` is not a dependency,

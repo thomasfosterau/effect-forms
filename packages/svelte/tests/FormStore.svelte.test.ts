@@ -6,10 +6,11 @@
  * submitter)` / no-JS POST semantics — and the button-less auto-submit path
  * (`onChange`/`onBlur` with `autoSubmit`) must keep posting without one.
  *
- * `FormStore.svelte.ts` is otherwise only type-checked (by `vp check` and by
- * svelte-check, the `check` task), not unit-tested — this file only exercises
- * the submit body / event wiring, not the rest of the store (validation, field
- * arrays, snapshots, …). Importing the store here through the `svelte()`
+ * It also pins the `enhance` action's change listeners and its `destroy`
+ * teardown. The rest of the store (validation, field arrays, snapshots, …) is
+ * only type-checked (`tsc` and svelte-check, the `check` task); its effects run
+ * here because the package's Vite config resolves `svelte` to its client
+ * runtime under Vitest. Importing the store here through the `svelte()`
  * plugin is also what catches its rune compile errors (`state_invalid_export`,
  * …), which neither type-checker reports.
  * `.svelte.ts` runes need the Svelte compiler, hence `.svelte.test.ts` (see
@@ -22,6 +23,7 @@
 import { Constraints, Result, State } from "@thomasfosterau/effect-forms";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import { flushSync } from "svelte";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { createForm } from "../src/FormStore.svelte.ts";
 
@@ -233,5 +235,59 @@ describe("constraints — createForm overload symmetry (issue #1330)", () => {
     );
 
     expect(hydrated.constraints).toEqual(explicit);
+  });
+});
+
+describe("enhance — change listeners and teardown", () => {
+  const mount = (): HTMLFormElement => {
+    const node = document.createElement("form");
+    node.action = "/posts";
+    node.method = "post";
+    document.body.append(node);
+    return node;
+  };
+
+  it("dispatches onChange for each changed leaf while attached", () => {
+    const seen: string[] = [];
+    const store = createForm(
+      { schema: ActionForm, defaults: { title: "" } },
+      { listeners: { onChange: ({ path }) => seen.push(String(path)) } },
+    );
+    const action = store.enhance(mount());
+    flushSync();
+
+    store.setValue(["title"], "Hello");
+    flushSync();
+    expect(seen).toEqual(["title"]);
+
+    action.destroy();
+  });
+
+  it("stops listening, and stops submitting, once destroyed", () => {
+    const seen: string[] = [];
+    const bodies: FormData[] = [];
+    const store = createForm(
+      { schema: ActionForm, defaults: { title: "" } },
+      {
+        listeners: { onChange: ({ path }) => seen.push(String(path)) },
+        submit: async (body) => {
+          bodies.push(body);
+          return success(makeFormState({ title: titleOf(body) }));
+        },
+      },
+    );
+    const node = mount();
+    const action = store.enhance(node);
+    flushSync();
+    action.destroy();
+
+    store.setValue(["title"], "Hello");
+    flushSync();
+    // Keep the detached form from attempting a native navigation.
+    node.addEventListener("submit", (event) => event.preventDefault());
+    node.requestSubmit();
+
+    expect(seen).toEqual([]);
+    expect(bodies).toEqual([]);
   });
 });
