@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { changeEvents, dispatchChange, type FormListeners } from "../src/Listeners.ts";
 
+/** The linked-fields recipe's form data: a country and a province within it. */
+interface CountryProvince {
+  readonly country: string;
+  readonly province: string;
+}
+
 describe("changeEvents", () => {
   it("is empty when nothing changed", () => {
     expect(changeEvents({ a: 1 }, { a: 1 })).toEqual([]);
@@ -74,7 +80,7 @@ describe("dispatchChange", () => {
     it("only re-fires listeners for paths that changed in each transition", () => {
       const countryChanges: unknown[] = [];
       const provinceChanges: unknown[] = [];
-      let current: { country: string; province: string } = { country: "US", province: "CA" };
+      let current: CountryProvince = { country: "US", province: "CA" };
       const listeners: FormListeners = {
         fields: {
           country: {

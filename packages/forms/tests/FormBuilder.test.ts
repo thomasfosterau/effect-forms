@@ -1,4 +1,7 @@
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Order from "effect/Order";
+import * as Record from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { describe, expect, it } from "vite-plus/test";
@@ -16,14 +19,14 @@ describe("FormBuilder composition", () => {
     const builder = names.merge(extra);
 
     expect(isFormBuilder(builder)).toBe(true);
-    expect(Object.keys(builder.fields).sort()).toEqual(["age", "name", "tags"]);
+    expect(Arr.sort(Record.keys(builder.fields), Order.String)).toEqual(["age", "name", "tags"]);
   });
 
   it("is immutable — addField returns a new builder", () => {
     const base = empty.addField("a", Schema.String);
     const extended = base.addField("b", Schema.String);
-    expect(Object.keys(base.fields)).toEqual(["a"]);
-    expect(Object.keys(extended.fields)).toEqual(["a", "b"]);
+    expect(Record.keys(base.fields)).toEqual(["a"]);
+    expect(Record.keys(extended.fields)).toEqual(["a", "b"]);
   });
 });
 

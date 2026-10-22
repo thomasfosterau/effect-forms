@@ -1,15 +1,19 @@
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect, it } from "vite-plus/test";
 import { schemaIssuesToFormIssues } from "../src/Issues.ts";
 
-const issueOf = (schema: Schema.Top, input: unknown): SchemaIssue.Issue => {
-  const exit = Schema.decodeUnknownExit(schema as Schema.Decoder<unknown>)(input);
-  if (exit._tag !== "Failure") throw new Error("expected the decode to fail");
+const issueOf = (schema: Schema.Decoder<unknown>, input: unknown): SchemaIssue.Issue => {
+  const exit = Schema.decodeUnknownExit(schema)(input);
+  assert(Exit.isFailure(exit), "expected the decode to fail");
   const reason = exit.cause.reasons[0];
-  if (reason === undefined || reason._tag !== "Fail" || !Schema.isSchemaError(reason.error)) {
-    throw new Error("expected a SchemaError failure");
-  }
+  assert(
+    reason !== undefined && Cause.isFailReason(reason) && Schema.isSchemaError(reason.error),
+    "expected a SchemaError failure",
+  );
   return reason.error.issue;
 };
 
@@ -38,7 +42,11 @@ describe("schemaIssuesToFormIssues default messages", () => {
 
   it("renders a custom filter message and targets its path", () => {
     const schema = Schema.Struct({ confirm: Schema.String }).check(
-      Schema.makeFilter(() => ({ path: ["confirm"], issue: "must match" })),
+      Schema.makeFilter(() => ({ path: ["confirm"], issue: "must match" }), {
+        identifier: "ConfirmMatches",
+        title: "Confirm matches",
+        description: "a test filter that always fails at the confirm path",
+      }),
     );
     expect(schemaIssuesToFormIssues(issueOf(schema, { confirm: "x" }))).toEqual([
       { path: ["confirm"], message: "must match" },
@@ -87,7 +95,7 @@ describe("schemaIssuesToFormIssues shapes", () => {
     schemaIssuesToFormIssues(issueOf(schema, "x"), (issue) => {
       seen.push({
         tag: issue._tag,
-        inner: issue._tag === "Filter" ? issue.issue._tag : undefined,
+        inner: Predicate.isTagged(issue, "Filter") ? issue.issue._tag : undefined,
       });
       return "custom";
     });

@@ -24,6 +24,12 @@ export class SessionCallError extends Schema.TaggedError<SessionCallError>()("Se
   message: Schema.String,
 }) {}
 
+/** Raised when the app's hooks never put a session transport on `event.locals`. */
+class MissingSessionTransport extends Schema.TaggedError<MissingSessionTransport>()(
+  "MissingSessionTransport",
+  { message: Schema.String },
+) {}
+
 /** The session transport, reached through `event.locals` in this example. */
 export interface SessionTransport {
   readonly signIn: (credentials: {
@@ -78,7 +84,8 @@ export const actions = {
   default: formAction(
     signInForm,
     (input, { locals }) => {
-      if (locals.session === undefined) throw new Error("no session transport");
+      if (locals.session === undefined)
+        throw new MissingSessionTransport({ message: "no session transport" });
       return locals.session.signIn({
         email: input.email,
         password: input._password,

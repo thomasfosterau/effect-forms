@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
+import type { Component } from "svelte";
 import { defineEntityForm, type EntityFormEntry } from "../src/EntityForm.ts";
 
 // Synthetic command pair shaped like the creative-work family: a required
@@ -38,8 +39,14 @@ const statusOptionLabels = { draft: () => "Draft", published: () => "Published" 
 
 // A stand-in widget: EntityForm only stores the reference, so any function
 // object passes for a Component in unit scope.
-const Picker = (() => {}) as never;
-const RowsWidget = (() => {}) as never;
+const Picker: Component<never> = () => ({});
+const RowsWidget: Component<never> = () => ({});
+
+// `createInput` / `updateInput` are typed `Schema.Top`; decode them untyped.
+const decodeInput = (input: Schema.Top) =>
+  // SAFETY: EntityForm builds both inputs with `Command.formInputFields` (plus string
+  // overrides here), a struct of string schemas that needs no decoding service.
+  Schema.decodeUnknownSync(input as Schema.Codec<unknown>);
 
 const submit = { create: () => "Create thing", update: () => "Save changes" };
 
@@ -89,6 +96,8 @@ describe("defineEntityForm", () => {
   it("throws on an unknown, duplicate, or missing entry key", () => {
     expect(() =>
       defineEntityForm({ create: CreateThing, update: UpdateThing, submit }, (f) => [
+        // SAFETY: "typo" deliberately bypasses the key type to reach the runtime
+        // unknown-key guard under test; defineEntityForm throws before using it.
         f.text("typo" as never, { label: () => "x" }),
       ]),
     ).toThrow('entry "typo" is not a field');
@@ -106,10 +115,10 @@ describe("defineEntityForm", () => {
   });
 
   it("derives working form-input schemas and defaults", () => {
-    const decodeCreate = Schema.decodeUnknownSync(definition.createInput as Schema.Codec<unknown>);
+    const decodeCreate = decodeInput(definition.createInput);
     expect(() => decodeCreate({ title: "", parentId: "x" })).toThrow();
     expect(definition.createDefaults).toMatchObject({ id: "", title: "", parentId: "" });
-    const decodeUpdate = Schema.decodeUnknownSync(definition.updateInput as Schema.Codec<unknown>);
+    const decodeUpdate = decodeInput(definition.updateInput);
     expect(() => decodeUpdate({ id: "nope" })).toThrow();
   });
 
@@ -129,7 +138,7 @@ describe("defineEntityForm", () => {
         f.rows("rows", RowsWidget, () => ({})),
       ],
     );
-    const decode = Schema.decodeUnknownSync(withOverrides.createInput as Schema.Codec<unknown>);
+    const decode = decodeInput(withOverrides.createInput);
     expect(decode({ parentId: "p" })).toMatchObject({ parentId: "p" });
     expect(withOverrides.adaptCreate({ title: " ", parentId: "p" }).title).toBe("Untitled");
   });
@@ -157,9 +166,7 @@ describe("defineEntityForm", () => {
     );
     expect(withOmit.plan.fields.map((field) => field.key)).not.toContain("rows");
     expect(() => withOmit.fieldFor("rows")).toThrow('unknown field "rows"');
-    const decodeCreate = Schema.decodeUnknownSync(
-      withOmit.createInput as Schema.Codec<unknown>,
-    ) as (input: unknown) => Record<string, unknown>;
+    const decodeCreate = decodeInput(withOmit.createInput);
     expect(
       decodeCreate({ title: "T", parentId: "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f" }),
     ).not.toHaveProperty("rows");
@@ -171,23 +178,23 @@ describe("defineEntityForm", () => {
     // A Boolean field matches no FieldKind (Command.classify throws on it) —
     // omitting it must skip classification entirely, not just post-filter the
     // plan, or the escape hatch wouldn't actually escape the throw.
-    const CreateWithFlag = Schema.Struct({ title: Schema.String, active: Schema.Boolean });
+    const CreateWithFlag = Schema.Struct({ title: Schema.String, isActive: Schema.Boolean });
     const UpdateWithFlag = Schema.Struct({
       id: Uuid,
       title: Schema.optional(Schema.String),
-      active: Schema.optional(Schema.Boolean),
+      isActive: Schema.optional(Schema.Boolean),
     });
     expect(() =>
       defineEntityForm(
-        { create: CreateWithFlag, update: UpdateWithFlag, submit, omit: ["active"] },
+        { create: CreateWithFlag, update: UpdateWithFlag, submit, omit: ["isActive"] },
         (f) => [f.text("title", { label: () => "Title" })],
       ),
     ).not.toThrow();
     const withFlag = defineEntityForm(
-      { create: CreateWithFlag, update: UpdateWithFlag, submit, omit: ["active"] },
+      { create: CreateWithFlag, update: UpdateWithFlag, submit, omit: ["isActive"] },
       (f) => [f.text("title", { label: () => "Title" })],
     );
-    expect(withFlag.plan.fields.map((field) => field.key)).not.toContain("active");
+    expect(withFlag.plan.fields.map((field) => field.key)).not.toContain("isActive");
   });
 
   it("throws exhaustiveness for an omitted-then-redeclared field", () => {

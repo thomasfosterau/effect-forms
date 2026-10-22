@@ -22,6 +22,7 @@ import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type * as Schema from "effect/Schema";
@@ -60,14 +61,17 @@ const toEffect = <O>(
 
 const isConflict = (cause: unknown): boolean =>
   Predicate.isObjectOrArray(cause) &&
-  (cause as { readonly status?: unknown }).status === 409 &&
-  ((cause as { readonly _tag?: unknown })._tag === "JsonapiError" ||
-    (cause as { readonly _tag?: unknown })._tag === "ErrorResponse");
+  Predicate.hasProperty(cause, "status") &&
+  cause.status === 409 &&
+  (Predicate.isTagged(cause, "JsonapiError") || Predicate.isTagged(cause, "ErrorResponse"));
 
-const submittedId = (input: unknown): string | undefined => {
-  const id = Predicate.isObjectOrArray(input) ? (input as { readonly id?: unknown }).id : undefined;
-  return Predicate.isString(id) && id !== "" ? id : undefined;
-};
+const submittedId = (input: unknown): Option.Option<string> =>
+  Predicate.isObjectOrArray(input) &&
+  Predicate.hasProperty(input, "id") &&
+  Predicate.isString(input.id) &&
+  input.id !== ""
+    ? Option.some(input.id)
+    : Option.none();
 
 const retryOwnConflict = <I, O>(
   create: Command<I, O>,
@@ -75,12 +79,13 @@ const retryOwnConflict = <I, O>(
   input: I,
 ): Effect.Effect<O, unknown> =>
   toEffect(() => create(input)).pipe(
-    Effect.catch((cause) => {
-      const id = submittedId(input);
-      if (id === undefined || !isConflict(cause)) return Effect.fail(cause);
-      // The re-fetch failing rethrows the ORIGINAL conflict, not its own error.
-      return toEffect(() => fetchExisting(id)).pipe(Effect.mapError(() => cause));
-    }),
+    Effect.catch((cause) =>
+      Option.match(isConflict(cause) ? submittedId(input) : Option.none(), {
+        onNone: () => Effect.fail(cause),
+        // The re-fetch failing rethrows the ORIGINAL conflict, not its own error.
+        onSome: (id) => toEffect(() => fetchExisting(id)).pipe(Effect.mapError(() => cause)),
+      }),
+    ),
   );
 
 /**
@@ -161,7 +166,7 @@ const fieldPath = (error: ErrorObject): ReadonlyArray<string> =>
  * form-level message surface (`form.errors._errors`).
  */
 const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormState<A> =>
-  failure._tag === "Routed"
+  Predicate.isTagged(failure, "Routed")
     ? failure.errors.reduce(
         (acc, error) => State.withError(acc, fieldPath(error), detailOf(error)),
         state,
@@ -195,29 +200,50 @@ export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
   options: FormActionOptions<S["Type"], O> = {},
 ): Promise<FormActionResult<S["Type"]>> {
   const redact = options.redact ?? ((state: FormState<S["Type"]>) => state);
-  // A posted form needs no decoding services at runtime; schemas projected
-  // from elsewhere can still carry an unreduced `DecodingServices` type, so
-  // only the requirements channel is narrowed here.
-  const state = (await Effect.runPromise(
-    form.validate(request) as Effect.Effect<FormState<S["Type"], Message>>,
-  )) as FormState<S["Type"]>;
-  if (!state.valid) return Result.failure(redact(state), 400);
-
-  const idempotent = options.idempotent;
-  const command =
-    idempotent?.clientId === true
-      ? retryOwnConflict(run, idempotent.fetchExisting, state.data)
-      : toEffect(() => run(state.data));
-  const exit = await Effect.runPromiseExit(command);
-  if (Exit.isSuccess(exit)) return Result.redirect(locationFor(exit.value, state.data), 303);
-
-  const cause = Cause.squash(exit.cause);
-  const failure = (options.classify ?? jsonapiFailure)(cause);
-  if (Option.isSome(failure)) {
-    return Result.failure(redact(routeFailure(state, failure.value)), failure.value.status);
-  }
-  if (options.unrecognised === "throw") throw cause;
-  return Result.errorResult(Predicate.isError(cause) ? cause.message : DEFAULT_MESSAGE, 500);
+  const classify = options.classify ?? jsonapiFailure;
+  // SAFETY: a posted form needs no decoding services at runtime; schemas
+  // projected from elsewhere can still carry an unreduced `DecodingServices`
+  // type, so only the requirements channel is narrowed here.
+  const validate = form.validate(request) as Effect.Effect<FormState<S["Type"], Message>>;
+  const program = Effect.flatMap(
+    validate,
+    (state): Effect.Effect<FormActionResult<S["Type"]>, unknown> => {
+      if (!state.valid) return Effect.succeed(Result.failure(redact(state), 400));
+      const idempotent = options.idempotent;
+      const command =
+        idempotent?.clientId === true
+          ? retryOwnConflict(run, idempotent.fetchExisting, state.data)
+          : toEffect(() => run(state.data));
+      return Effect.matchCauseEffect(command, {
+        onSuccess: (output) =>
+          Effect.sync(() => Result.redirect(locationFor(output, state.data), 303)),
+        onFailure: (commandCause) =>
+          Effect.suspend(() => {
+            const cause = Cause.squash(commandCause);
+            return Option.match(classify(cause), {
+              onSome: (failure) =>
+                Effect.sync(() =>
+                  Result.failure(redact(routeFailure(state, failure)), failure.status),
+                ),
+              onNone: () =>
+                options.unrecognised === "throw"
+                  ? Effect.fail(cause)
+                  : Effect.succeed(
+                      Result.errorResult(
+                        Predicate.isError(cause) ? cause.message : DEFAULT_MESSAGE,
+                        500,
+                      ),
+                    ),
+            });
+          }),
+      });
+    },
+  );
+  // The Promise boundary: an unrecognised failure under `"throw"` (or a defect
+  // anywhere above) rejects with the squashed cause, as a thrown value would.
+  const exit = await Effect.runPromiseExit(program);
+  if (Exit.isSuccess(exit)) return exit.value;
+  throw Cause.squash(exit.cause);
 }
 
 /**
@@ -281,17 +307,13 @@ export function formAction<S extends Schema.Top, O, Message = unknown>(
       options,
     );
     const data = (d: FormActionData<S["Type"]>): FormActionData<S["Type"]> => d;
-    switch (result._tag) {
-      case "Redirect":
-        return redirect(result.status, result.location);
-      case "Failure":
-        return fail(result.status, data({ form: result.state }));
-      case "Error":
-        return fail(result.status, data({ message: result.message }));
-      case "Success":
-        // `runFormAction` answers success with a redirect; a success result
-        // carrying state is echoed back as-is.
-        return data({ form: result.state });
-    }
+    return Match.valueTags(result, {
+      Redirect: (redirectResult) => redirect(redirectResult.status, redirectResult.location),
+      Failure: (failure) => fail(failure.status, data({ form: failure.state })),
+      Error: (error) => fail(error.status, data({ message: error.message })),
+      // `runFormAction` answers success with a redirect; a success result
+      // carrying state is echoed back as-is.
+      Success: (success) => data({ form: success.state }),
+    });
   };
 }

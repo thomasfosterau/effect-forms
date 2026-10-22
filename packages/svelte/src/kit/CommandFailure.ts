@@ -18,6 +18,7 @@
  * @module effect-forms-svelte/kit/CommandFailure
  */
 
+import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type { Document } from "@thomasfosterau/effect-jsonapi";
@@ -70,46 +71,64 @@ export const DEFAULT_MESSAGE = "Request could not be completed";
 export const detailOf = (error: ErrorObject | undefined, fallback = DEFAULT_MESSAGE): string =>
   error?.detail ?? error?.title ?? fallback;
 
-interface TaggedLike {
-  readonly _tag?: unknown;
-  readonly status?: unknown;
-  readonly message?: unknown;
-  readonly errors?: unknown;
-  readonly document?: unknown;
+const isStatus = (u: unknown): u is number => Predicate.isNumber(u) && Number.isInteger(u);
+
+/** A cause recognised by its `_tag` as effect-jsonapi's (or an application's) `JsonapiError`. */
+interface JsonapiErrorLike {
+  readonly _tag: "JsonapiError";
 }
 
-const isStatus = (u: unknown): u is number => Predicate.isNumber(u) && Number.isInteger(u);
+/** A cause recognised by its `_tag` as effect-jsonapi's client-side `ErrorResponse`. */
+interface ErrorResponseLike {
+  readonly _tag: "ErrorResponse";
+}
+
+/** The cause's `status`, when it carries an integer one. */
+const statusOf = (cause: JsonapiErrorLike | ErrorResponseLike | Error): Option.Option<number> =>
+  Predicate.hasProperty(cause, "status") && isStatus(cause.status)
+    ? Option.some(cause.status)
+    : Option.none();
 
 // `ServerErrors.JsonapiError` (effect-jsonapi) and the applications' own
 // `JsonapiError`: `{ _tag: "JsonapiError", status, errors }`.
-const fromJsonapiError = (cause: TaggedLike): Option.Option<CommandFailure> =>
-  isStatus(cause.status) && Array.isArray(cause.errors)
-    ? Option.some(routed(cause.status, cause.errors as ReadonlyArray<ErrorObject>))
-    : Option.none();
+const fromJsonapiError = (cause: JsonapiErrorLike): Option.Option<CommandFailure> =>
+  Option.flatMap(statusOf(cause), (status) =>
+    Predicate.hasProperty(cause, "errors") && Array.isArray(cause.errors)
+      ? // SAFETY: a `JsonapiError`-tagged cause carries JSON:API error objects in
+        // `errors` by that tag's contract (effect-jsonapi's `ServerErrors.JsonapiError`
+        // and the applications' own); causes are recognised structurally, not decoded.
+        Option.some(routed(status, cause.errors as ReadonlyArray<ErrorObject>))
+      : Option.none(),
+  );
 
 // `Client.ErrorResponse` (effect-jsonapi): `{ _tag: "ErrorResponse", status,
 // message, document: Option<ErrorDocument> }`. A decoded document routes its
 // error objects; a response with none is its message alone.
-const fromErrorResponse = (cause: TaggedLike): Option.Option<CommandFailure> => {
-  if (!isStatus(cause.status)) return Option.none();
-  const errors = Option.isOption(cause.document)
-    ? Option.flatMap(cause.document as Option.Option<unknown>, (document) =>
-        Predicate.hasProperty(document, "errors") &&
-        Array.isArray(document.errors) &&
-        document.errors.length > 0
-          ? Option.some(document.errors as ReadonlyArray<ErrorObject>)
-          : Option.none(),
-      )
-    : Option.none<ReadonlyArray<ErrorObject>>();
-  const status = cause.status;
-  return Option.some(
-    Option.match(errors, {
+const fromErrorResponse = (cause: ErrorResponseLike): Option.Option<CommandFailure> =>
+  Option.map(statusOf(cause), (status) => {
+    const errors =
+      Predicate.hasProperty(cause, "document") && Option.isOption(cause.document)
+        ? Option.flatMap(cause.document, (document) =>
+            Predicate.hasProperty(document, "errors") &&
+            Array.isArray(document.errors) &&
+            Arr.isReadonlyArrayNonEmpty(document.errors)
+              ? // SAFETY: an `ErrorResponse`'s `document` is effect-jsonapi's decoded
+                // `ErrorDocument`, whose `errors` are JSON:API error objects.
+                Option.some(document.errors as ReadonlyArray<ErrorObject>)
+              : Option.none(),
+          )
+        : Option.none<ReadonlyArray<ErrorObject>>();
+    return Option.match(errors, {
       onSome: (errors) => routed(status, errors),
       onNone: () =>
-        message(status, Predicate.isString(cause.message) ? cause.message : DEFAULT_MESSAGE),
-    }),
-  );
-};
+        message(
+          status,
+          Predicate.hasProperty(cause, "message") && Predicate.isString(cause.message)
+            ? cause.message
+            : DEFAULT_MESSAGE,
+        ),
+    });
+  });
 
 /**
  * The default classifier:
@@ -126,11 +145,9 @@ const fromErrorResponse = (cause: TaggedLike): Option.Option<CommandFailure> => 
  */
 export const jsonapiFailure: Classify = (cause) => {
   if (!Predicate.isObjectOrArray(cause)) return Option.none();
-  const tagged = cause as TaggedLike;
-  if (tagged._tag === "JsonapiError") return fromJsonapiError(tagged);
-  if (tagged._tag === "ErrorResponse") return fromErrorResponse(tagged);
-  if (Predicate.isError(cause) && isStatus(tagged.status)) {
-    return Option.some(message(tagged.status, cause.message));
-  }
-  return Option.none();
+  if (Predicate.isTagged(cause, "JsonapiError")) return fromJsonapiError(cause);
+  if (Predicate.isTagged(cause, "ErrorResponse")) return fromErrorResponse(cause);
+  return Predicate.isError(cause)
+    ? Option.map(statusOf(cause), (status) => message(status, cause.message))
+    : Option.none();
 };

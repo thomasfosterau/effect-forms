@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Schema from "effect/Schema";
 import {
   blankDefaults,
@@ -37,7 +40,7 @@ const CreateThing = Schema.Struct({
   publishedOn: Schema.optional(Schema.DateFromString),
   rows: Schema.optional(Schema.Array(Row)),
   // Bare, like `CreateQuestion.pinned` — required at create, defaults `false`.
-  pinned: Schema.Boolean,
+  isPinned: Schema.Boolean,
   visibility: Schema.optional(Visibility),
   // Bare, like `CreateQuestion.title` — required at create.
   caption: Doc,
@@ -54,14 +57,14 @@ const UpdateThing = Schema.Struct({
   rows: Schema.optional(Schema.Array(Row)),
   // Not `NullOr` — like `UpdateQuestion.pinned`, boolean fields skip rather
   // than clear.
-  pinned: Schema.optional(Schema.Boolean),
+  isPinned: Schema.optional(Schema.Boolean),
   visibility: Schema.optional(Visibility),
   caption: Schema.optional(Schema.NullOr(Doc)),
   document: Schema.optional(Schema.NullOr(Doc)),
 });
 
 const thing = plan(CreateThing, UpdateThing);
-const byKey = Object.fromEntries(thing.fields.map((field) => [field.key, field]));
+const byKey = Record.fromEntries(Arr.map(thing.fields, (field) => [field.key, field] as const));
 
 describe("Command.plan", () => {
   it("detects the client-generated create id", () => {
@@ -81,7 +84,7 @@ describe("Command.plan", () => {
       "count",
       "publishedOn",
       "rows",
-      "pinned",
+      "isPinned",
       "visibility",
       "caption",
       "document",
@@ -98,7 +101,7 @@ describe("Command.plan", () => {
   });
 
   it("classifies a bare Schema.Boolean field as boolean (decode probe)", () => {
-    expect(byKey.pinned.kind).toBe("boolean");
+    expect(byKey.isPinned.kind).toBe("boolean");
   });
 
   it("classifies a literal union as enum and reads its options off the AST", () => {
@@ -115,8 +118,7 @@ describe("Command.plan", () => {
 
   it("still throws at plan time on a Schema.declare'd field (uploads, images)", () => {
     const Upload = Schema.declare(
-      (u): u is { readonly bytes: Uint8Array } =>
-        typeof u === "object" && u !== null && "bytes" in u,
+      (u): u is { readonly bytes: Uint8Array } => Predicate.isObjectOrArray(u) && "bytes" in u,
     );
     expect(() =>
       plan(
@@ -141,8 +143,8 @@ describe("Command.plan", () => {
     expect(byKey.title.updateClearable).toBe(false);
     expect(byKey.rows.updateClearable).toBe(false);
     // Bare boolean/struct fields are create-required like any other bare field.
-    expect(byKey.pinned.createRequired).toBe(true);
-    expect(byKey.pinned.updateClearable).toBe(false);
+    expect(byKey.isPinned.createRequired).toBe(true);
+    expect(byKey.isPinned.updateClearable).toBe(false);
     expect(byKey.visibility.createRequired).toBe(false);
     expect(byKey.visibility.updateClearable).toBe(false);
     expect(byKey.caption.createRequired).toBe(true);
@@ -152,27 +154,34 @@ describe("Command.plan", () => {
   });
 });
 
+type FormInputField = Schema.String | Schema.optional<Schema.String>;
+
+const decodeFormInput = (fields: { readonly [key: string]: Schema.Top }) => {
+  // SAFETY: formInputFields emits only `Schema.String` (possibly `.check`ed) or
+  // `Schema.optional(Schema.String)` per key, and the overrides passed below are too.
+  const stringFields = fields as { readonly [key: string]: FormInputField };
+  return Schema.decodeUnknownSync(Schema.Struct(stringFields));
+};
+
 describe("Command.formInputFields / blankDefaults", () => {
   it("derives the all-string create shape with min-length on required fields", () => {
     const fields = formInputFields(thing, "create");
-    const CreateInput = Schema.Struct(fields as Record<string, never>);
-    const decode = Schema.decodeUnknownSync(CreateInput as Schema.Codec<unknown>);
-    expect(() => decode({ title: "", parentId: "x", pinned: "true", caption: "{}" })).toThrow();
+    const decode = decodeFormInput(fields);
+    expect(() => decode({ title: "", parentId: "x", isPinned: "true", caption: "{}" })).toThrow();
     expect(
       decode({
         title: "T",
         parentId: "x",
         note: "n",
-        pinned: "true",
+        isPinned: "true",
         caption: "{}",
-      }) as Record<string, unknown>,
+      }),
     ).toMatchObject({ title: "T", parentId: "x", note: "n" });
   });
 
   it("derives the update shape keyed by a UUID id", () => {
     const fields = formInputFields(thing, "update");
-    const UpdateInput = Schema.Struct(fields as Record<string, never>);
-    const decode = Schema.decodeUnknownSync(UpdateInput as Schema.Codec<unknown>);
+    const decode = decodeFormInput(fields);
     expect(() => decode({ id: "not-a-uuid" })).toThrow();
     expect(decode({ id: "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f" })).toMatchObject({
       id: "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f",
@@ -181,9 +190,8 @@ describe("Command.formInputFields / blankDefaults", () => {
 
   it("supports per-field schema overrides, spread last", () => {
     const fields = formInputFields(thing, "create", { title: Schema.optional(Schema.String) });
-    const CreateInput = Schema.Struct(fields as Record<string, never>);
-    const decode = Schema.decodeUnknownSync(CreateInput as Schema.Codec<unknown>);
-    expect(decode({ parentId: "x", pinned: "true", caption: "{}" })).toMatchObject({
+    const decode = decodeFormInput(fields);
+    expect(decode({ parentId: "x", isPinned: "true", caption: "{}" })).toMatchObject({
       parentId: "x",
     });
   });
@@ -197,7 +205,7 @@ describe("Command.formInputFields / blankDefaults", () => {
       count: "",
       publishedOn: "",
       rows: "",
-      pinned: "",
+      isPinned: "",
       visibility: "",
       caption: "",
       document: "",
@@ -230,7 +238,7 @@ describe("Command.createAdapter", () => {
       rows: undefined,
       // Boolean create-required defaults `false`; the rest skip (`undefined`)
       // — structured ignores required-ness, see coerceBoolean / structuredFromField.
-      pinned: false,
+      isPinned: false,
       visibility: undefined,
       caption: undefined,
       document: undefined,
@@ -243,7 +251,7 @@ describe("Command.createAdapter", () => {
       parentId: "p1",
       count: "7",
       publishedOn: " 2024-01-02 ",
-      rows: JSON.stringify([{ agentId: "a1" }]),
+      rows: '[{"agentId":"a1"}]',
     });
     expect(out.count).toBe(7);
     expect(out.publishedOn).toBe("2024-01-02");
@@ -274,9 +282,9 @@ describe("Command.updateAdapter", () => {
       count: null,
       publishedOn: null,
       rows: undefined,
-      // Not clearable (pinned/visibility) skip; clearable structured fields
+      // Not clearable (isPinned/visibility) skip; clearable structured fields
       // (caption/document) clear on blank, unlike jsonArray's rows.
-      pinned: undefined,
+      isPinned: undefined,
       visibility: undefined,
       caption: null,
       document: null,
@@ -289,7 +297,7 @@ describe("Command.updateAdapter", () => {
       count: undefined,
       publishedOn: undefined,
       rows: undefined,
-      pinned: undefined,
+      isPinned: undefined,
       visibility: undefined,
       caption: null,
       document: null,
@@ -309,19 +317,19 @@ describe("Command.createAdapter / updateAdapter — boolean, enum, structured ki
   const update = updateAdapter(thing);
 
   it("boolean: create defaults an absent/blank field to false, never skips", () => {
-    expect(create({ title: "T", parentId: "p1" }).pinned).toBe(false);
-    expect(create({ title: "T", parentId: "p1", pinned: "" }).pinned).toBe(false);
-    expect(create({ title: "T", parentId: "p1", pinned: "true" }).pinned).toBe(true);
-    expect(create({ title: "T", parentId: "p1", pinned: "false" }).pinned).toBe(false);
+    expect(create({ title: "T", parentId: "p1" }).isPinned).toBe(false);
+    expect(create({ title: "T", parentId: "p1", isPinned: "" }).isPinned).toBe(false);
+    expect(create({ title: "T", parentId: "p1", isPinned: "true" }).isPinned).toBe(true);
+    expect(create({ title: "T", parentId: "p1", isPinned: "false" }).isPinned).toBe(false);
   });
 
   it('boolean: update skips an absent field (carries forward); only the literal "true" reads true', () => {
-    expect(update({ id: "u1" }).pinned).toBeUndefined();
-    expect(update({ id: "u1", pinned: "true" }).pinned).toBe(true);
-    expect(update({ id: "u1", pinned: "false" }).pinned).toBe(false);
+    expect(update({ id: "u1" }).isPinned).toBeUndefined();
+    expect(update({ id: "u1", isPinned: "true" }).isPinned).toBe(true);
+    expect(update({ id: "u1", isPinned: "false" }).isPinned).toBe(false);
     // Not a checkbox — a bare "on" (the HTML checkbox default value) is not
     // truthy here, unlike Coerce.booleanFromCheckbox.
-    expect(update({ id: "u1", pinned: "on" }).pinned).toBe(false);
+    expect(update({ id: "u1", isPinned: "on" }).isPinned).toBe(false);
   });
 
   it("enum: passes the raw select value through untouched — validity is the command's decode's job", () => {
@@ -353,10 +361,7 @@ describe("Command.jsonRowsFromField", () => {
     expect(jsonRowsFromField("  ", "rows")).toBeUndefined();
     expect(jsonRowsFromField("[]", "rows")).toEqual([]);
     expect(
-      jsonRowsFromField(
-        JSON.stringify([{ agentId: "a", orderingPosition: 4 }, { agentId: "b" }]),
-        "rows",
-      ),
+      jsonRowsFromField('[{"agentId":"a","orderingPosition":4},{"agentId":"b"}]', "rows"),
     ).toEqual([
       { id: undefined, agentId: "a", creditedName: undefined, orderingPosition: 4 },
       { id: undefined, agentId: "b", creditedName: undefined, orderingPosition: 1 },

@@ -6,7 +6,7 @@
 import { isRedirect, type RequestEvent } from "@sveltejs/kit";
 import { Form } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect, it } from "vite-plus/test";
 import { formAction, runFormAction } from "../../src/kit/index.ts";
 import { post, testFailure } from "./fixtures.ts";
 
@@ -16,8 +16,14 @@ const form = Form.make(Org, { defaults: { name: "" } });
 
 // Minimal RequestEvent — formAction only reads `request`, and hands the event
 // to the command.
-const event = (body: Record<string, string>) =>
-  ({ request: post(body), locals: { user: "u-1" } }) as unknown as RequestEvent;
+const event = (body: Record<string, string>) => {
+  const stub: Pick<RequestEvent, "request"> & { readonly locals: object } = {
+    request: post(body),
+    locals: { user: "u-1" },
+  };
+  // SAFETY: formAction reads only `request` and hands `locals` to the command.
+  return stub as RequestEvent;
+};
 
 describe("formAction (derived SvelteKit page action)", () => {
   it("redirects (throws) to the resource on a valid submission", async () => {
@@ -59,9 +65,7 @@ describe("formAction (derived SvelteKit page action)", () => {
     const result = await action(event({ name: "  " }));
     expect(ran).toBe(false); // command never runs on invalid input
     expect(result).toMatchObject({ status: 400, data: { form: { valid: false } } });
-    expect((result as { data: { form: { errors: object } } }).data.form.errors).toHaveProperty(
-      "name",
-    );
+    expect(result).toHaveProperty(["data", "form", "errors", "name"]);
   });
 
   it("returns fail({ message }) when the command throws", async () => {
@@ -115,8 +119,8 @@ describe("formAction: locationFor must return a same-origin path", () => {
     );
     expect(ran).toBe(true);
     expect(isRedirect(thrown)).toBe(false);
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toMatch(/redirect_external_not_allowed/);
+    assert.instanceOf(thrown, Error);
+    expect(thrown.message).toMatch(/redirect_external_not_allowed/);
   });
 
   it("leaves the location unchecked in runFormAction's framework-neutral result", async () => {
