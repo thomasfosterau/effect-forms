@@ -46,7 +46,7 @@ catalog:
   "@mpsuesser/oxlint-plugin-effect": ^0.6.0
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
-  "@sveltejs/kit": 3.0.1
+  "@sveltejs/kit": 3.1.0
   "@sveltejs/vite-plugin-svelte": ^7.3.1
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
@@ -68,7 +68,7 @@ catalog:
   fallow: 3.34.1
   happy-dom: ^20.14.5
   svelte: ^5.57.2
-  svelte-check: ^4.7.6
+  svelte-check: ^4.7.7
   # TypeScript 6/7 side-by-side: TS7 ships no JavaScript compiler API until
   # 7.1, so everything that `require("typescript")` — svelte-check, the Effect
   # language service patch and tsdown's declaration emit — stays on TS6, kept
