@@ -1,6 +1,6 @@
 {
   "name": "@thomasfosterau/effect-forms",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Framework-neutral, Effect-native form validation and state — schema-driven validation, nested errors, posted-value retention, and native constraints, on Effect Schema.",
   "keywords": [
     "effect",
