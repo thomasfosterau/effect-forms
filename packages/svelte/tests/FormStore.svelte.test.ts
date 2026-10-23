@@ -20,7 +20,8 @@
  * @module tests/FormStore.svelte
  */
 
-import { Constraints, Result, State } from "@thomasfosterau/effect-forms";
+import { Constraints, FormBuilder, Result, State } from "@thomasfosterau/effect-forms";
+import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { flushSync } from "svelte";
@@ -289,5 +290,70 @@ describe("enhance — change listeners and teardown", () => {
 
     expect(seen).toEqual([]);
     expect(bodies).toEqual([]);
+  });
+});
+
+describe("builder refineEffect — runs on decoded values (issue #72)", () => {
+  /** Resolve once the store's in-flight validators (the refinement fiber) settle. */
+  const settled = async (
+    store: { readonly isValidating: boolean },
+    attemptsLeft = 50,
+  ): Promise<void> => {
+    if (!store.isValidating || attemptsLeft === 0) {
+      flushSync();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return settled(store, attemptsLeft - 1);
+  };
+
+  // `age` is posted as a string and decodes to a number: the refinement is
+  // typed against (and on the server receives) the number.
+  const seen: Array<unknown> = [];
+  const builder = FormBuilder.empty
+    .addField("age", Schema.FiniteFromString)
+    .refineEffect((values) => {
+      seen.push(values.age);
+      return Effect.succeed(
+        values.age === 42 ? undefined : { path: ["age"], issue: "must be the number 42" },
+      );
+    });
+
+  it("hands the refinement the decoded value, as the server path does", async () => {
+    seen.length = 0;
+    const store = createForm(builder);
+    store.data.age = "42";
+    store.validate();
+    await settled(store);
+
+    expect(seen).toEqual([42]);
+    expect(store.errorsAt(["age"])).toEqual([]);
+    expect(store.valid).toBe(true);
+  });
+
+  it("skips the refinement when the values don't decode (the field errors report that)", async () => {
+    seen.length = 0;
+    const store = createForm(builder);
+    store.data.age = "not a number";
+    store.validate();
+    await settled(store);
+
+    expect(seen).toEqual([]);
+    expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
+    expect(store.valid).toBe(false);
+  });
+
+  it("clears a previous run's refinement errors once the values stop decoding", async () => {
+    seen.length = 0;
+    const store = createForm(builder);
+    store.data.age = "7";
+    store.validate();
+    await settled(store);
+    expect(store.errorsAt(["age"])).toEqual(["must be the number 42"]);
+
+    store.data.age = "oops";
+    store.validate();
+    await settled(store);
+    expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
   });
 });
