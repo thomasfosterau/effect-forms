@@ -64,9 +64,12 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
+import * as SchemaParser from "effect/SchemaParser";
 import { createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
 import {
@@ -258,7 +261,9 @@ export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
   /**
    * The builder itself, set automatically when {@link createForm} is given a
    * {@link FormBuilder}. Its `refineEffect` refinements run client-side as a
-   * whole-form async validator whenever {@link FormStore.validate} runs.
+   * whole-form async validator whenever {@link FormStore.validate} runs, on the
+   * form data decoded through the builder's schema (as on the server); while
+   * the data doesn't decode they don't run, and the field errors say why.
    */
   readonly builder?: FormBuilder.FormBuilder<Field.FieldsRecord, R>;
   /** The action URL the form posts to (defaults to the current page's action). */
@@ -433,6 +438,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   #fibers: Record<string, Fiber.Fiber<unknown, never>> = {};
   /** The error paths the last `refineEffect` run set, so the next run can clear exactly those before merging fresh ones. */
   #lastRefinementPaths: FormPath[] = [];
+  /**
+   * The decoder that turns the form data into the builder's decoded values
+   * before its `refineEffect` refinements see them — `None` unless the store
+   * was seeded from a {@link FormBuilder}.
+   */
+  readonly #decodeForRefinements: Option.Option<
+    (input: A) => Effect.Effect<Field.DecodedFromFields<Field.FieldsRecord>, SchemaIssue.Issue, R>
+  >;
   /** The data snapshot the field-tracking watcher last diffed against. */
   #previousData: A;
 
@@ -487,6 +500,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     // asserts" contract `validateValueSync` documents for a sync-only schema.
     this.#runtime = ManagedRuntime.make(options.layer ?? (Layer.empty as Layer.Layer<R>));
     this.#fieldValidators = { ...options.validators };
+    this.#decodeForRefinements = Option.map(Option.fromUndefinedOr(options.builder), (builder) =>
+      SchemaParser.decodeUnknownEffect(FormBuilder.buildSchema(builder), { errors: "all" }),
+    );
     this.data = structuredClone(initial.data);
     this.#sourced = { client: noErrors, server: initial.errors ?? noErrors };
     this.message = initial.message;
@@ -1062,14 +1078,22 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     const builder = this.#options.builder;
     if (!builder || Arr.isReadonlyArrayEmpty(FormBuilder.asyncRefinements(builder))) return;
 
-    // SAFETY: `builder` is only set by `createForm`'s builder overload, where `A`
-    // is that builder's `EncodedFromFields`. The live, *undecoded* form values
-    // are passed: they match `DecodedFromFields` field for field, but a field
-    // whose codec transforms is seen in its encoded form here.
-    const values = this.data as never;
+    // The refinements are typed against the builder's *decoded* values, and
+    // the server (`Form.fromBuilder`) runs them on decoded data; the live form
+    // holds the *encoded* values, so decode first. Values that don't decode
+    // run no refinements — exactly as on the server — and the schema's own
+    // field errors (from `validate`) already report why; the run's empty
+    // result still clears the previous run's refinement errors.
+    if (Option.isNone(this.#decodeForRefinements)) return;
+    const decoded = this.#decodeForRefinements.value(this.#detachedData());
     this.#runValidatorFiber(
       "",
-      FormBuilder.runAsyncRefinements(builder, values).pipe(
+      decoded.pipe(
+        Effect.matchEffect({
+          onFailure: (): Effect.Effect<ReadonlyArray<Issues.FormIssue>, never, R> =>
+            Effect.succeed([]),
+          onSuccess: (values) => FormBuilder.runAsyncRefinements(builder, values),
+        }),
         Effect.tap((issues) =>
           Effect.sync(() => {
             const cleared = Arr.reduce(
