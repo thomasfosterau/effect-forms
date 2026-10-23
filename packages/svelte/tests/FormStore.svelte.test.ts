@@ -322,7 +322,7 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
   it("hands the refinement the decoded value, as the server path does", async () => {
     seen.length = 0;
     const store = createForm(builder);
-    store.data.age = "42";
+    store.setValue(["age"], "42");
     store.validate();
     await settled(store);
 
@@ -334,7 +334,7 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
   it("skips the refinement when the values don't decode (the field errors report that)", async () => {
     seen.length = 0;
     const store = createForm(builder);
-    store.data.age = "not a number";
+    store.setValue(["age"], "not a number");
     store.validate();
     await settled(store);
 
@@ -346,12 +346,12 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
   it("clears a previous run's refinement errors once the values stop decoding", async () => {
     seen.length = 0;
     const store = createForm(builder);
-    store.data.age = "7";
+    store.setValue(["age"], "7");
     store.validate();
     await settled(store);
     expect(store.errorsAt(["age"])).toEqual(["must be the number 42"]);
 
-    store.data.age = "oops";
+    store.setValue(["age"], "oops");
     store.validate();
     await settled(store);
     expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
