@@ -1,5 +1,21 @@
 # @thomasfosterau/effect-forms-svelte
 
+## 0.3.1
+
+### Patch Changes
+
+- 58cebf7: `FormStore` now runs a `FormBuilder`'s `refineEffect` refinements on the form data decoded through the builder's schema, as `Form.fromBuilder` does on the server, instead of on the raw encoded values. A field whose codec transforms (such as `Schema.FiniteFromString`) is therefore seen as the same decoded value in the browser and on the server. While the data doesn't decode, the refinements don't run (the field errors already report why), and errors from their previous run are cleared.
+- 21fc910: Internal cleanup to the Effect lint rules (`@mpsuesser/oxlint-plugin-effect`) with no API change; the emitted `.d.ts` is unchanged apart from doc comments. Observable edge differences:
+
+  - `Command`'s developer-facing errors (an unclassifiable field, invalid JSON rows) and `EntityForm`'s definition-time errors are now tagged error classes. They still extend `Error` with the same `message`; only `name` differs.
+  - Record helpers read own keys only, so an inherited or `__proto__` key in a posted object or schema field set no longer reaches a prototype.
+  - `FormData.formDataToObject` given a non-iterable object outside its `FormBodySource` type now parses as an empty body instead of throwing.
+
+  Also: runnable `@example`s for `Form.make`, `FormData.formDataToObject`, `Path.setAt` and `Constraints.constraintsFromSchema`; README links that resolve on npmjs.com; `homepage` points at the `trunk` branch.
+
+- Updated dependencies [21fc910]
+  - @thomasfosterau/effect-forms@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
