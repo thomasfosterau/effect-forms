@@ -25,7 +25,7 @@ catalog:
   "@changesets/cli": ^3.0.3
   # Compiles AND RUNS every JSDoc `@example` (the `docgen` task); needs `tsx`
   # and a TypeScript JS API — the TS6 alias below satisfies its peer.
-  "@effect/docgen": ^4.0.5
+  "@effect/docgen": ^4.0.6
   "@effect/language-service": ^0.87.5
   # Effect Language Service as a native (TypeScript-Go) binary — the TS7 side
   # of the 6/7 split. `effect-tsgo patch` overwrites the native `tsc` and the
@@ -62,7 +62,7 @@ catalog:
   # The development copy only: the suite runs against this pin and nothing
   # else. The published peer range lives under `catalogs.peers` below, and the
   # suite does not test that floor.
-  effect: 4.0.5
+  effect: 4.0.6
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.
   fallow: 3.34.1
