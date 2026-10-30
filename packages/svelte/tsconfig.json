@@ -4,7 +4,15 @@
   "include": ["src/**/*", "tests/**/*", "vite.config.ts"],
   "exclude": ["node_modules", "dist"],
   "compilerOptions": {
+    // The core resolves to its sources here, so editors and the type-aware
+    // lint in `vp check` (tsgolint reads the nearest `tsconfig.json`) work on
+    // a clean checkout, before the core's `dist/` exists: CI runs `vp check`
+    // before any build. The `check` task's type gate uses
+    // `tsconfig.check.json`, which drops this entry so the svelte package is
+    // still type-checked against the core's emitted declarations, as a
+    // consumer sees them.
     "paths": {
+      "@thomasfosterau/effect-forms": ["../forms/src/index.ts"],
       "@thomasfosterau/effect-forms-svelte/kit": ["./src/kit/index.ts"]
     }
   }

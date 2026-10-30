@@ -63,7 +63,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: latest
+          # The newest STABLE Node (setup-node's stable manifest), never
+          # `latest`: that is the first nodejs.org index entry, pre-releases
+          # included (`v27.0.0-alpha` since 2026-10-29), and would publish
+          # from an alpha. Matches the shared setup action's default.
+          node-version: "*"
+          check-latest: true
           cache: pnpm
           registry-url: https://registry.npmjs.org
 

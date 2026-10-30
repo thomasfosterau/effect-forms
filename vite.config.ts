@@ -17,8 +17,17 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   // Staged-file checks run by `vp staged` (the pre-commit hook).
+  // Format with fixes, lint WITHOUT them: `vp check --fix` would also apply
+  // the autofixes of type-aware rules (even those at `warn`, such as
+  // `no-unnecessary-type-assertion`) to staged files at commit time, so the
+  // commit would differ from the tree that was verified.
+  // `--no-error-on-unmatched-pattern`: a commit that stages only CSS / JSON /
+  // Markdown leaves the lint step no file to lint.
   staged: {
-    "*.{js,ts,css,json,md}": "vp check --fix",
+    "*.{js,ts,css,json,md}": [
+      "vp check --fix --no-lint",
+      "vp check --no-fmt --no-error-on-unmatched-pattern",
+    ],
   },
 
   /** `vp fmt` / `vp check` (Oxfmt) */
@@ -70,6 +79,36 @@ export default defineConfig({
 
       "vite-plus/prefer-vite-plus-imports": "error",
 
+      // ---- Type-aware rules (tsgolint) at `warn`, with their site counts ---
+      // Debt tracked on #91, not headroom: a new site is a
+      // defect, and a rule whose count reaches zero goes back to `error`.
+      //
+      // 38 sites. Every one already carries the `// SAFETY:` invariant that
+      // `require-safety-comment-for-type-assertion` (at `error`) demands —
+      // erasing a store's or builder's type parameters, `$state` proxies,
+      // SvelteKit's untyped `RequestEvent` / DOM targets, test fixtures — so
+      // removing each is a per-site redesign, not a lint sweep.
+      "typescript/no-unsafe-type-assertion": "warn",
+      // 12 sites (11 in `packages/svelte/src/kit/FormAction.ts`, 1 in
+      // `packages/forms/src/Form.ts`): a caller's command rejection, or an
+      // unreadable request body, is `unknown` by contract and reaches the
+      // classifiers / the defect as-is. Typing it means wrapping it in a tagged
+      // error every classifier then unwraps. `Form.ts` cannot switch to
+      // `Effect.promise` either: `effect/effect-promise-vs-trypromise` forbids it.
+      "effecttsgo/any-unknown-in-error-context": "warn",
+      // 2 sites (`Validate.validateValueSync`, `FormAction`'s `form.validate`):
+      // each drops a decoding-service requirement the published sync contract
+      // has the caller assert is `never`, with a `// SAFETY:` comment.
+      "effecttsgo/unsafe-effect-type-assertion": "warn",
+      // 4 sites, all published signatures (`validateData` / `validateField`,
+      // `EntityFormBuilder.custom` / `.rows`): dropping the type parameter
+      // breaks every caller that passes it explicitly, so it is a breaking
+      // change decided per export, as for the Effect rules above.
+      "typescript/no-unnecessary-type-parameters": "warn",
+      // 1 site: `FormBuilder.make` is deliberately `FormBuilder<{}, never>`,
+      // the builder with no fields that `addField` extends.
+      "typescript/no-generated-empty-object-type": "warn",
+
       // ---- Oxlint's own plugins (suspicious / perf categories) ------------
       // `_tag` is Effect's discriminant and a leading `_` marks a form field
       // that is never echoed back to the client (`_password`, `_errors`) —
@@ -101,6 +140,9 @@ export default defineConfig({
         files: ["**/tests/**/*.ts"],
         rules: {
           "effect/effect-run-in-body": "off",
+          // A test is an application entry point: each case provides its own
+          // `TestClock.layer()` (see `packages/forms/tests/Validate.test.ts`).
+          "effecttsgo/strict-effect-provide": "off",
           // A helper declared inside the `it` that uses it keeps each case
           // self-contained; `src/` still hoists them.
           "unicorn/consistent-function-scoping": "off",
@@ -170,13 +212,19 @@ export default defineConfig({
         },
       },
     ],
-    // Type-aware linting is off: type checking is the `check` tasks' job
-    // (native `tsc`, Effect-patched, plus svelte-check), which run after the
-    // sibling build the svelte package's types resolve through. `vp check`
-    // stays format + lint, runnable on a clean checkout.
+    // Type-aware linting through oxlint-tsgolint (bundled with Vite+; patched
+    // by `effect-tsgo patch --oxlint`, so the `effecttsgo/*` rules run too).
+    // `typeCheck` also reports TypeScript errors in `vp check`; it overlaps the
+    // `check` tasks (native Effect-patched `tsc` plus svelte-check) without
+    // conflicting, and gives the pre-commit hook a type check. tsgolint reads
+    // each file's nearest `tsconfig.json`, so `packages/svelte/tsconfig.json`
+    // maps the core to its `src/`: `vp check` runs on a clean checkout, before
+    // any `dist/` exists (as CI runs it), while the `check` task still types
+    // the svelte package against the core's built declarations
+    // (`packages/svelte/tsconfig.check.json`).
     options: {
-      typeAware: false,
-      typeCheck: false,
+      typeAware: true,
+      typeCheck: true,
     },
     jsPlugins: [
       {

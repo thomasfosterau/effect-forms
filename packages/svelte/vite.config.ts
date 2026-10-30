@@ -39,13 +39,15 @@ export default defineConfig({
       },
       // The native, Effect-patched `tsc` (TS7) over `src`, the tests and this
       // config, then svelte-check (TS6 + Svelte's language tooling) over the
-      // same `tsconfig.json`. No `--fail-on-warnings`: with no `.svelte`
-      // components here svelte-check always warns "No svelte input files
-      // were found", and no option silences that warning alone
-      // (`--threshold error` would hide every warning). The root `check`
+      // same config. Both read `tsconfig.check.json`, which resolves the core
+      // through its built `dist/` declarations (the `siblingBuild` edge). No
+      // `--fail-on-warnings`: with no `.svelte` components here svelte-check
+      // always warns "No svelte input files were found", and no option
+      // silences that warning alone (`--threshold error` would hide every
+      // warning). The root `check`
       // task depends on it.
       check: {
-        command: "tsc -p tsconfig.json && svelte-check --tsconfig ./tsconfig.json",
+        command: "tsc -p tsconfig.check.json && svelte-check --tsconfig ./tsconfig.check.json",
         dependsOn: [siblingBuild],
         cache: { input: cacheInputs, output: [] },
       },

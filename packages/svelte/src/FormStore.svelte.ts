@@ -151,12 +151,12 @@ export interface FieldMeta {
  * type-checked.
  */
 export class FieldHandle<V> {
-  readonly #store: FormStore<Schema.Top, object, unknown>;
+  readonly #store: FormStore<Schema.Top, object>;
   readonly #path: FormPath;
   /** The path in flat field-name notation — use as the input's `name` attribute. */
   readonly name: string;
 
-  constructor(store: FormStore<Schema.Top, object, unknown>, path: FormPath) {
+  constructor(store: FormStore<Schema.Top, object>, path: FormPath) {
     this.#store = store;
     this.#path = path;
     this.name = Path.toString(path);
@@ -356,13 +356,13 @@ const defaultSubmit = async <A, Message>(
  */
 const eraseStore = <S extends Schema.Top, A, Message, R>(
   store: FormStore<S, A, Message, R>,
-): FormStore<Schema.Top, object, unknown> => {
+): FormStore<Schema.Top, object> => {
   const erased: object = store;
   // SAFETY: `FieldHandle` only calls the store's path-addressed methods
   // (`valueAt`, `setValue`, `errorsAt`, `handleBlur`, …), whose signatures take
   // a `FormPath` and `unknown` values whatever `S` / `A` / `Message` / `R` are,
   // so erasing those parameters loses nothing it relies on.
-  return erased as FormStore<Schema.Top, object, unknown>;
+  return erased as FormStore<Schema.Top, object>;
 };
 
 /** Whether `index` is a valid position in an array of `length`. */
@@ -398,7 +398,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * Per-field blurred flags, keyed by {@link Path.toString}. Drives `onBlur`
    * display (via {@link shouldShowError}) and {@link FieldMeta.isBlurred}.
    */
-  #touched: Record<string, boolean> = $state({});
+  #touched: Partial<Record<string, boolean>> = $state({});
   /**
    * Per-field persistent dirty flags, keyed by {@link Path.toString}. Set once
    * a field's value is changed away from its default via {@link setValue} or
@@ -409,13 +409,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * (`bind:value={form.data.x}`, bypassing {@link FormStore.field}) never marks
    * a field dirty.
    */
-  #dirtied: Record<string, boolean> = $state({});
+  #dirtied: Partial<Record<string, boolean>> = $state({});
   /** Parallel error trees — see {@link Errors.SourcedErrors}. `errors` is their merged view. */
   #sourced: Errors.SourcedErrors = $state(emptySourced);
   /** Whether *any* validation (whole-form or per-field) has run yet — see {@link canSubmit}. */
   #hasValidated = $state(false);
   /** Per-field / whole-form ("") async-validation-in-flight flags, keyed by `"<path>:<trigger>"` or `""`. */
-  #validating: Record<string, boolean> = $state({});
+  #validating: Partial<Record<string, boolean>> = $state({});
   /** Per-key run counter guarding `#validating` writes — see {@link FormStore.#runValidatorFiber}. */
   #validatingGeneration: Record<string, number> = {};
   /** The outcome of the last completed submission, for {@link isSubmitSuccessful}. */
@@ -435,7 +435,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Per-field validators, keyed by {@link Path.toString}; seeded from `options.validators`. */
   #fieldValidators: Record<string, FieldValidators<unknown, R>>;
   /** In-flight async-validator fibers, keyed by `"<path>:<trigger>"` (fields) or `""` (whole-form `refineEffect`). */
-  #fibers: Record<string, Fiber.Fiber<unknown, never>> = {};
+  #fibers: Record<string, Fiber.Fiber<unknown>> = {};
   /** The error paths the last `refineEffect` run set, so the next run can clear exactly those before merging fresh ones. */
   #lastRefinementPaths: FormPath[] = [];
   /**
@@ -918,9 +918,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * one of those calls, snapshot it first.
    */
   #sourcedSnapshot(): Errors.SourcedErrors {
-    // SAFETY: `#sourced` holds a `SourcedErrors`, and `$state.snapshot` of that
-    // plain tree is a deep copy of the same shape.
-    return $state.snapshot(this.#sourced) as Errors.SourcedErrors;
+    // `$state.snapshot` of that plain tree is a deep copy of the same shape.
+    return $state.snapshot(this.#sourced);
   }
 
   /** Whether {@link Mode.ParsedMode.revalidate} names this field trigger. */
@@ -1471,7 +1470,7 @@ export function createForm<S extends Schema.Top, A = S["Type"], Message = unknow
 ): FormStore<S, A, Message, R>;
 export function createForm(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  source: FormBuilder.FormBuilder<any, any> | FormSeed<Schema.Top> | FormState<unknown, unknown>,
+  source: FormBuilder.FormBuilder<any, any> | FormSeed<Schema.Top> | FormState<unknown>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options: FormOptions<Schema.Top, any, any, any> & {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1502,5 +1501,5 @@ export function createForm(
   }
   // SAFETY: `source` is neither a builder (`isFormBuilder`) nor a seed (it
   // lacks `defaults` / `schema`), so it is the `FormState`-hydration overload's.
-  return new FormStore(source as FormState<unknown, unknown>, options);
+  return new FormStore(source as FormState<unknown>, options);
 }
