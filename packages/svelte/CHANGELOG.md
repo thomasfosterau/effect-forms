@@ -1,5 +1,14 @@
 # @thomasfosterau/effect-forms-svelte
 
+## 0.3.2
+
+### Patch Changes
+
+- cd4a425: Internal cleanup for the stricter lint set (`@enfect/oxlint` plus Oxlint's `suspicious` / `perf` categories) with no behaviour change: module-level helpers are hoisted out of the functions that used them, shadowed names are renamed, and the parameter of `CommandFailure.message` is now named `text` in the emitted `.d.ts` (positional, so callers are unaffected).
+- 19690ba: Drop redundant default type arguments in `FormStore.svelte.ts` (found by type-aware linting): `FieldHandle`'s constructor now declares its store as `FormStore<Schema.Top, object>`, the same type as before written without the default `Message = unknown`. No runtime change.
+- Updated dependencies [cd4a425]
+  - @thomasfosterau/effect-forms@0.3.2
+
 ## 0.3.1
 
 ### Patch Changes
