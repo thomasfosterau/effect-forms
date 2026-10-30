@@ -5,7 +5,9 @@ name: CI
 # `check` / `test:unit` / `build`), not in GitHub Actions `needs:`. Shaped like
 # the effect-web library's CI. Nothing here needs a database, a stage or a
 # credential, so every PR runs the whole gate, in AGENTS.md "Verification"
-# order.
+# order. Hardened for Dependabot PRs: no permissions beyond `contents: read`,
+# no secrets, SHA-pinned actions, `persist-credentials: false`, and no
+# `$GITHUB_PATH` writes (bins run through `pnpm exec`); checked with zizmor.
 
 on:
   pull_request:
@@ -52,23 +54,23 @@ jobs:
             vp-task-v1-${{ runner.os }}-
 
       - name: Format and lint
-        run: vp check
+        run: pnpm exec vp check
 
       # Every package's native, Effect-patched `tsc` (plus svelte-check over
       # packages/svelte) and the root config. packages/svelte resolves the core
       # through its `exports` (→ `dist/`), so this builds the core first.
       - name: Type gate
-        run: vp run check
+        run: pnpm exec vp run check
 
       - name: Unit tests
-        run: vp run -r test:unit
+        run: pnpm exec vp run -r test:unit
 
       - name: Build
-        run: vp run -r build
+        run: pnpm exec vp run -r build
 
       # Type-checks AND runs every JSDoc @example against the built dist/.
       - name: Verify documentation examples (docgen)
-        run: vp run docgen
+        run: pnpm exec vp run docgen
 
       - name: Audit
         run: pnpm audit --audit-level high

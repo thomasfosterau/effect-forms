@@ -162,6 +162,10 @@ function applyPayloadPatch(
   return patch(representation.payload);
 }
 
+/** Whether a check is `Schema.isInt` (it implies `step="1"`, not an attribute payload). */
+const isIntCheck = (representation: SchemaRepresentation.RepresentationAnnotation): boolean =>
+  representation.id === "effect/schema/isInt";
+
 /**
  * Derive an {@link InputConstraint}'s refinement attributes from the checks
  * attached to `outer` (the property's own type, e.g. the union wrapping an
@@ -180,8 +184,6 @@ function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): Input
     return representation === undefined ? [] : [representation];
   });
 
-  const isIntCheck = (representation: SchemaRepresentation.RepresentationAnnotation): boolean =>
-    representation.id === "effect/schema/isInt";
   const empty: ConstraintPatch = {};
   const patched = Arr.reduce(representations, empty, (out, representation) =>
     isIntCheck(representation) ? out : { ...out, ...applyPayloadPatch(representation) },

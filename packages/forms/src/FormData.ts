@@ -30,6 +30,9 @@ export type FormBodySource =
 
 type Container = Record<string, unknown> | unknown[];
 
+/** A pending path token, dropped when empty. */
+const nonEmpty = (buffer: string): ReadonlyArray<string> => (buffer === "" ? [] : [buffer]);
+
 /**
  * Split a flat field name into its path tokens. Supports dot notation
  * (`a.b`), bracket notation (`a[b]`, `a[0]`), and the trailing append form
@@ -37,7 +40,6 @@ type Container = Record<string, unknown> | unknown[];
  * `"a.b[]"` → `["a","b",""]`.
  */
 export function parseFieldPath(name: string): string[] {
-  const nonEmpty = (buffer: string): ReadonlyArray<string> => (buffer === "" ? [] : [buffer]);
   const scanned = Arr.reduce(
     Arr.fromIterable(name),
     { tokens: Arr.empty<string>(), buffer: "", inBracket: false },

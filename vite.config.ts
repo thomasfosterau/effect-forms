@@ -12,7 +12,7 @@
  */
 
 import { recommended } from "@effect/tsgo/oxlint-presets";
-import effect from "@mpsuesser/oxlint-plugin-effect";
+import effect from "@enfect/oxlint";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
@@ -26,12 +26,15 @@ export default defineConfig({
     ignorePatterns: ["**/dist/**", "**/docs/**", "**/coverage/**"],
   },
 
-  /** `vp lint` / `vp check` (Oxlint, with the Effect rule sets) */
+  /** `vp lint` / `vp check` (Oxlint, with `@enfect/oxlint` and `@effect/tsgo`'s Effect rule sets) */
   lint: {
     ignorePatterns: ["**/dist/**", "**/docs/**", "**/coverage/**", "**/node_modules/**"],
     extends: [recommended, effect.configs.recommended],
+    plugins: ["eslint", "typescript", "unicorn", "oxc", "import", "promise", "vitest", "jsdoc"],
     categories: {
       correctness: "error",
+      suspicious: "error",
+      perf: "error",
     },
     rules: {
       // Hard-codes abbreviations (`Arr`, `P`, `R`, …) with no options, so it is
@@ -66,6 +69,15 @@ export default defineConfig({
       "effect/no-unsafe-dictionary-type": "warn",
 
       "vite-plus/prefer-vite-plus-imports": "error",
+
+      // ---- Oxlint's own plugins (suspicious / perf categories) ------------
+      // `_tag` is Effect's discriminant and a leading `_` marks a form field
+      // that is never echoed back to the client (`_password`, `_errors`) —
+      // both published conventions this rule would rename away.
+      "eslint/no-underscore-dangle": "off",
+      // Every `vi.fn` here wraps a typed implementation; a type parameter
+      // would only restate the implementation's own signature.
+      "vitest/require-mock-type-parameters": "off",
     },
     overrides: [
       // Build/test configs are evaluated by Vite and Vitest in bare Node,
@@ -89,6 +101,9 @@ export default defineConfig({
         files: ["**/tests/**/*.ts"],
         rules: {
           "effect/effect-run-in-body": "off",
+          // A helper declared inside the `it` that uses it keeps each case
+          // self-contained; `src/` still hoists them.
+          "unicorn/consistent-function-scoping": "off",
         },
       },
       // Its expect-error directives ARE the assertions: each marks a

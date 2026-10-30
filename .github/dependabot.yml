@@ -1,6 +1,6 @@
 # Dependabot version updates for the pnpm workspace (the `npm` ecosystem at
 # `/` reads pnpm-workspace.yaml's catalogs and the lockfile) and the GitHub
-# Actions, including the local composite setup action's pins.
+# Actions, including the local composite setup action's SHA pins.
 #
 # Groups exist so that dependencies which MUST move together arrive in ONE PR.
 # Dependabot puts a dependency in the FIRST group that matches it, so the
@@ -13,21 +13,33 @@
 #   native `tsc` (`@typescript/native`) and that oxlint / tsgolint by version
 #   and hard-errors on any pairing it has no artifact for; the TS6 alias
 #   (`typescript` → `@typescript/typescript6`) pairs with the TS7 one; the
-#   Effect lint plugin loads into that oxlint. A PR moving one alone goes red,
-#   so every update type (major included) is grouped. Read the catalog
-#   comments in pnpm-workspace.yaml before merging one.
+#   Effect lint plugin (`@enfect/oxlint`) loads into that oxlint. A PR moving
+#   one alone goes red, so every update type (major included) is grouped.
+#   Read the catalog comments in pnpm-workspace.yaml before merging one.
+# - `docgen`: `@effect/docgen` runs its compiled examples with `tsx`.
 # - `effect`: the Effect 4 line is lockstep-versioned and a runtime singleton.
 # - `svelte`, `changesets`: their own release families.
 # - `minor-and-patch`: everything else's minor / patch updates in one PR, so
 #   PR volume stays low; majors outside the sets above stay individual.
 #
-# Not bumpable here: `oxlint`, `oxfmt` and `oxlint-tsgolint` are transitive
-# pins of `vite-plus` (they move when it does), and the `overrides` entries
-# (`vite`, `vitest`, `effect`) all point at `catalog:`, so they follow their
-# catalog entry. See AGENTS.md "Common pitfalls".
+# Hand moves (Dependabot cannot make them; do them on the `toolchain` PR's
+# branch, then `pnpm install`):
+# - the npm-alias catalog entries: `vite` (`npm:@voidzero-dev/vite-plus-core@…`,
+#   must equal `vite-plus`), `typescript` (`npm:@typescript/typescript6@…`) and
+#   `@typescript/native` (`npm:typescript@…`, must be in `@effect/tsgo`'s
+#   `components` table) — when a `vite-plus` bump outruns `@effect/tsgo`, pick
+#   the `@effect/tsgo` release that supports the new oxlint / tsgolint by hand;
+# - `oxlint`, `oxfmt` and `oxlint-tsgolint` are transitive pins of `vite-plus`
+#   (they move when it does);
+# - the `overrides` entries (`vite@*`, `vitest@*`, `effect`) all point at
+#   `catalog:`, so they follow their catalog entry.
+# See AGENTS.md "Common pitfalls".
 #
-# `cooldown` mirrors pnpm-workspace.yaml's `minimumReleaseAge` (1 day), with
-# the same `@thomasfosterau/*` exemption as `minimumReleaseAgeExclude`.
+# `cooldown`: pnpm-workspace.yaml's `minimumReleaseAge` is 8 hours (480
+# minutes), but Dependabot's cooldown takes whole days only, so it is 1 day —
+# longer than pnpm's guard, so a Dependabot PR never proposes a version pnpm
+# would still refuse to install. Same `@thomasfosterau/*` exemption as
+# `minimumReleaseAgeExclude`.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -57,7 +69,15 @@ updates:
           - "@typescript/native"
           - "typescript"
           - "@typescript/typescript6"
-          - "@mpsuesser/oxlint-plugin-effect"
+          - "@voidzero-dev/*"
+          - "@oxlint/*"
+          - "@enfect/oxlint"
+        update-types: ["major", "minor", "patch"]
+      docgen:
+        applies-to: version-updates
+        patterns:
+          - "@effect/docgen"
+          - "tsx"
         update-types: ["major", "minor", "patch"]
       effect:
         applies-to: version-updates
@@ -66,6 +86,7 @@ updates:
           - "@effect/*"
         exclude-patterns:
           - "@effect/tsgo"
+          - "@effect/docgen"
         update-types: ["major", "minor", "patch"]
       svelte:
         applies-to: version-updates

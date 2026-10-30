@@ -55,10 +55,10 @@ export const routed = (status: number, errors: ReadonlyArray<ErrorObject>): Comm
 });
 
 /** Construct a {@link MessageFailure}. */
-export const message = (status: number, message: string): CommandFailure => ({
+export const message = (status: number, text: string): CommandFailure => ({
   _tag: "Message",
   status,
-  message,
+  message: text,
 });
 
 /** A classifier: `Some` for a failure the form can show, `None` for an unexpected one. */
@@ -119,7 +119,7 @@ const fromErrorResponse = (cause: ErrorResponseLike): Option.Option<CommandFailu
           )
         : Option.none<ReadonlyArray<ErrorObject>>();
     return Option.match(errors, {
-      onSome: (errors) => routed(status, errors),
+      onSome: (routedErrors) => routed(status, routedErrors),
       onNone: () =>
         message(
           status,

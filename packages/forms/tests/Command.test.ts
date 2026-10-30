@@ -167,7 +167,9 @@ describe("Command.formInputFields / blankDefaults", () => {
   it("derives the all-string create shape with min-length on required fields", () => {
     const fields = formInputFields(thing, "create");
     const decode = decodeFormInput(fields);
-    expect(() => decode({ title: "", parentId: "x", isPinned: "true", caption: "{}" })).toThrow();
+    expect(() => decode({ title: "", parentId: "x", isPinned: "true", caption: "{}" })).toThrow(
+      "Expected a value with a length of at least 1",
+    );
     expect(
       decode({
         title: "T",
@@ -182,7 +184,7 @@ describe("Command.formInputFields / blankDefaults", () => {
   it("derives the update shape keyed by a UUID id", () => {
     const fields = formInputFields(thing, "update");
     const decode = decodeFormInput(fields);
-    expect(() => decode({ id: "not-a-uuid" })).toThrow();
+    expect(() => decode({ id: "not-a-uuid" })).toThrow("Expected a UUID");
     expect(decode({ id: "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f" })).toMatchObject({
       id: "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f",
     });

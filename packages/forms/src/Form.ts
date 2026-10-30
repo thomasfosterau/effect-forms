@@ -77,6 +77,10 @@ export interface Form<S extends Schema.Top, Message = unknown> {
   ): Effect.Effect<FormState<S["Type"], Message>, never, S["DecodingServices"]>;
 }
 
+/** {@link Form.parse}: flatten a posted body, pass a plain record through. */
+const parseInput: Form<Schema.Top>["parse"] = (input) =>
+  input instanceof FormData || input instanceof URLSearchParams ? formDataToObject(input) : input;
+
 const toStructured = (input: FormInput): Effect.Effect<Record<string, unknown> | null> => {
   if (input === null || input === undefined) return Effect.succeed(null);
   if (input instanceof Request) {
@@ -139,8 +143,7 @@ export function make<S extends Schema.Top, Message = unknown>(
       ...overrides,
     });
 
-  const parse: Form<S, Message>["parse"] = (input) =>
-    input instanceof FormData || input instanceof URLSearchParams ? formDataToObject(input) : input;
+  const parse: Form<S, Message>["parse"] = parseInput;
 
   const validate: Form<S, Message>["validate"] = (input) =>
     toStructured(input).pipe(
