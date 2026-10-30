@@ -19,7 +19,7 @@ Branch off `trunk`, rebase rather than merge, squash-merge with a conventional p
 
 ## Git hooks
 
-Hooks are managed by Vite+ (`vp config`, run by `prepare`); the editable [.vite-hooks/pre-commit](.vite-hooks/pre-commit) is committed. **pre-commit** runs `vp staged` (format + lint on staged files). There is no pre-push hook: run the gates yourself.
+Hooks are managed by Vite+ (`vp config`, run by `prepare`); the editable [.vite-hooks/pre-commit](.vite-hooks/pre-commit) is committed. **pre-commit** runs `vp staged` (format with fixes, then a type-aware lint _without_ fixes, on staged files: a type-aware autofix applied at commit time would make the commit differ from the tree you verified). There is no pre-push hook: run the gates yourself.
 
 ## CI expectations
 

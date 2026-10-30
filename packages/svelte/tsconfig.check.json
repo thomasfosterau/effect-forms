@@ -1,0 +1,13 @@
+{
+  // The type gate's config (`check` task in vite.config.ts): `tsconfig.json`
+  // minus its `@thomasfosterau/effect-forms` → `src/` path, so `tsc` and
+  // svelte-check resolve the core through its `exports` (the built `dist/`
+  // declarations), exactly as a consumer does. `paths` replaces rather than
+  // merges, so the `/kit` self-reference is restated.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@thomasfosterau/effect-forms-svelte/kit": ["./src/kit/index.ts"]
+    }
+  }
+}

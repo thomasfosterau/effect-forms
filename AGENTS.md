@@ -33,8 +33,8 @@ Package-local invariants and terms live in each package's `CLAUDE.md` (`packages
 
 ## Commands
 
-- `pnpm install` — dependencies plus the Vite+ git hooks (pre-commit runs `vp staged`: format + lint on staged files) and the `prepare` step that patches the native `tsc` / `oxlint` with `@effect/tsgo`.
-- `vp check` — format (Oxfmt) + lint (Oxlint with the Effect rules); `--fix` to autofix. `vp run check` — the type gate: every package's native, Effect-patched `tsc`, svelte-check over `packages/svelte`, and the root config. They are different commands.
+- `pnpm install` — dependencies plus the Vite+ git hooks (pre-commit runs `vp staged`: format with fixes, then lint without them, on staged files) and the `prepare` step that patches the native `tsc` / `oxlint` with `@effect/tsgo`.
+- `vp check` — format (Oxfmt) + lint (Oxlint with the Effect rules), type-aware through oxlint-tsgolint (`typeAware` + `typeCheck`, so it also reports TypeScript errors; it runs on a clean checkout, before any build); `--fix` to autofix. `vp run check` — the type gate: every package's native, Effect-patched `tsc`, svelte-check over `packages/svelte`, and the root config. They are different commands.
 - `vp run -r test:unit` — every package's Vitest suite.
 - `vp run -r build` — `vp pack` (tsdown) → every package's `dist/`.
 - `vp run docgen` — compiles and runs every `@example` in `packages/forms` against `dist/`, and writes the (git-ignored) API reference under `packages/forms/docs/`.

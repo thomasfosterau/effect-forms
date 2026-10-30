@@ -19,10 +19,13 @@ inputs:
   node-version:
     description: The Node.js version to set up.
     required: false
-    # CI and Release both run on one Node version: the newest
-    # release, via setup-node's `latest` alias. `engines.node` in the published
-    # manifests is a separate, wider support range. pnpm 11 needs Node >= 22.13.
-    default: latest
+    # The newest STABLE Node release: `*` with `check-latest: true` resolves
+    # against setup-node's stable manifest. Never `latest`: setup-node takes
+    # that from the first nodejs.org index entry, pre-releases included
+    # (`v27.0.0-alpha` since 2026-10-29), which hangs some suites
+    # (effect-svelte#214). `engines.node` in the published manifests is a
+    # separate, wider support range. pnpm 11 needs Node >= 22.13.
+    default: "*"
 runs:
   using: composite
   steps:
@@ -35,6 +38,7 @@ runs:
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ inputs.node-version }}
+        check-latest: true
         cache: pnpm
 
     # --ignore-scripts blocks dependency lifecycle scripts; --frozen-lockfile
