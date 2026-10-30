@@ -64,7 +64,7 @@ catalog:
   # The development copy only: the suite runs against this pin and nothing
   # else. The published peer range lives under `catalogs.peers` below, and the
   # suite does not test that floor.
-  effect: 4.0.6
+  effect: 4.1.0
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.
   fallow: 3.37.0
