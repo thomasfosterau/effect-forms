@@ -289,20 +289,20 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
   const entries = build(builders);
 
   const byKey = HashMap.fromIterable(Arr.map(plan.fields, (field) => [field.key, field] as const));
-  const declared = Arr.reduce(entries, HashSet.empty<string>(), (declared, entry) => {
+  const declared = Arr.reduce(entries, HashSet.empty<string>(), (seen, entry) => {
     const field = HashMap.get(byKey, entry.key);
     if (Option.isNone(field)) {
       throw new EntityFormDefinitionError({
         message: `defineEntityForm: entry "${entry.key}" is not a field of either command struct`,
       });
     }
-    if (HashSet.has(declared, entry.key)) {
+    if (HashSet.has(seen, entry.key)) {
       throw new EntityFormDefinitionError({
         message: `defineEntityForm: entry "${entry.key}" is declared twice`,
       });
     }
     if (Predicate.isTagged(entry, "select")) validateSelectEntry(entry, field.value);
-    return HashSet.add(declared, entry.key);
+    return HashSet.add(seen, entry.key);
   });
   const missing = Arr.map(
     Arr.filter(plan.fields, (field) => !HashSet.has(declared, field.key)),

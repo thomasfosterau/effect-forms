@@ -255,6 +255,9 @@ export type ActionCommand<I, O> = (
   event: RequestEvent,
 ) => Promise<O> | Effect.Effect<O, unknown>;
 
+/** Pin an action's return to {@link FormActionData}, so every branch types alike. */
+const actionData = <A>(data: FormActionData<A>): FormActionData<A> => data;
+
 /**
  * Derive a SvelteKit page form **action** from `form` plus its command. The
  * handler validates the submission, runs the command on success, and maps
@@ -306,14 +309,13 @@ export function formAction<S extends Schema.Top, O, Message = unknown>(
       locationFor,
       options,
     );
-    const data = (d: FormActionData<S["Type"]>): FormActionData<S["Type"]> => d;
     return Match.valueTags(result, {
       Redirect: (redirectResult) => redirect(redirectResult.status, redirectResult.location),
-      Failure: (failure) => fail(failure.status, data({ form: failure.state })),
-      Error: (error) => fail(error.status, data({ message: error.message })),
+      Failure: (failure) => fail(failure.status, actionData<S["Type"]>({ form: failure.state })),
+      Error: (error) => fail(error.status, actionData<S["Type"]>({ message: error.message })),
       // `runFormAction` answers success with a redirect; a success result
       // carrying state is echoed back as-is.
-      Success: (success) => data({ form: success.state }),
+      Success: (success) => actionData<S["Type"]>({ form: success.state }),
     });
   };
 }

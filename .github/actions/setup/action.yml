@@ -1,7 +1,8 @@
 # Composite setup shared by every workflow that needs the toolchain: pnpm +
 # Node.js, the pnpm store cache (keyed on pnpm-lock.yaml by setup-node), and a
-# frozen-lockfile install. `vp` and the dev bins land in node_modules/.bin,
-# which this adds to PATH so later steps invoke them directly. Copied in shape
+# frozen-lockfile install. `vp` and the dev bins land in node_modules/.bin;
+# later steps call them as `pnpm exec vp …` (writing to `$GITHUB_PATH` is a
+# zizmor `github-env` finding, so this action no longer does). Copied in shape
 # from effect-jsonapi (the library standard's release pipeline).
 #
 # Install scripts: `pnpm install --ignore-scripts` blocks DEPENDENCY lifecycle
@@ -46,7 +47,3 @@ runs:
     - name: Patch the toolchain (repository `prepare` script)
       shell: bash
       run: pnpm run prepare
-
-    - name: Expose the local bins
-      shell: bash
-      run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"

@@ -31,19 +31,21 @@ catalog:
   # of the 6/7 split. `effect-tsgo patch` overwrites the native `tsc` and the
   # `oxlint` / `oxlint-tsgolint` that vite-plus carries with Effect-patched
   # builds matched by gitHead / version, so this pins in lockstep with
-  # `@typescript/native` and `vite-plus` below (0.55.0 ships against
-  # typescript 7.0.2, oxlint 1.87.0 – 1.89.0 and tsgolint 7.0.2003 / 7.0.2004;
-  # vite-plus 1.3.0 carries oxlint 1.88.0 and tsgolint 7.0.2004). Each release
+  # `@typescript/native` and `vite-plus` below (0.63.0 ships against
+  # typescript 7.0.2, oxlint 1.88.0 – 1.90.0 and tsgolint 7.0.2004 / 7.0.2005;
+  # vite-plus 1.4.0 carries oxlint 1.89.0 and tsgolint 7.0.2004). Each release
   # hard-errors (UnsupportedTargetPackageVersionError) on any other component
   # version, failing `pnpm install` itself. Read the `components` table in
   # node_modules/@effect/tsgo/dist/effect-tsgo.cjs before bumping any of the
   # three.
-  "@effect/tsgo": 0.55.0
-  # The Effect rule set for Oxlint, wired in the root vite.config.ts as
-  # `effect.configs.recommended`. 0.6.0 is built on the stable `effect` line,
-  # so the `effect: "catalog:"` singleton override below needs no scoped
-  # exception for it.
-  "@mpsuesser/oxlint-plugin-effect": ^0.6.0
+  "@effect/tsgo": 0.63.0
+  # The Effect rule set for Oxlint (the successor of
+  # `@mpsuesser/oxlint-plugin-effect`, same `effect/` rule namespace), wired in
+  # the root vite.config.ts as `effect.configs.recommended`. It loads into the
+  # oxlint vite-plus carries, so it moves with the toolchain set. Its own
+  # `effect` dependency (4.1.0) resolves to the catalog singleton through the
+  # `effect: "catalog:"` override below; it lints fine on that copy.
+  "@enfect/oxlint": 0.9.0
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
   "@sveltejs/kit": 3.1.0
@@ -65,7 +67,7 @@ catalog:
   effect: 4.0.6
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.
-  fallow: 3.36.0
+  fallow: 3.37.0
   happy-dom: ^21.0.4
   svelte: ^5.57.2
   svelte-check: ^4.7.7
@@ -80,13 +82,13 @@ catalog:
   tsx: ^4.23.15
   # vite-plus pins `oxlint`, `oxfmt` and `vitest` to exact versions, so this
   # entry decides the oxlint version `effect-tsgo patch --oxlint` has to
-  # support (see the @effect/tsgo note above): 1.3.0 carries oxlint 1.88.0,
-  # tsgolint 7.0.2004 and vitest 5.0.5. `vite` is the same release under its
+  # support (see the @effect/tsgo note above): 1.4.0 carries oxlint 1.89.0,
+  # oxfmt 0.74.0, tsgolint 7.0.2004 and vitest 5.0.5. `vite` is the same release under its
   # aliased core package, and `vitest` must match vite-plus's exact pin
   # because the `vitest: "catalog:"` override forces every resolution to the
   # catalog singleton.
-  vite-plus: 1.3.0
-  vite: npm:@voidzero-dev/vite-plus-core@1.3.0
+  vite-plus: 1.4.0
+  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
   vitest: 5.0.5
 
 # Peer ranges the PUBLISHED packages declare. Kept as a named catalog so the
@@ -101,11 +103,14 @@ catalogs:
     svelte: ^5.40.0
 
 overrides:
-  vite: "catalog:"
-  vitest: "catalog:"
   # `effect` MUST be a singleton (see the header): force every resolution to
   # the catalog version so a hoisting reshuffle cannot introduce a second copy.
   effect: "catalog:"
+  # Vite+ manages these two (`vp migrate` writes the `@*` keys): every `vite` /
+  # `vitest` resolution, transitive ones included, is forced onto the catalog
+  # singleton vite-plus carries.
+  "vite@*": "catalog:"
+  "vitest@*": "catalog:"
 
 allowBuilds:
   esbuild: true
@@ -122,9 +127,11 @@ peerDependencyRules:
     vite: "*"
     vitest: "*"
 
-# Supply-chain delay (owner's policy, gardeneria #1149): hold newly published
-# versions for 1 day (unit: MINUTES) before pnpm will install them.
-minimumReleaseAge: 1440
+# Supply-chain delay (owner's policy, gardeneria #1149, relaxed to 8 hours on
+# 2026-10-30): hold newly published versions for 8 hours (unit: MINUTES)
+# before pnpm will install them. Dependabot's `cooldown` (whole days only) is
+# 1 day, so it never proposes a version this would still refuse.
+minimumReleaseAge: 480
 minimumReleaseAgeExclude:
   # @thomasfosterau/* is first-party — exempt so our own releases install immediately.
   - "@thomasfosterau/*"

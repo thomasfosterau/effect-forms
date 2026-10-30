@@ -116,10 +116,12 @@ describe("defineEntityForm", () => {
 
   it("derives working form-input schemas and defaults", () => {
     const decodeCreate = decodeInput(definition.createInput);
-    expect(() => decodeCreate({ title: "", parentId: "x" })).toThrow();
+    expect(() => decodeCreate({ title: "", parentId: "x" })).toThrow(
+      "Expected a value with a length of at least 1",
+    );
     expect(definition.createDefaults).toMatchObject({ id: "", title: "", parentId: "" });
     const decodeUpdate = decodeInput(definition.updateInput);
-    expect(() => decodeUpdate({ id: "nope" })).toThrow();
+    expect(() => decodeUpdate({ id: "nope" })).toThrow("Expected a UUID");
   });
 
   it("threads adapter and input overrides through", () => {
