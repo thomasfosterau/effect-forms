@@ -53,8 +53,8 @@ catalog:
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
   # peer). Nothing imports it at runtime.
-  "@thomasfosterau/effect-jsonapi": ^0.19.0
-  "@types/node": ^26.6.5
+  "@thomasfosterau/effect-jsonapi": ^0.20.0
+  "@types/node": ^26.6.6
   # Must equal the vitest that vite-plus bundles (see `vitest` below); vite-plus
   # refuses to run coverage on a mismatch.
   "@vitest/coverage-istanbul": 5.0.5
@@ -67,7 +67,7 @@ catalog:
   effect: 4.0.6
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.
-  fallow: 3.37.0
+  fallow: 3.38.0
   happy-dom: ^21.0.4
   svelte: ^5.57.3
   svelte-check: ^4.7.7
