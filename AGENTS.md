@@ -82,7 +82,6 @@ These packages target **Effect v4**: a single `effect` package. Development and 
 
 - The SessionStart hook (`.claude/hooks/session-start.sh`) installs dependencies against the lockfile, puts `vp` (a re-exec shim that prefers the nearest worktree's `node_modules`), `fallow`, `tsx` and `changeset` on PATH for non-interactive shells, and builds the packages on a clean checkout. It hydrates no secrets; none are needed, and nothing here can publish.
 - A PreToolUse hook (`.claude/hooks/fallow-gate.sh`) blocks `git commit` / `git push` when `fallow audit --base origin/trunk` fails; it reads the coverage map on disk, so run `vp run test:coverage` first. A PostToolUse hook runs `vp fmt --write` on every `.ts` / `.js` / `.css` / `.json` / `.md` file an agent edits, so expect formatter rewrites rather than hand-formatting.
-- `.claude/settings.json` enables the `@enfect/claude` plugin (Effect guidance, skills and post-write pattern checks), pinned by `ref` to a reviewed `mpsuesser/enfect` commit; moving it is a reviewed edit of that SHA.
 - Every gate in [Verification](#verification) runs in an agent session; `pnpm audit` needs the network. Only publishing (the release workflow's OIDC) can't.
 
 ## Documentation surfaces
