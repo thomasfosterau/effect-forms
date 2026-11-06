@@ -31,6 +31,8 @@
 #   (they move when it does);
 # - the `overrides` entries (`vite@*`, `vitest@*`, `effect`) all point at
 #   `catalog:`, so they follow their catalog entry.
+# - the `ghcr.io/voidzero-dev/vite-plus:<tag>` image in .devcontainer/devcontainer.json:
+#   it equals the catalog's `vite-plus` pin, moved on the toolchain PR.
 # See AGENTS.md "Common pitfalls".
 #
 # `cooldown`: pnpm-workspace.yaml's `minimumReleaseAge` is 8 hours (480
@@ -89,6 +91,20 @@ updates:
     directories:
       - "/"
       - "/.github/actions/setup"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+    cooldown:
+      default-days: 1
+
+  # The dev container's features (.devcontainer/devcontainer.json) and their
+  # lockfile. The base image tag is not a feature: it is the catalog's
+  # `vite-plus` pin, moved by hand on the toolchain PR.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
