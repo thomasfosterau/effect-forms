@@ -54,7 +54,7 @@ Before you report work as done, run the gates below in order and quote each comm
 5. `vp run -r build`
 6. `vp run docgen`
 7. `pnpm audit --audit-level high` (network)
-8. `vp run test:coverage`, then `fallow audit --format json --quiet --explain --gate-marker agent --base origin/trunk` (the fallow gate below; not a CI step).
+8. `vp run test:coverage`, then `vp exec fallow audit --format json --quiet --explain --gate-marker agent --base origin/trunk` (the fallow gate below; not a CI step).
 
 Steps 2–7 are CI's `build` job, in its order ([ci.yml](.github/workflows/ci.yml)). Neither type-checker reports Svelte's rune compile errors in `*.svelte.ts` (`state_invalid_export`, `rune_missing_parentheses`, …); `vp run -r test:unit` does, because `tests/FormStore.svelte.test.ts` imports `FormStore.svelte.ts` through the `svelte()` Vite plugin.
 
@@ -80,8 +80,8 @@ These packages target **Effect v4**: a single `effect` package. Development and 
 
 ## Agent sessions
 
-- The SessionStart hook (`.claude/hooks/session-start.sh`) installs dependencies against the lockfile, puts `vp` (a re-exec shim that prefers the nearest worktree's `node_modules`), `fallow`, `tsx` and `changeset` on PATH for non-interactive shells, and builds the packages on a clean checkout. It hydrates no secrets; none are needed, and nothing here can publish.
-- A PreToolUse hook (`.claude/hooks/fallow-gate.sh`) blocks `git commit` / `git push` when `fallow audit --base origin/trunk` fails; it reads the coverage map on disk, so run `vp run test:coverage` first. A PostToolUse hook runs `vp fmt --write` on every `.ts` / `.js` / `.css` / `.json` / `.md` file an agent edits, so expect formatter rewrites rather than hand-formatting.
+- The SessionStart hook (`.claude/hooks/session-start.sh`) installs the global Vite+ CLI at the catalog's `vite-plus` pin with the official installer (npm-provenance and SHA-512 checked; it needs `vite.plus` and `viteplus.dev` on the environment's allowlist), links `vp` and `vpx` into `~/.local/bin` for non-interactive shells, runs `vp install --frozen-lockfile`, repairs a broken bare `node`, and builds the packages on a clean checkout. The global `vp` delegates to each checkout's own `vite-plus`, worktrees included. Everything else goes through Vite+: `vp exec fallow …`, `vp exec changeset …`, `vpx <file>.ts` for scripts (`tsx` is installed only because docgen spawns it); nothing else is put on PATH. If the installer can't run, `vp` falls back to this checkout's `node_modules` copy. It hydrates no secrets; none are needed, and nothing here can publish.
+- A PreToolUse hook (`.claude/hooks/fallow-gate.sh`) blocks `git commit` / `git push` when `fallow audit --base origin/trunk` (run through `vp exec fallow`) fails, in this checkout and its `.claude/worktrees/*` only: for a commit in any other tree it runs none of that tree's tooling and skips the audit with a notice. It reads the coverage map on disk, so run `vp run test:coverage` first. A PostToolUse hook runs `vp fmt --write` on every `.ts` / `.js` / `.css` / `.json` / `.md` file an agent edits, so expect formatter rewrites rather than hand-formatting.
 - Every gate in [Verification](#verification) runs in an agent session; `pnpm audit` needs the network. Only publishing (the release workflow's OIDC) can't.
 
 ## Documentation surfaces
