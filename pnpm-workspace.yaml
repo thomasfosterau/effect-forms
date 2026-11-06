@@ -70,7 +70,7 @@ catalog:
   fallow: 3.38.1
   happy-dom: ^21.0.4
   svelte: ^5.57.3
-  svelte-check: ^4.7.7
+  svelte-check: ^4.7.8
   # TypeScript 6/7 side-by-side: TS7 ships no JavaScript compiler API until
   # 7.1, so everything that `require("typescript")` — svelte-check, the Effect
   # language service patch and tsdown's declaration emit — stays on TS6, kept
