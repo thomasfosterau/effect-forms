@@ -13,6 +13,8 @@ vp run -r build       # dist/ for every package (packages/svelte consumes the co
 
 The `vp` CLI ships with the `vite-plus` dev dependency; use `./node_modules/.bin/vp` if no global `vp` is installed.
 
+Open in a Codespace or Dev Container: `.devcontainer/` provisions it with the same hook as agent sessions.
+
 ## Branches
 
 Branch off `trunk`, rebase rather than merge, squash-merge with a conventional prefix: see [AGENTS.md](AGENTS.md#branches-and-pull-requests).
