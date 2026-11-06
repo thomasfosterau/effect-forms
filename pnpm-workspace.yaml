@@ -67,7 +67,7 @@ catalog:
   effect: 4.1.2
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.
-  fallow: 3.38.1
+  fallow: 3.39.0
   happy-dom: ^21.0.4
   svelte: ^5.57.3
   svelte-check: ^4.7.7
