@@ -78,7 +78,8 @@ catalog:
   # `@typescript/native` above is TS7 (bin `tsc`), whose gitHead must match
   # @effect/tsgo's bundled binary.
   typescript: "npm:@typescript/typescript6@6.0.2"
-  # Runs docgen's compiled examples.
+  # Exists only for `@effect/docgen`, which peers on it and spawns the `tsx`
+  # binary itself to run its compiled examples. Scripts run with `vpx`.
   tsx: ^4.23.15
   # vite-plus pins `oxlint`, `oxfmt` and `vitest` to exact versions, so this
   # entry decides the oxlint version `effect-tsgo patch --oxlint` has to
