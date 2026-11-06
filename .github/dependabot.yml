@@ -2,25 +2,23 @@
 # `/` reads pnpm-workspace.yaml's catalogs and the lockfile) and the GitHub
 # Actions, including the local composite setup action's SHA pins.
 #
-# Groups exist so that dependencies which MUST move together arrive in ONE PR.
-# Dependabot puts a dependency in the FIRST group that matches it, so the
-# groups run specific → general, with `exclude-patterns` where a broader
-# pattern would otherwise catch a lockstep member:
+# Groups exist only for dependencies that MUST move together, so they arrive
+# in ONE PR; everything else gets a PR of its own. Dependabot puts a
+# dependency in the FIRST group that matches it, with `exclude-patterns` where
+# a broader pattern would otherwise catch a lockstep member:
 #
 # - `toolchain`: `vite-plus` pins the `vite` core, `vitest`, `oxlint`, `oxfmt`
 #   and `oxlint-tsgolint` it carries (and `@vitest/coverage-istanbul` must equal
 #   that vitest); the root `prepare` script's `effect-tsgo patch` matches the
 #   native `tsc` (`@typescript/native`) and that oxlint / tsgolint by version
-#   and hard-errors on any pairing it has no artifact for; the TS6 alias
-#   (`typescript` → `@typescript/typescript6`) pairs with the TS7 one; the
-#   Effect lint plugin (`@enfect/oxlint`) loads into that oxlint. A PR moving
-#   one alone goes red, so every update type (major included) is grouped.
-#   Read the catalog comments in pnpm-workspace.yaml before merging one.
-# - `docgen`: `@effect/docgen` runs its compiled examples with `tsx`.
+#   and hard-errors on any pairing it has no artifact for. A PR moving one
+#   alone goes red, so every update type (major included) is grouped. Read the
+#   catalog comments in pnpm-workspace.yaml before merging one.
+#   `@enfect/oxlint` is not in it: it takes `@oxlint/plugins` at a caret
+#   range, so it runs on whichever oxlint vite-plus pins.
 # - `effect`: the Effect 4 line is lockstep-versioned and a runtime singleton.
-# - `svelte`, `changesets`: their own release families.
-# - `minor-and-patch`: everything else's minor / patch updates in one PR, so
-#   PR volume stays low; majors outside the sets above stay individual.
+# - `svelte`: Svelte, SvelteKit and svelte-check / svelte2tsx track each
+#   other's compiler versions.
 #
 # Hand moves (Dependabot cannot make them; do them on the `toolchain` PR's
 # branch, then `pnpm install`):
@@ -55,30 +53,18 @@ updates:
       exclude:
         - "@thomasfosterau/*"
     groups:
+      # vite-plus pins vitest / oxlint exactly; effect-tsgo's patch has a hard
+      # compatibility table (header).
       toolchain:
         applies-to: version-updates
         patterns:
           - "vite-plus"
-          - "vite"
+          - "@voidzero-dev/*"
           - "vitest"
           - "@vitest/*"
-          - "oxlint"
-          - "oxfmt"
-          - "oxlint-tsgolint"
           - "@effect/tsgo"
-          - "@typescript/native"
-          - "typescript"
-          - "@typescript/typescript6"
-          - "@voidzero-dev/*"
-          - "@oxlint/*"
-          - "@enfect/oxlint"
         update-types: ["major", "minor", "patch"]
-      docgen:
-        applies-to: version-updates
-        patterns:
-          - "@effect/docgen"
-          - "tsx"
-        update-types: ["major", "minor", "patch"]
+      # One release train; a split bump installs two copies of `effect`.
       effect:
         applies-to: version-updates
         patterns:
@@ -88,6 +74,7 @@ updates:
           - "@effect/tsgo"
           - "@effect/docgen"
         update-types: ["major", "minor", "patch"]
+      # The compiler, Kit and the checkers that embed its version.
       svelte:
         applies-to: version-updates
         patterns:
@@ -96,16 +83,6 @@ updates:
           - "svelte-check"
           - "svelte2tsx"
         update-types: ["major", "minor", "patch"]
-      changesets:
-        applies-to: version-updates
-        patterns:
-          - "@changesets/*"
-        update-types: ["major", "minor", "patch"]
-      minor-and-patch:
-        applies-to: version-updates
-        patterns:
-          - "*"
-        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
     # The composite setup action pins actions too; list it explicitly.
@@ -120,7 +97,3 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 1
-    groups:
-      github-actions:
-        patterns:
-          - "*"
