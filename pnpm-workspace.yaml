@@ -45,7 +45,7 @@ catalog:
   # oxlint vite-plus carries, so it moves with the toolchain set. Its own
   # `effect` dependency (4.1.0) resolves to the catalog singleton through the
   # `effect: "catalog:"` override below; it lints fine on that copy.
-  "@enfect/oxlint": 0.9.0
+  "@enfect/oxlint": 0.10.0
   # The SvelteKit the three consuming applications run; only the `/kit` entry
   # of effect-forms-svelte imports it (an optional peer, see `catalogs.peers`).
   "@sveltejs/kit": 3.1.1
