@@ -1,5 +1,14 @@
 # @thomasfosterau/effect-forms-svelte
 
+## 0.3.3
+
+### Patch Changes
+
+- 11987ea: Ship `CHANGELOG.md` in the published tarballs, so the release notes are readable from `node_modules`.
+- Updated dependencies [11987ea]
+- Updated dependencies [40348f7]
+  - @thomasfosterau/effect-forms@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes
