@@ -1,5 +1,15 @@
 # @thomasfosterau/effect-forms
 
+## 0.4.0
+
+### Minor Changes
+
+- 40348f7: `Command.plan` now classifies `Schema.OptionFrom*` fields (`OptionFromNullOr`, `OptionFromUndefinedOr`, `OptionFromNullishOr`, …) by their encoded side, so a `date`, `structured` or `enum` field keeps its kind when it moves from `optional(NullOr(X))` to `optional(OptionFromNullOr(X))`. Before, those fields threw `matches no known kind` at plan time. Fields that don't decode to an `Option` classify exactly as before.
+
+### Patch Changes
+
+- 11987ea: Ship `CHANGELOG.md` in the published tarballs, so the release notes are readable from `node_modules`.
+
 ## 0.3.2
 
 ### Patch Changes
