@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Record from "effect/Record";
 import * as Schema from "effect/Schema";
@@ -151,6 +152,145 @@ describe("Command.plan", () => {
     expect(byKey.caption.updateClearable).toBe(true);
     expect(byKey.document.createRequired).toBe(false);
     expect(byKey.document.updateClearable).toBe(true);
+  });
+});
+
+// website#1906: the `OptionFrom*` family must classify as its inner type
+// does under the plain `optional(NullOr(X))` spelling.
+describe("Command.plan — OptionFrom* fields", () => {
+  const inners = [
+    ["String", Schema.String, "text"],
+    ["Finite", Schema.Finite, "number"],
+    ["DateFromString", Schema.DateFromString, "date"],
+    ["Uuid", Uuid, "id"],
+    ["branded id", ParentId, "id"],
+    ["struct", Doc, "structured"],
+    ["Literals", Visibility, "enum"],
+  ] as const;
+  const optionWrappers = [
+    ["OptionFromNullOr", Schema.OptionFromNullOr],
+    ["OptionFromUndefinedOr", Schema.OptionFromUndefinedOr],
+    ["OptionFromNullishOr", (s: Schema.Top) => Schema.OptionFromNullishOr(s)],
+  ] as const;
+  const fieldWrappers = [
+    ["optional", Schema.optional],
+    ["optionalKey", Schema.optionalKey],
+  ] as const;
+
+  const cases = Arr.flatMap(inners, ([innerName, inner, kind]) =>
+    Arr.flatMap(optionWrappers, ([optionName, wrapOption]) =>
+      Arr.map(
+        fieldWrappers,
+        ([fieldName, wrapField]) =>
+          [
+            `${fieldName}(${optionName}(${innerName}))`,
+            kind,
+            wrapField(wrapOption(inner)),
+          ] as const,
+      ),
+    ),
+  );
+
+  it.each(cases)("classifies %s as %s", (_name, kind, field) => {
+    const fieldPlan = plan(Schema.Struct({ value: field }), Schema.Struct({ id: Uuid })).fields[0];
+    expect(fieldPlan.kind).toBe(kind);
+  });
+
+  it.each(inners)("matches the optional(NullOr(%s)) classification", (_name, inner) => {
+    const viaNullOr = plan(
+      Schema.Struct({ value: Schema.optional(Schema.NullOr(inner)) }),
+      Schema.Struct({ id: Uuid, value: Schema.optional(Schema.NullOr(inner)) }),
+    ).fields[0];
+    const viaOption = plan(
+      Schema.Struct({ value: Schema.optional(Schema.OptionFromNullOr(inner)) }),
+      Schema.Struct({ id: Uuid, value: Schema.optional(Schema.OptionFromNullOr(inner)) }),
+    ).fields[0];
+    expect(viaOption).toEqual(viaNullOr);
+  });
+
+  it("reads enum options through the Option wrapper", () => {
+    const fieldPlan = plan(
+      Schema.Struct({ certainty: Schema.optional(Schema.OptionFromNullOr(Visibility)) }),
+      Schema.Struct({ id: Uuid }),
+    ).fields[0];
+    expect(fieldPlan.options).toEqual(["public", "private", "unlisted"]);
+  });
+
+  it("still throws on an Option of a Schema.declare'd type", () => {
+    const Upload = Schema.declare(
+      (u): u is { readonly bytes: Uint8Array } => Predicate.isObjectOrArray(u) && "bytes" in u,
+    );
+    expect(() =>
+      plan(
+        Schema.Struct({ file: Schema.optional(Schema.OptionFromNullOr(Upload)) }),
+        Schema.Struct({ id: Uuid }),
+      ),
+    ).toThrow('field "file" matches no known kind');
+  });
+
+  // End to end: the derived adapters' encoded payload decodes through the
+  // command structs — a value to `Some`, blank to absent (create) or `None`
+  // (update clear).
+  const CreateEntry = Schema.Struct({
+    startedAt: Schema.optional(Schema.OptionFromNullOr(Schema.DateFromString)),
+    content: Schema.optional(Schema.OptionFromNullOr(Doc)),
+    certainty: Schema.optional(Schema.OptionFromNullOr(Visibility)),
+  });
+  const UpdateEntry = Schema.Struct({
+    id: Uuid,
+    startedAt: Schema.optional(Schema.OptionFromNullOr(Schema.DateFromString)),
+    content: Schema.optional(Schema.OptionFromNullOr(Doc)),
+    certainty: Schema.optional(Schema.OptionFromNullOr(Visibility)),
+  });
+  const entry = plan(CreateEntry, UpdateEntry);
+  const id = "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f";
+  const isoString = (date: Date) => date.toISOString();
+  const filled = {
+    startedAt: "2024-01-02",
+    content: '{"type":"doc","text":"hi"}',
+    certainty: "public",
+  };
+
+  it("derives clearable update fields", () => {
+    expect(Arr.map(entry.fields, (field) => [field.kind, field.updateClearable])).toEqual([
+      ["date", true],
+      ["structured", true],
+      ["enum", true],
+    ]);
+  });
+
+  it("decodes a filled create payload to Some", () => {
+    const decoded = Schema.decodeUnknownSync(CreateEntry)(createAdapter(entry)(filled));
+    expect(Option.map(decoded.startedAt ?? Option.none(), isoString)).toEqual(
+      Option.some("2024-01-02T00:00:00.000Z"),
+    );
+    expect(decoded.content).toEqual(Option.some({ type: "doc", text: "hi" }));
+    expect(decoded.certainty).toEqual(Option.some("public"));
+  });
+
+  it("decodes a blank create payload to absent fields", () => {
+    const blank = { startedAt: "", content: "", certainty: "" };
+    const payload = createAdapter(entry)(blank);
+    expect(payload).toEqual({ startedAt: undefined, content: undefined, certainty: undefined });
+    const decoded = Schema.decodeUnknownSync(CreateEntry)(payload);
+    expect(decoded.startedAt ?? Option.none()).toEqual(Option.none());
+    expect(decoded.content ?? Option.none()).toEqual(Option.none());
+  });
+
+  it("decodes a blank update payload to None (clear)", () => {
+    const blank = { id, startedAt: "", content: "", certainty: "" };
+    const decoded = Schema.decodeUnknownSync(UpdateEntry)(updateAdapter(entry)(blank));
+    expect(decoded.startedAt).toEqual(Option.none());
+    expect(decoded.content).toEqual(Option.none());
+    expect(decoded.certainty).toEqual(Option.none());
+  });
+
+  it("decodes a filled update payload to Some", () => {
+    const decoded = Schema.decodeUnknownSync(UpdateEntry)(updateAdapter(entry)({ id, ...filled }));
+    expect(Option.map(decoded.startedAt ?? Option.none(), isoString)).toEqual(
+      Option.some("2024-01-02T00:00:00.000Z"),
+    );
+    expect(decoded.certainty).toEqual(Option.some("public"));
   });
 });
 
