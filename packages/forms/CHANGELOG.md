@@ -1,5 +1,12 @@
 # @thomasfosterau/effect-forms
 
+## 0.3.2
+
+### Patch Changes
+
+- 1ef75b1: The `effect` peer range is now `^4.0.0` (was `>=4.0.0`), per the peer-range policy. Only the form of the range changes: every 4.x release from 4.0.0 stays supported, and the floor is raised only when a dependency requires it.
+- cd4a425: Internal cleanup for the stricter lint set (`@enfect/oxlint` plus Oxlint's `suspicious` / `perf` categories) with no behaviour change: module-level helpers are hoisted out of the functions that used them, shadowed names are renamed, and the parameter of `CommandFailure.message` is now named `text` in the emitted `.d.ts` (positional, so callers are unaffected).
+
 ## 0.3.1
 
 ### Patch Changes
