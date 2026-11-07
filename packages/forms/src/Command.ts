@@ -179,6 +179,33 @@ function isStructured(ast: SchemaAST.AST): boolean {
   return SchemaAST.isObjects(unwrapWrapperUnion(ast));
 }
 
+/** The `representation` id `Schema.Option`'s declaration carries (4.0.0 onward). */
+const OPTION_REPRESENTATION_ID = "effect/schema/Option";
+
+/**
+ * The encoded side of an `Option`-decoding field — `Schema.OptionFromNullOr(X)`,
+ * `OptionFromUndefinedOr(X)`, `OptionFromNullishOr(X)` and the rest of the
+ * `OptionFrom*` family (optionally `optional` / `NullOr`-wrapped) — or
+ * `undefined` when the field doesn't decode to an `Option`. Such a field's
+ * type-side AST is the `Option` declaration, which hides the inner `X` from
+ * the AST checks (`enum`, `structured`) and wraps the decoded value the
+ * `date` probe inspects; its last encoding link leads to the wire shape
+ * (`NullOr(X)`, …), which classifies exactly as the plain nullable spelling
+ * does.
+ */
+function optionEncodedSide(ast: SchemaAST.AST): SchemaAST.AST | undefined {
+  const inner = unwrapWrapperUnion(ast);
+  if (!SchemaAST.isDeclaration(inner) || inner.encoding === undefined) return undefined;
+  const representation = inner.annotations?.representation;
+  if (
+    !Predicate.hasProperty(representation, "id") ||
+    representation.id !== OPTION_REPRESENTATION_ID
+  ) {
+    return undefined;
+  }
+  return Arr.lastNonEmpty(inner.encoding).to;
+}
+
 /** One field's classification: its {@link FieldKind}, plus `options` for `"enum"`. */
 interface Classification {
   readonly kind: FieldKind;
@@ -209,6 +236,9 @@ const probeKind = (schema: Schema.Top): FieldKind | undefined => {
  * shape (worse, a numeric-literal enum whose set happens to include the `42`
  * probe value would otherwise misclassify as `number`) — reading the literal
  * set off the AST is unambiguous, and it's needed anyway for the renderer.
+ * An `OptionFrom*` field is classified by its encoded side first (see
+ * {@link optionEncodedSide}), so it gets the same kind as the plain
+ * `NullOr` / `UndefinedOr` spelling of the same wire value.
  * `structured` is checked last, after every probe has failed: an object
  * schema never decodes any of `probeKind`'s scalar probes, so there is no
  * real ordering hazard, but putting the broadest, AST-only check last keeps
@@ -217,6 +247,8 @@ const probeKind = (schema: Schema.Top): FieldKind | undefined => {
  * the gap surfaces when the plan is declared, not on a live submission.
  */
 const classify = (key: string, schema: Schema.Top): Classification => {
+  const encodedSide = optionEncodedSide(schema.ast);
+  if (encodedSide !== undefined) return classify(key, Schema.make<Schema.Top>(encodedSide));
   const options = enumOptions(schema.ast);
   if (options !== undefined) return { kind: "enum", options };
   const probed = probeKind(schema);
