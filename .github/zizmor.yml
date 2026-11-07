@@ -13,9 +13,3 @@ rules:
     # `./.github/actions/setup` is the documented local-action path; the
     # `$/` spelling buys nothing for a single-repo composite action.
     disable: true
-  artipacked:
-    ignore:
-      # The release job's changesets/action pushes the version branch and the
-      # tags, so its checkout must keep the (job-scoped) GITHUB_TOKEN. The job
-      # uploads no artifacts and never runs for forks or Dependabot.
-      - release.yml
