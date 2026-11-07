@@ -98,25 +98,12 @@ export default defineConfig({
       // SvelteKit's untyped `RequestEvent` / DOM targets, test fixtures — so
       // removing each is a per-site redesign, not a lint sweep.
       "typescript/no-unsafe-type-assertion": "warn",
-      // 12 sites (11 in `packages/svelte/src/kit/FormAction.ts`, 1 in
-      // `packages/forms/src/Form.ts`): a caller's command rejection, or an
-      // unreadable request body, is `unknown` by contract and reaches the
-      // classifiers / the defect as-is. Typing it means wrapping it in a tagged
-      // error every classifier then unwraps. `Form.ts` cannot switch to
-      // `Effect.promise` either: `effect/effect-promise-vs-trypromise` forbids it.
-      "effecttsgo/any-unknown-in-error-context": "warn",
-      // 2 sites (`Validate.validateValueSync`, `FormAction`'s `form.validate`):
-      // each drops a decoding-service requirement the published sync contract
-      // has the caller assert is `never`, with a `// SAFETY:` comment.
-      "effecttsgo/unsafe-effect-type-assertion": "warn",
-      // 4 sites, all published signatures (`validateData` / `validateField`,
-      // `EntityFormBuilder.custom` / `.rows`): dropping the type parameter
-      // breaks every caller that passes it explicitly, so it is a breaking
-      // change decided per export, as for the Effect rules above.
-      "typescript/no-unnecessary-type-parameters": "warn",
-      // 1 site: `FormBuilder.make` is deliberately `FormBuilder<{}, never>`,
-      // the builder with no fields that `addField` extends.
-      "typescript/no-generated-empty-object-type": "warn",
+      // The other type-aware rules are at `error`; their can't-apply sites
+      // are scoped overrides below ("Type-aware rules: can't-apply sites").
+      "effecttsgo/any-unknown-in-error-context": "error",
+      "effecttsgo/unsafe-effect-type-assertion": "error",
+      "typescript/no-unnecessary-type-parameters": "error",
+      "typescript/no-generated-empty-object-type": "error",
 
       // ---- Oxlint's own plugins (suspicious / perf categories) ------------
       // `_tag` is Effect's discriminant and a leading `_` marks a form field
@@ -242,6 +229,59 @@ export default defineConfig({
         files: ["packages/forms/src/FormBuilder.ts"],
         rules: {
           "effect/require-filter-metadata": "off",
+        },
+      },
+
+      // ---- Type-aware rules: can't-apply sites (#91) ----------------------
+      // A caller's command rejection is `unknown` by contract: the published
+      // `Command` type is `Promise<O> | Effect<O, unknown>`, and the cause
+      // reaches the caller's `classify` as-is. Typing it means wrapping it in
+      // a tagged error every classifier then unwraps — a breaking change to
+      // `Command` / `classify`. `form.validate`'s cast only narrows a
+      // decoding-service requirement a posted form never has at runtime
+      // (`// SAFETY:` at the site).
+      {
+        files: ["packages/svelte/src/kit/FormAction.ts"],
+        rules: {
+          "effecttsgo/any-unknown-in-error-context": "off",
+          "effecttsgo/unsafe-effect-type-assertion": "off",
+        },
+      },
+      // An unreadable request body dies as its own rejection reason
+      // (`validate` never fails); `Effect.promise` would say the same, but
+      // `effect/effect-promise-vs-trypromise` forbids it.
+      {
+        files: ["packages/forms/src/Form.ts"],
+        rules: {
+          "effecttsgo/any-unknown-in-error-context": "off",
+        },
+      },
+      // `validateValueSync` is the published sync contract: the caller asserts
+      // the schema needs no decoding services, and the cast drops that
+      // requirement (`// SAFETY:` at the site).
+      {
+        files: ["packages/forms/src/Validate.ts"],
+        rules: {
+          "effecttsgo/unsafe-effect-type-assertion": "off",
+        },
+      },
+      // `FormBuilder.make` is deliberately `FormBuilder<{}, never>`: the
+      // builder with no fields, which `addField` extends by intersection.
+      // `{}` is the published type; `Record<never, never>` would change it.
+      {
+        files: ["packages/forms/src/FormBuilder.ts"],
+        rules: {
+          "typescript/no-generated-empty-object-type": "off",
+        },
+      },
+      // Published signatures (`validateData` / `validateField`,
+      // `EntityFormBuilder.custom` / `.rows`): dropping the type parameter
+      // breaks every caller that passes it explicitly. A breaking change
+      // decided per export on #91.
+      {
+        files: ["packages/svelte/src/ClientValidate.ts", "packages/svelte/src/EntityForm.ts"],
+        rules: {
+          "typescript/no-unnecessary-type-parameters": "off",
         },
       },
     ],
