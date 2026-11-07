@@ -79,6 +79,15 @@ export default defineConfig({
 
       "vite-plus/prefer-vite-plus-imports": "error",
 
+      // ---- @effect/tsgo preset rules the preset leaves at `warn` (#116) ----
+      // Set explicitly, so a new site is an error, not a warning.
+      "effecttsgo/schema-class-missing-brand": "error",
+      "effecttsgo/schema-number": "error",
+      "effecttsgo/effect-succeed-with-void": "error",
+      "effecttsgo/unnecessary-typeof-type": "error",
+      "effecttsgo/unknown-in-effect-catch": "error",
+      "effecttsgo/prefer-typed-schema-decoder": "error",
+
       // ---- Type-aware rules (tsgolint) at `warn`, with their site counts ---
       // Debt tracked on #91, not headroom: a new site is a
       // defect, and a rule whose count reaches zero goes back to `error`.
@@ -119,6 +128,30 @@ export default defineConfig({
       "vitest/require-mock-type-parameters": "off",
     },
     overrides: [
+      // A `tryPromise` whose rejection is `unknown` by contract: a caller's
+      // command failure reaches `classify` as-is (the published `Command`
+      // type's error channel is `unknown`), and an unreadable request body
+      // dies as its own reason (`validate` never fails). Same sites as
+      // `effecttsgo/any-unknown-in-error-context` (#91).
+      {
+        files: ["packages/svelte/src/kit/FormAction.ts", "packages/forms/src/Form.ts"],
+        rules: {
+          "effecttsgo/unknown-in-effect-catch": "off",
+        },
+      },
+      // The suggested `Document.ErrorObject` type doesn't exist at the
+      // `@thomasfosterau/effect-jsonapi` peer floor (0.16.0 exports it only
+      // as a value), so the published `CommandFailure.ErrorObject` keeps
+      // `typeof Document.ErrorObject.Type`, and its type test mirrors it.
+      {
+        files: [
+          "packages/svelte/src/kit/CommandFailure.ts",
+          "packages/svelte/tests/kit/CommandFailure.types.test.ts",
+        ],
+        rules: {
+          "effecttsgo/unnecessary-typeof-type": "off",
+        },
+      },
       // Build/test configs are evaluated by Vite and Vitest in bare Node,
       // before any Effect runtime exists — there is no `Config` provider to
       // read from and no `FileSystem` service to call, so `process.env` and

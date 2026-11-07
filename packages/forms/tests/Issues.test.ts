@@ -65,7 +65,7 @@ describe("schemaIssuesToFormIssues default messages", () => {
 
 describe("schemaIssuesToFormIssues shapes", () => {
   it("renders a union mismatch as one issue at the field", () => {
-    const schema = Schema.Struct({ v: Schema.Union([Schema.String, Schema.Number]) });
+    const schema = Schema.Struct({ v: Schema.Union([Schema.String, Schema.Finite]) });
     const issues = schemaIssuesToFormIssues(issueOf(schema, { v: true }));
     expect(issues).toHaveLength(1);
     expect(issues[0]?.path).toEqual(["v"]);

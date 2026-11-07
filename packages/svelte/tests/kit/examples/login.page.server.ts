@@ -19,16 +19,19 @@ import * as Schema from "effect/Schema";
 // ── What the application provides (`#lib/server/...`) ──────────────────
 
 /** The session transport's failure: a status from the auth Worker. */
-export class SessionCallError extends Schema.TaggedError<SessionCallError>()("SessionCallError", {
-  status: Schema.Number,
+export class SessionCallError extends Schema.TaggedError<
+  SessionCallError,
+  { readonly brand: unique symbol }
+>()("SessionCallError", {
+  status: Schema.Finite,
   message: Schema.String,
 }) {}
 
 /** Raised when the app's hooks never put a session transport on `event.locals`. */
-class MissingSessionTransport extends Schema.TaggedError<MissingSessionTransport>()(
-  "MissingSessionTransport",
-  { message: Schema.String },
-) {}
+class MissingSessionTransport extends Schema.TaggedError<
+  MissingSessionTransport,
+  { readonly brand: unique symbol }
+>()("MissingSessionTransport", { message: Schema.String }) {}
 
 /** The session transport, reached through `event.locals` in this example. */
 export interface SessionTransport {

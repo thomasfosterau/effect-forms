@@ -95,16 +95,16 @@ export type FormInputRecord = Readonly<Record<string, string | undefined>>;
 // ── errors ────────────────────────────────────────────────────────────
 
 /** A command field {@link plan} cannot classify into any {@link FieldKind}. */
-class UnclassifiableFieldError extends Schema.TaggedError<UnclassifiableFieldError>()(
-  "UnclassifiableFieldError",
-  { message: Schema.String },
-) {}
+class UnclassifiableFieldError extends Schema.TaggedError<
+  UnclassifiableFieldError,
+  { readonly brand: unique symbol }
+>()("UnclassifiableFieldError", { message: Schema.String }) {}
 
 /** A malformed `jsonArray` field payload, as {@link jsonRowsFromField} rejects it. */
-class InvalidJsonRowsError extends Schema.TaggedError<InvalidJsonRowsError>()(
-  "InvalidJsonRowsError",
-  { message: Schema.String },
-) {}
+class InvalidJsonRowsError extends Schema.TaggedError<
+  InvalidJsonRowsError,
+  { readonly brand: unique symbol }
+>()("InvalidJsonRowsError", { message: Schema.String }) {}
 
 // ── probes ────────────────────────────────────────────────────────────
 

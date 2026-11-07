@@ -43,7 +43,7 @@ describe("FormStateSchema", () => {
   it("round-trips a state across encode/decode", () => {
     const schema = FormStateSchema(Schema.Struct({ name: Schema.String }));
     const state = make({ name: "Ada" }, { errors: { name: ["x"] } });
-    const decoded = Effect.runSync(SchemaParser.decodeUnknownEffect(schema)(state));
+    const decoded = Effect.runSync(SchemaParser.decodeEffect(schema)(state));
     expect(decoded.data).toEqual({ name: "Ada" });
     expect(decoded.valid).toBe(false);
   });
