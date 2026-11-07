@@ -1,6 +1,6 @@
 {
   "name": "@thomasfosterau/effect-forms-svelte",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Svelte 5 (runes) bindings for @thomasfosterau/effect-forms — a reactive form store, an enhance action, tainted tracking, and client-side validation.",
   "keywords": [
     "effect",
