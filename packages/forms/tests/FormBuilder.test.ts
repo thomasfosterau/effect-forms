@@ -39,7 +39,7 @@ describe("FormBuilder.buildSchema", () => {
   it("collapses to a schema that decodes fields and array items", () => {
     const schema = buildSchema(builder);
     const decoded = run(
-      SchemaParser.decodeUnknownEffect(schema)({ name: "Ada", age: "31", tags: ["x", "y"] }),
+      SchemaParser.decodeEffect(schema)({ name: "Ada", age: "31", tags: ["x", "y"] }),
     );
     expect(decoded).toEqual({ name: "Ada", age: 31, tags: ["x", "y"] });
   });

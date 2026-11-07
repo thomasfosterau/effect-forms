@@ -23,13 +23,19 @@ const ErrorObject = Schema.Struct({
 
 export type ErrorObject = typeof ErrorObject.Type;
 
-export class JsonapiError extends Schema.TaggedError<JsonapiError>()("JsonapiError", {
-  status: Schema.Number,
+export class JsonapiError extends Schema.TaggedError<
+  JsonapiError,
+  { readonly brand: unique symbol }
+>()("JsonapiError", {
+  status: Schema.Finite,
   errors: Schema.Array(ErrorObject),
 }) {}
 
-export class ErrorResponse extends Schema.TaggedError<ErrorResponse>()("ErrorResponse", {
-  status: Schema.Number,
+export class ErrorResponse extends Schema.TaggedError<
+  ErrorResponse,
+  { readonly brand: unique symbol }
+>()("ErrorResponse", {
+  status: Schema.Finite,
   message: Schema.String,
   document: Schema.Option(Schema.Struct({ errors: Schema.Array(ErrorObject) })),
 }) {}
@@ -44,9 +50,12 @@ export class ApiError extends Error {
   }
 }
 
-class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", {
-  message: Schema.String,
-}) {}
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()(
+  "TestFailure",
+  {
+    message: Schema.String,
+  },
+) {}
 
 export const testFailure = (message: string): TestFailure => new TestFailure({ message });
 
