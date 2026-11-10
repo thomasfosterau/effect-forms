@@ -85,7 +85,8 @@ updates:
           - "svelte-check"
           - "svelte2tsx"
         update-types: ["major", "minor", "patch"]
-
+    assignees:
+      - thomasfosterau
   - package-ecosystem: "github-actions"
     # The composite setup action pins actions too; list it explicitly.
     directories:
@@ -99,7 +100,8 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 1
-
+    assignees:
+      - thomasfosterau
   # The dev container's features (.devcontainer/devcontainer.json) and their
   # lockfile. The base image tag is not a feature: it is the catalog's
   # `vite-plus` pin, moved by hand on the toolchain PR.
@@ -113,3 +115,5 @@ updates:
       prefix: "chore"
     cooldown:
       default-days: 1
+    assignees:
+      - thomasfosterau
