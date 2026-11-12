@@ -27,6 +27,12 @@ describe("formStateOf", () => {
   it("answers undefined for an action result that carried a bare message", () => {
     expect(formStateOf({ message: "The request could not be completed." })).toBeUndefined();
   });
+
+  it("drops a malformed error tree rather than the whole state", () => {
+    const state = formStateOf({ form: { data: { name: "Balcony" }, errors: { name: [3] } } });
+    expect(state?.errors).toBeUndefined();
+    expect(valueOf(state, "name")).toBe("Balcony");
+  });
 });
 
 describe("issuesFor", () => {
@@ -74,5 +80,11 @@ describe("valueOf", () => {
 
   it("renders a non-string posted value rather than dropping it", () => {
     expect(valueOf(state, "count")).toBe("3");
+  });
+
+  it("falls back for a posted null", () => {
+    expect(valueOf(formStateOf({ form: { data: { name: null } } }), "name", "Stored")).toBe(
+      "Stored",
+    );
   });
 });

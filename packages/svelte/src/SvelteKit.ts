@@ -21,7 +21,12 @@ type FormState<A, Message = unknown> = State.FormState<A, Message>;
  */
 export interface ServerActionResult {
   readonly type: "success" | "failure" | "redirect" | "error";
-  readonly data?: FormActionData | Record<string, unknown> | undefined;
+  /**
+   * The result's payload, unparsed: SvelteKit types it as an open record, and
+   * {@link applyActionResult} checks it for a carried {@link FormActionData}
+   * before reading it.
+   */
+  readonly data?: unknown;
 }
 
 const isFormActionData = (data: unknown): data is FormActionData & { form: FormState<unknown> } =>

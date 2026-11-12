@@ -91,7 +91,7 @@ export type DecodedFromFields<T extends FieldsRecord> = {
  * HTML input's empty value). Conservative by design — a value that will not
  * decode cleanly is still a valid *starting* value the user edits.
  */
-export function defaultValue(schema: Schema.Top): unknown {
+export function defaultValue(schema: Schema.Top): BlankValue {
   return fromAst(schema.ast);
 }
 
@@ -112,10 +112,10 @@ function unwrapToStructured(ast: SchemaAST.AST): SchemaAST.AST {
 }
 
 /** A seeded blank value: `""` for a leaf, `[]` for an array, a struct of blanks for a struct. */
-type BlankValue = "" | Array<never> | BlankStruct;
+export type BlankValue = "" | Array<never> | BlankStruct;
 
-/** A struct of {@link BlankValue}s, one per property. */
-interface BlankStruct {
+/** A struct of {@link BlankValue}s, one per property — what {@link defaultEncodedValues} seeds. */
+export interface BlankStruct {
   readonly [key: string]: BlankValue;
 }
 
@@ -180,6 +180,6 @@ export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
 }
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */
-export function defaultEncodedValues(fields: FieldsRecord): Record<string, unknown> {
+export function defaultEncodedValues(fields: FieldsRecord): BlankStruct {
   return R.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
 }

@@ -21,24 +21,44 @@
  * @module effect-forms-svelte/kit/FormStateReaders
  */
 
+import type { Errors } from "@thomasfosterau/effect-forms";
 import { flow } from "effect/Function";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 
 /**
- * The subset of `State.FormState` the readers touch: the posted values and
- * the nested error tree. Structural rather than imported so a page can hand
- * in its raw `ActionData` without a cast.
+ * What the readers keep of a carried `State.FormState`: each posted value
+ * rendered as the string a field shows, and the nested error tree. Built by
+ * {@link formStateOf}, which parses the page's raw `form` prop into it.
  */
 export interface ActionFormState {
-  readonly data?: Readonly<Record<string, unknown>>;
-  readonly errors?: Readonly<Record<string, unknown>>;
+  /** Posted values by field name, as rendered; a `null` / `undefined` value is absent. */
+  readonly data?: Readonly<Record<string, string>>;
+  /** The nested error tree `formAction` hands back. */
+  readonly errors?: Errors.FormErrors;
 }
+
+/** The wire shape of a carried error tree: `Errors.FormErrors`, checked recursively. */
+const FormErrorsTree: Schema.Codec<Errors.FormErrors> = Schema.Record(
+  Schema.String,
+  Schema.Union([
+    Schema.Array(Schema.String),
+    Schema.Undefined,
+    Schema.suspend((): Schema.Codec<Errors.FormErrors> => FormErrorsTree),
+  ]),
+);
+
+/** Whether an error-tree node is a leaf: a field's own messages. */
+const isMessages = Schema.is(Schema.Array(Schema.String));
+
+/** The carried error tree, or `None` when the member is not a well-formed one. */
+const decodeErrors = Schema.decodeUnknownOption(FormErrorsTree);
 
 /**
  * An action result that carries a form state: an object whose `form` member
- * is itself an object. Its `data` / `errors` members are checked by
+ * is itself an object. Its `data` / `errors` members are parsed by
  * {@link carriedState}, so a malformed member reads as absent rather than
  * rejecting the whole state.
  */
@@ -50,14 +70,29 @@ const CarriedForm = Schema.Struct({
 });
 
 /**
- * Only the two members the readers touch, each kept only when it is an
- * object — anything else answers as absent, exactly as reading through it
- * would.
+ * Only the two members the readers touch: `data` kept when it is an object,
+ * `errors` when it is a well-formed error tree — anything else answers as
+ * absent, exactly as reading through it would.
+ *
+ * Each posted value is rendered as a field shows it: a string as itself,
+ * `null` / `undefined` as absent, and any other value (a checkbox's boolean,
+ * a number) through `String(...)` rather than dropped — the point of
+ * repopulation is that the user sees what they sent.
  */
 const carriedState = ({ form: state }: typeof CarriedForm.Type): ActionFormState => {
   const carried: { -readonly [K in keyof ActionFormState]: ActionFormState[K] } = {};
-  if (P.isReadonlyObject(state.data)) carried.data = state.data;
-  if (P.isReadonlyObject(state.errors)) carried.errors = state.errors;
+  if (P.isReadonlyObject(state.data)) {
+    carried.data = R.getSomes(
+      R.map(state.data, (value) =>
+        P.isNullish(value)
+          ? Option.none()
+          : // oxlint-disable-next-line typescript/no-base-to-string -- posted values are form scalars (a checkbox's boolean, a number); rendering them is the point
+            Option.some(P.isString(value) ? value : String(value)),
+      ),
+    );
+  }
+  const errors = decodeErrors(state.errors);
+  if (Option.isSome(errors)) carried.errors = errors.value;
   return carried;
 };
 
@@ -79,9 +114,7 @@ export const issuesFor = (
   field: string,
 ): ReadonlyArray<string> => {
   const issues = state?.errors?.[field];
-  // SAFETY: the error tree `formAction` hands back holds the form's messages
-  // at each field, and these readers serve pages whose messages are strings.
-  return Array.isArray(issues) ? (issues as ReadonlyArray<string>) : [];
+  return isMessages(issues) ? issues : [];
 };
 
 /**
@@ -101,13 +134,5 @@ export const rootIssuesOf = (state: ActionFormState | undefined): ReadonlyArray<
  * `String(...)` rather than being dropped: the point of repopulation is that
  * the user sees what they sent.
  */
-export const valueOf = (
-  state: ActionFormState | undefined,
-  field: string,
-  fallback = "",
-): string => {
-  const value = state?.data?.[field];
-  if (value === undefined || value === null) return fallback;
-  // oxlint-disable-next-line typescript/no-base-to-string -- posted values are form scalars (a checkbox's boolean, a number); rendering them is the point
-  return P.isString(value) ? value : String(value);
-};
+export const valueOf = (state: ActionFormState | undefined, field: string, fallback = ""): string =>
+  state?.data?.[field] ?? fallback;
