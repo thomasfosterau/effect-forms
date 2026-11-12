@@ -29,9 +29,11 @@ export interface EnhancedFormProps {
 /**
  * Spreadable `<form>` props wiring SvelteKit's native `enhance` to the store:
  * `method="post"` plus a Svelte attachment that flips `submitting`, applies a
- * validation failure back to the store, and otherwise defers to SvelteKit's
- * default `update` (with `reset: false`) for success / redirect / error, which
- * applies the result exactly once.
+ * validation failure back to the store, and then always runs SvelteKit's
+ * default `update` (with `reset: false`), which applies the result to
+ * `page.form` / `page.status` exactly once. So a validation failure replaces
+ * whatever `page.form` an earlier submit left (a `fail(500, { message })`, say)
+ * instead of leaving it on screen beside the new field errors.
  *
  * @example
  * ```svelte
@@ -56,7 +58,7 @@ export function enhanceForm(
         form.submitting = true;
         return async ({ result, update }) => {
           form.submitting = false;
-          if (applyActionResult(form, result)) return;
+          applyActionResult(form, result);
           await update({ reset: false });
         };
       });
