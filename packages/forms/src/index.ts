@@ -26,4 +26,5 @@ export * as Mode from "./Mode.ts";
 export * as Path from "./Path.ts";
 export * as Result from "./Result.ts";
 export * as State from "./State.ts";
+export * as TriState from "./TriState.ts";
 export * as Validate from "./Validate.ts";

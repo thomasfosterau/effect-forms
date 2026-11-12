@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { Command } from "@thomasfosterau/effect-forms";
+import { type Command, TriState } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
 import type { Component } from "svelte";
 import { defineEntityForm, type EntityFormEntry } from "../src/EntityForm.ts";
@@ -130,7 +130,9 @@ describe("defineEntityForm", () => {
         update: UpdateThing,
         submit,
         inputOverrides: { create: { title: Schema.optional(Schema.String) } },
-        adaptOverrides: { create: { title: (raw) => raw?.trim() || "Untitled" } },
+        adaptOverrides: {
+          create: { title: (raw) => TriState.assign(raw?.trim() || "Untitled") },
+        },
       },
       (f) => [
         f.custom("parentId", Picker, () => ({})),

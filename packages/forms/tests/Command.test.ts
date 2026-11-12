@@ -13,6 +13,7 @@ import {
   plan,
   updateAdapter,
 } from "../src/Command.ts";
+import * as TriState from "../src/TriState.ts";
 
 // Synthetic command pair exercising every field kind and both tri-state
 // shapes — mirrors the host app's flat Create*/Update* structs (required
@@ -272,7 +273,8 @@ describe("Command.plan — OptionFrom* fields", () => {
   it("decodes a blank create payload to absent fields", () => {
     const blank = { startedAt: "", content: "", certainty: "" };
     const payload = createAdapter(entry)(blank);
-    expect(payload).toEqual({ startedAt: undefined, content: undefined, certainty: undefined });
+    // Carry-forward fields are left out of the payload entirely.
+    expect(payload).toStrictEqual({});
     const decoded = Schema.decodeSync(CreateEntry)(payload);
     expect(decoded.startedAt ?? Option.none()).toEqual(Option.none());
     expect(decoded.content ?? Option.none()).toEqual(Option.none());
@@ -369,16 +371,10 @@ describe("Command.createAdapter", () => {
       id: "u1",
       title: "T",
       parentId: "p1",
-      note: undefined,
-      count: undefined,
-      publishedOn: undefined,
-      rows: undefined,
-      // Boolean create-required defaults `false`; the rest skip (`undefined`)
-      // — structured ignores required-ness, see coerceBoolean / structuredFromField.
+      // Boolean create-required defaults `false`; the rest carry forward, so
+      // their keys are absent — structured ignores required-ness, see
+      // coerceBoolean / structuredFromField.
       isPinned: false,
-      visibility: undefined,
-      caption: undefined,
-      document: undefined,
     });
   });
 
@@ -399,9 +395,19 @@ describe("Command.createAdapter", () => {
 
   it("applies per-field overrides", () => {
     const withDefault = createAdapter(thing, {
-      title: (raw) => raw?.trim() || "Untitled",
+      title: (raw) => TriState.assign(raw?.trim() || "Untitled"),
     });
     expect(withDefault({ title: " ", parentId: "p1" }).title).toBe("Untitled");
+  });
+
+  it("encodes an override's Clear as null and its CarryForward as an absent key", () => {
+    const adaptWithStates = createAdapter(thing, {
+      note: () => TriState.clear,
+      count: () => TriState.carryForward,
+    });
+    const out = adaptWithStates({ title: "T", parentId: "p1", note: "n", count: "1" });
+    expect(out.note).toBeNull();
+    expect(out).not.toHaveProperty("count");
   });
 });
 
@@ -413,29 +419,18 @@ describe("Command.updateAdapter", () => {
       adapt({ id: "u1", title: "", note: "", count: "", publishedOn: "", parentId: "" }),
     ).toStrictEqual({
       id: "u1",
-      title: undefined,
       parentId: null,
       note: null,
       count: null,
       publishedOn: null,
-      rows: undefined,
-      // Not clearable (isPinned/visibility) skip; clearable structured fields
-      // (caption/document) clear on blank, unlike jsonArray's rows.
-      isPinned: undefined,
-      visibility: undefined,
+      // Not clearable (title/rows/isPinned/visibility) carry forward, so their
+      // keys are absent; clearable structured fields (caption/document) clear
+      // on blank, unlike jsonArray's rows.
       caption: null,
       document: null,
     });
     expect(adapt({ id: "u1" })).toStrictEqual({
       id: "u1",
-      title: undefined,
-      parentId: undefined,
-      note: undefined,
-      count: undefined,
-      publishedOn: undefined,
-      rows: undefined,
-      isPinned: undefined,
-      visibility: undefined,
       caption: null,
       document: null,
     });
@@ -495,16 +490,18 @@ describe("Command.createAdapter / updateAdapter — boolean, enum, structured ki
 });
 
 describe("Command.jsonRowsFromField", () => {
-  it("skips blank, clears on empty array, falls back to index ordering", () => {
-    expect(jsonRowsFromField(undefined, "rows")).toBeUndefined();
-    expect(jsonRowsFromField("  ", "rows")).toBeUndefined();
-    expect(jsonRowsFromField("[]", "rows")).toEqual([]);
+  it("carries blank forward, assigns an empty array, falls back to index ordering", () => {
+    expect(jsonRowsFromField(undefined, "rows")).toEqual(TriState.carryForward);
+    expect(jsonRowsFromField("  ", "rows")).toEqual(TriState.carryForward);
+    expect(jsonRowsFromField("[]", "rows")).toEqual(TriState.assign([]));
     expect(
       jsonRowsFromField('[{"agentId":"a","orderingPosition":4},{"agentId":"b"}]', "rows"),
-    ).toEqual([
-      { id: undefined, agentId: "a", creditedName: undefined, orderingPosition: 4 },
-      { id: undefined, agentId: "b", creditedName: undefined, orderingPosition: 1 },
-    ]);
+    ).toEqual(
+      TriState.assign([
+        { id: undefined, agentId: "a", creditedName: undefined, orderingPosition: 4 },
+        { id: undefined, agentId: "b", creditedName: undefined, orderingPosition: 1 },
+      ]),
+    );
   });
 
   it("throws plain errors on malformed payloads", () => {

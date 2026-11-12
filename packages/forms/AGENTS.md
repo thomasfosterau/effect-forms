@@ -12,7 +12,7 @@ The framework-neutral core. Read the root [AGENTS.md](../../AGENTS.md) first.
 - **`validate` never fails.** `Form.make(...).validate(input)` returns `Effect<FormState, never, R>`: validation failures live in the returned state, collected with `errors: "all"`, and the posted values are preserved.
 - **The error tree is plain JSON.** `FormErrors` (leaf `string[]`, a branch's own message under `_errors`) and `FormState` cross the SSR boundary unchanged; nothing in them may be a class instance, `Option` or `Map`.
 - **The body parser never guesses types.** `FormData.formDataToObject` builds strings / arrays / objects from the `a.b` / `a[0]` / `a[]` notation; coercion is the schema's job (`Coerce`, `*FromString` leaves).
-- **Tri-state update values.** `Coerce` and `Command` adapters keep value / `null` / `undefined` meaning set / clear / carry-forward.
+- **Tri-state update values.** `Coerce` and the `Command` coercions return a `TriState.TriState` (`Assign` / `Clear` / `CarryForward` — set / clear / carry forward), never a bare value / `null` / `undefined`. Only the wire keeps the nullable form: the `Command` adapters encode `Assign` as the value, `Clear` as `null` and `CarryForward` as an absent key, so the posted payload matches the command's `optional(NullOr(...))` (`TriState.clearableNullOr`) decode. `TriState` mirrors `@thomasfosterau/effect-ext`'s `TriState` module (names, constructors, semantics) without depending on it; keep the two in step.
 - **`@deprecated` aliases stay** until a major release removes them, naming the replacement as a backticked name.
 
 ## Docs

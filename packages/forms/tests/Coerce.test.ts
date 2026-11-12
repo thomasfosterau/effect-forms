@@ -1,53 +1,53 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   booleanFromCheckbox,
-  emptyToNull,
-  emptyToUndefined,
+  emptyToCarryForward,
+  emptyToClear,
   numberFromField,
-  trimToNull,
-  trimToUndefined,
+  trimToCarryForward,
+  trimToClear,
 } from "../src/Coerce.ts";
+import * as TriState from "../src/TriState.ts";
 
-describe("emptyToUndefined / emptyToNull", () => {
-  it("emptyToUndefined drops blanks to undefined", () => {
-    expect(emptyToUndefined("")).toBeUndefined();
-    expect(emptyToUndefined(undefined)).toBeUndefined();
-    expect(emptyToUndefined("x")).toBe("x");
+describe("emptyToCarryForward / emptyToClear", () => {
+  it("emptyToCarryForward carries blanks forward", () => {
+    expect(emptyToCarryForward("")).toEqual(TriState.carryForward);
+    expect(emptyToCarryForward(undefined)).toEqual(TriState.carryForward);
+    expect(emptyToCarryForward("x")).toEqual(TriState.assign("x"));
   });
 
-  it("emptyToNull is tri-state", () => {
-    expect(emptyToNull(undefined)).toBeUndefined();
-    expect(emptyToNull("")).toBeNull();
-    expect(emptyToNull(null)).toBeNull();
-    expect(emptyToNull("x")).toBe("x");
+  it("emptyToClear is tri-state", () => {
+    expect(emptyToClear(undefined)).toEqual(TriState.carryForward);
+    expect(emptyToClear("")).toEqual(TriState.clear);
+    expect(emptyToClear("x")).toEqual(TriState.assign("x"));
   });
 });
 
-describe("trimToUndefined / trimToNull", () => {
-  it("trimToUndefined collapses whitespace-only to undefined", () => {
-    expect(trimToUndefined("   ")).toBeUndefined();
-    expect(trimToUndefined(" a ")).toBe("a");
-    expect(trimToUndefined(undefined)).toBeUndefined();
+describe("trimToCarryForward / trimToClear", () => {
+  it("trimToCarryForward carries whitespace-only forward", () => {
+    expect(trimToCarryForward("   ")).toEqual(TriState.carryForward);
+    expect(trimToCarryForward(" a ")).toEqual(TriState.assign("a"));
+    expect(trimToCarryForward(undefined)).toEqual(TriState.carryForward);
   });
 
-  it("trimToNull clears whitespace-only to null but skips undefined", () => {
-    expect(trimToNull("   ")).toBeNull();
-    expect(trimToNull(undefined)).toBeUndefined();
-    expect(trimToNull(" a ")).toBe("a");
+  it("trimToClear clears whitespace-only but carries absent forward", () => {
+    expect(trimToClear("   ")).toEqual(TriState.clear);
+    expect(trimToClear(undefined)).toEqual(TriState.carryForward);
+    expect(trimToClear(" a ")).toEqual(TriState.assign("a"));
   });
 });
 
 describe("numberFromField", () => {
-  it("non-nullable: blank skips, value parses", () => {
-    expect(numberFromField("", { nullable: false })).toBeUndefined();
-    expect(numberFromField(undefined, { nullable: false })).toBeUndefined();
-    expect(numberFromField("12", { nullable: false })).toBe(12);
+  it("non-nullable (the default): blank carries forward, value parses", () => {
+    expect(numberFromField("")).toEqual(TriState.carryForward);
+    expect(numberFromField(undefined, { nullable: false })).toEqual(TriState.carryForward);
+    expect(numberFromField("12", { nullable: false })).toEqual(TriState.assign(12));
   });
 
   it("nullable: blank clears, value parses", () => {
-    expect(numberFromField("", { nullable: true })).toBeNull();
-    expect(numberFromField(undefined, { nullable: true })).toBeUndefined();
-    expect(numberFromField("3.5", { nullable: true })).toBe(3.5);
+    expect(numberFromField("", { nullable: true })).toEqual(TriState.clear);
+    expect(numberFromField(undefined, { nullable: true })).toEqual(TriState.carryForward);
+    expect(numberFromField("3.5", { nullable: true })).toEqual(TriState.assign(3.5));
   });
 });
 
