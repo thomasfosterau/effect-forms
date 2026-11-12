@@ -12,12 +12,17 @@ import { FormStateSchema, isValid, make, withError, withMessage } from "../src/S
 describe("State.make", () => {
   it("defaults valid to no-errors and posted to false", () => {
     const state = make({ name: "" });
-    expect(state).toMatchObject({ id: "default", valid: true, posted: false, data: { name: "" } });
+    expect(state).toMatchObject({
+      id: "default",
+      isValid: true,
+      isPosted: false,
+      data: { name: "" },
+    });
   });
 
   it("derives valid=false when errors are present", () => {
     const state = make({ name: "" }, { errors: { name: ["Required"] } });
-    expect(state.valid).toBe(false);
+    expect(state.isValid).toBe(false);
     expect(isValid(state)).toBe(false);
   });
 
@@ -36,7 +41,7 @@ describe("withMessage / withError", () => {
 
   it("withError adds a field error and forces invalid", () => {
     const state = withError(make({ email: "x" }), ["email"], "Already taken");
-    expect(state.valid).toBe(false);
+    expect(state.isValid).toBe(false);
     expect(getError(state.errors, ["email"])).toEqual(Option.some(["Already taken"]));
   });
 });
@@ -48,7 +53,7 @@ describe("FormStateSchema", () => {
       const state = make({ name: "Ada" }, { errors: { name: ["x"] } });
       const decoded = yield* SchemaParser.decodeEffect(schema)(state);
       expect(decoded.data).toEqual({ name: "Ada" });
-      expect(decoded.valid).toBe(false);
+      expect(decoded.isValid).toBe(false);
     }),
   );
 });

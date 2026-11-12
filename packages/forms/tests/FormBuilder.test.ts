@@ -60,14 +60,14 @@ describe("FormBuilder sync refine (cross-field)", () => {
   it.effect("passes when the cross-field rule holds", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ password: "secret", confirm: "secret" });
-      expect(state.valid).toBe(true);
+      expect(state.isValid).toBe(true);
     }),
   );
 
   it.effect("routes a cross-field failure to the targeted field", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ password: "secret", confirm: "nope" });
-      expect(state.valid).toBe(false);
+      expect(state.isValid).toBe(false);
       expect(getError(state.errors, ["confirm"])).toEqual(Option.some(["must match"]));
     }),
   );
@@ -97,7 +97,7 @@ describe("Form.fromBuilder", () => {
   it.effect("retains posted values on a field failure", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ name: "A", tags: ["x"] });
-      expect(state.valid).toBe(false);
+      expect(state.isValid).toBe(false);
       expect(state.data.name).toBe("A");
       expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
     }),
@@ -115,14 +115,14 @@ describe("FormBuilder async refineEffect", () => {
   it.effect("passes when the async rule holds", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ name: "free" });
-      expect(state.valid).toBe(true);
+      expect(state.isValid).toBe(true);
     }),
   );
 
   it.effect("folds an async failure into the error tree", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ name: "taken" });
-      expect(state.valid).toBe(false);
+      expect(state.isValid).toBe(false);
       expect(getError(state.errors, ["name"])).toEqual(Option.some(["already taken"]));
     }),
   );

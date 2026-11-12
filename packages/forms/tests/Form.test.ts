@@ -23,8 +23,8 @@ describe("Form.make → empty", () => {
     const state = form.empty();
     expect(state).toMatchObject({
       id: "signup",
-      valid: false,
-      posted: false,
+      isValid: false,
+      isPosted: false,
       data: { name: "", age: undefined },
       errors: {},
     });
@@ -42,8 +42,8 @@ describe("Form.make → validate", () => {
   it.effect("returns a valid state with decoded (coerced) data", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ name: "Ada", age: "31" });
-      expect(state.valid).toBe(true);
-      expect(state.posted).toBe(true);
+      expect(state.isValid).toBe(true);
+      expect(state.isPosted).toBe(true);
       expect(state.data).toEqual({ name: "Ada", age: 31 });
       expect(state.errors).toEqual({});
     }),
@@ -52,8 +52,8 @@ describe("Form.make → validate", () => {
   it.effect("returns an invalid state with field errors and retains posted values", () =>
     Effect.gen(function* () {
       const state = yield* form.validate({ name: "A" });
-      expect(state.valid).toBe(false);
-      expect(state.posted).toBe(true);
+      expect(state.isValid).toBe(false);
+      expect(state.isPosted).toBe(true);
       // posted values are preserved so the form re-renders user input
       expect(state.data.name).toBe("A");
       expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
@@ -63,8 +63,8 @@ describe("Form.make → validate", () => {
   it.effect("treats no input as an empty (unposted) form", () =>
     Effect.gen(function* () {
       const state = yield* form.validate();
-      expect(state.posted).toBe(false);
-      expect(state.valid).toBe(false);
+      expect(state.isPosted).toBe(false);
+      expect(state.isValid).toBe(false);
     }),
   );
 
@@ -72,7 +72,7 @@ describe("Form.make → validate", () => {
     Effect.gen(function* () {
       const body = new URLSearchParams({ name: "Bob", age: "40" });
       const state = yield* form.validate(body);
-      expect(state.valid).toBe(true);
+      expect(state.isValid).toBe(true);
       expect(state.data).toEqual({ name: "Bob", age: 40 });
     }),
   );
@@ -86,7 +86,7 @@ describe("Form.make → validate", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
       });
       const state = yield* form.validate(request);
-      expect(state.valid).toBe(true);
+      expect(state.isValid).toBe(true);
       expect(state.data).toEqual({ name: "Cy", age: 5 });
     }),
   );

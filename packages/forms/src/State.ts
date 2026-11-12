@@ -21,8 +21,8 @@ import type { FormPath } from "./Issues.ts";
  * A form snapshot.
  *
  * - `id` distinguishes multiple forms on one page.
- * - `valid` is whether the last validation succeeded.
- * - `posted` is whether this snapshot came from a submission (vs. a seeded
+ * - `isValid` is whether the last validation succeeded.
+ * - `isPosted` is whether this snapshot came from a submission (vs. a seeded
  *   empty form) — drives "show errors only after submit" UIs.
  * - `data` is the current values (typed output on success; posted values
  *   merged over defaults on failure, so the form re-renders what the user
@@ -33,8 +33,8 @@ import type { FormPath } from "./Issues.ts";
  */
 export interface FormState<A, Message = unknown> {
   readonly id: string;
-  readonly valid: boolean;
-  readonly posted: boolean;
+  readonly isValid: boolean;
+  readonly isPosted: boolean;
   readonly data: A;
   readonly errors: FormErrors;
   readonly message?: Message;
@@ -46,9 +46,9 @@ export interface MakeFormStateOptions<Message> {
   /** The form's id, distinguishing several forms on one page. Defaults to `"default"`. */
   readonly id?: string;
   /** Whether the state is valid. Defaults to `true` exactly when `errors` is empty. */
-  readonly valid?: boolean;
+  readonly isValid?: boolean;
   /** Whether the state comes from a submission. Defaults to `false`. */
-  readonly posted?: boolean;
+  readonly isPosted?: boolean;
   /** The nested error tree. Defaults to no errors. */
   readonly errors?: FormErrors;
   /** A status message to render with the form. Omitted by default. */
@@ -57,7 +57,7 @@ export interface MakeFormStateOptions<Message> {
   readonly constraints?: InputConstraints;
 }
 
-/** Build a {@link FormState} from data plus overrides. `valid` defaults to "no errors". */
+/** Build a {@link FormState} from data plus overrides. `isValid` defaults to "no errors". */
 export function make<A, Message = unknown>(
   data: A,
   options: MakeFormStateOptions<Message> = {},
@@ -65,8 +65,8 @@ export function make<A, Message = unknown>(
   const errors = options.errors ?? noErrors;
   const state: Types.Mutable<FormState<A, Message>> = {
     id: options.id ?? "default",
-    valid: options.valid ?? !hasErrors(errors),
-    posted: options.posted ?? false,
+    isValid: options.isValid ?? !hasErrors(errors),
+    isPosted: options.isPosted ?? false,
     data,
     errors,
   };
@@ -84,7 +84,7 @@ export function withMessage<A, Message>(
 }
 
 /**
- * Return a new state with `message` added at `path` and `valid` forced to
+ * Return a new state with `message` added at `path` and `isValid` forced to
  * `false` — for attaching a
  * server-side validation failure to a specific field after the schema passed.
  */
@@ -93,18 +93,18 @@ export function withError<A, Message>(
   path: FormPath,
   message: string,
 ): FormState<A, Message> {
-  return { ...state, valid: false, errors: setError(state.errors, path, message) };
+  return { ...state, isValid: false, errors: setError(state.errors, path, message) };
 }
 
-/** Whether the state is valid. */
-export const isValid = <A, Message>(state: FormState<A, Message>): boolean => state.valid;
+/** Whether the state is valid. Equivalent to reading `state.isValid`, for use as a function (`Array.filter(states, State.isValid)`). */
+export const isValid = <A, Message>(state: FormState<A, Message>): boolean => state.isValid;
 
 /** Effect Schema describing the JSON shape of {@link FormState} for transport. */
 export function FormStateSchema<DataSchema extends Schema.Top>(data: DataSchema) {
   return Schema.Struct({
     id: Schema.String,
-    valid: Schema.Boolean,
-    posted: Schema.Boolean,
+    isValid: Schema.Boolean,
+    isPosted: Schema.Boolean,
     data,
     errors: Schema.Record(Schema.String, Schema.Unknown),
     message: Schema.optional(Schema.Unknown),

@@ -473,7 +473,7 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
 
     expect(seen).toEqual([42]);
     expect(store.errorsAt(["age"])).toEqual([]);
-    expect(store.valid).toBe(true);
+    expect(store.isValid).toBe(true);
   });
 
   it("skips the refinement when the values don't decode (the field errors report that)", async () => {
@@ -485,7 +485,7 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
 
     expect(seen).toEqual([]);
     expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
-    expect(store.valid).toBe(false);
+    expect(store.isValid).toBe(false);
   });
 
   it("clears a previous run's refinement errors once the values stop decoding", async () => {

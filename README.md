@@ -36,7 +36,7 @@ const signupForm = Form.make(Signup, { id: "signup", defaults: { name: "", age: 
 // On the server: decode a submission (FormData, URLSearchParams, Request or a plain object).
 const body = new URLSearchParams({ name: "A", age: "forty" });
 const state = await Effect.runPromise(signupForm.validate(body));
-// state.valid === false; state.errors.name and state.errors.age hold the messages;
+// state.isValid === false; state.errors.name and state.errors.age hold the messages;
 // state.data keeps what was posted, so the form re-renders it.
 ```
 
