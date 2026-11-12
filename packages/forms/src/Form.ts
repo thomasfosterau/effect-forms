@@ -41,7 +41,14 @@ import {
 } from "./FormBuilder.ts";
 import { type FormBodyRecord, formDataToObject, requestToObject } from "./FormData.ts";
 import { type LeafFormatter, schemaIssuesToFormIssues } from "./Issues.ts";
-import { type FormState, make as makeFormState, type MakeFormStateOptions } from "./State.ts";
+import {
+  type FormState,
+  make as makeFormState,
+  invalid,
+  valid,
+  type MakeFormStateOptions,
+  type ValidatedFormState,
+} from "./State.ts";
 
 /**
  * Everything {@link Form.validate} accepts: a posted body (`FormData`,
@@ -97,7 +104,7 @@ export interface Form<
    */
   validate(
     input?: FormInput<S["Encoded"]>,
-  ): Effect.Effect<FormState<S["Type"] | Blank, Message>, never, R>;
+  ): Effect.Effect<ValidatedFormState<S["Type"], Blank, Message>, never, R>;
 }
 
 /** {@link Form.parse}: flatten a posted body, pass a plain record through. */
@@ -197,15 +204,18 @@ function bind<S extends Schema.Top, Message, Blank>(
     toStructured(input).pipe(
       Effect.flatMap((submitted) =>
         Option.match(submitted, {
-          onNone: () => Effect.succeed<FormState<S["Type"] | Blank, Message>>(empty()),
+          onNone: () =>
+            Effect.succeed<ValidatedFormState<S["Type"], Blank, Message>>({
+              ...empty(),
+              isValid: false,
+            }),
           onSome: (object) =>
             decode(object).pipe(
               Effect.matchEffect({
                 onSuccess: (data) =>
                   Effect.succeed(
-                    makeFormState<S["Type"], Message>(data, {
+                    valid<S["Type"], Message>(data, {
                       id,
-                      isValid: true,
                       isPosted: true,
                       constraints,
                     }),
@@ -223,9 +233,8 @@ function bind<S extends Schema.Top, Message, Blank>(
                       : { ...postedFields }
                   ) as S["Type"];
                   return Effect.succeed(
-                    makeFormState<S["Type"], Message>(posted, {
+                    invalid<S["Type"], Message>(posted, {
                       id,
-                      isValid: false,
                       isPosted: true,
                       constraints,
                       errors: issuesToErrors(schemaIssuesToFormIssues(issue, leafFormatter)),
@@ -309,9 +318,10 @@ export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = u
       Effect.flatMap((submitted) =>
         Option.match(submitted, {
           onNone: () =>
-            Effect.succeed<FormState<Values<F> | BuilderEncoded<F> | Blanks<F>, Message>>(
-              base.empty(),
-            ),
+            Effect.succeed<ValidatedFormState<Values<F>, BuilderEncoded<F> | Blanks<F>, Message>>({
+              ...base.empty(),
+              isValid: false,
+            }),
           onSome: (object) => {
             // On a failed validation the state carries the posted values merged
             // over the blank, so the form re-renders what the user typed.
@@ -323,16 +333,14 @@ export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = u
                     Effect.map((issues) =>
                       Arr.match(issues, {
                         onEmpty: () =>
-                          makeFormState<Values<F>, Message>(data, {
+                          valid<Values<F>, Message>(data, {
                             id: base.id,
-                            isValid: true,
                             isPosted: true,
                             constraints: base.constraints,
                           }),
                         onNonEmpty: (failures) =>
-                          makeFormState<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
+                          invalid<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
                             id: base.id,
-                            isValid: false,
                             isPosted: true,
                             constraints: base.constraints,
                             errors: issuesToErrors(failures),
@@ -342,9 +350,8 @@ export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = u
                   ),
                 onFailure: (issue) =>
                   Effect.succeed(
-                    makeFormState<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
+                    invalid<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
                       id: base.id,
-                      isValid: false,
                       isPosted: true,
                       constraints: base.constraints,
                       errors: issuesToErrors(
