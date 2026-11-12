@@ -160,10 +160,10 @@ export interface EntryBuilders<K extends string> {
    * `name` / `value` / `onChange` / `errors`; `props()` supplies the rest at
    * render time (labels stay thunk-resolved).
    */
-  custom<P extends Record<string, unknown>>(
+  custom(
     key: K,
     component: Component<never>,
-    props: () => P,
+    props: () => Readonly<Record<string, unknown>>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
   /**
@@ -171,10 +171,10 @@ export interface EntryBuilders<K extends string> {
    * state and supplies `name` / `value` / `onChange` / `errors`; the widget
    * owns the wire serialisation (its hidden input).
    */
-  rows<P extends Record<string, unknown>>(
+  rows(
     key: K,
     component: Component<never>,
-    props: () => P,
+    props: () => Readonly<Record<string, unknown>>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
 }
