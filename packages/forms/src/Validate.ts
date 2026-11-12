@@ -21,6 +21,7 @@
 
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { type FormErrors, issuesToErrors } from "./Errors.ts";
@@ -161,8 +162,10 @@ export type FieldTrigger = "change" | "blur";
 
 /** The validator(s) (if any) that apply for one field trigger — see {@link resolveFieldTrigger}. */
 export interface ResolvedFieldTrigger<A, R = never> {
-  readonly sync: SyncFieldValidator<A> | undefined;
-  readonly async: AsyncFieldValidator<A, R> | undefined;
+  /** The sync validator registered for the trigger, if any. */
+  readonly sync: Option.Option<SyncFieldValidator<A>>;
+  /** The async validator registered for the trigger, if any. */
+  readonly async: Option.Option<AsyncFieldValidator<A, R>>;
   readonly asyncDebounceMs: number;
 }
 
@@ -174,12 +177,14 @@ export interface ResolvedFieldTrigger<A, R = never> {
  * field-trigger dispatch runs.
  */
 export function resolveFieldTrigger<A, R = never>(
-  validators: FieldValidators<A, R> | undefined,
   trigger: FieldTrigger,
+  validators?: FieldValidators<A, R>,
 ): ResolvedFieldTrigger<A, R> {
   return {
-    sync: trigger === "change" ? validators?.onChange : validators?.onBlur,
-    async: trigger === "change" ? validators?.onChangeAsync : validators?.onBlurAsync,
+    sync: Option.fromUndefinedOr(trigger === "change" ? validators?.onChange : validators?.onBlur),
+    async: Option.fromUndefinedOr(
+      trigger === "change" ? validators?.onChangeAsync : validators?.onBlurAsync,
+    ),
     asyncDebounceMs: validators?.asyncDebounceMs ?? 0,
   };
 }

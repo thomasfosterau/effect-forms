@@ -28,6 +28,7 @@
  */
 
 import * as Duration from "effect/Duration";
+import * as Option from "effect/Option";
 
 /** What re-validates a posted form as the user keeps editing. See {@link ParsedMode.revalidate}. */
 export type RevalidateMode = "onChange" | "onBlur" | "never";
@@ -55,8 +56,8 @@ export type FormMode = (
 /** The fully-resolved form of a {@link FormMode} — every field decided. */
 export interface ParsedMode {
   readonly validation: "onSubmit" | "onBlur" | "onChange";
-  /** Debounce in milliseconds, or `null` for no debounce. */
-  readonly debounce: number | null;
+  /** Debounce in milliseconds, or `Option.none()` for no debounce. */
+  readonly debounce: Option.Option<number>;
   readonly autoSubmit: boolean;
   /** What re-validates the form once it has been posted at least once. Defaults to `"onChange"`. */
   readonly revalidate: RevalidateMode;
@@ -76,16 +77,16 @@ export function parse(mode?: FormMode): ParsedMode {
   if (validation === "onBlur") {
     return {
       validation: "onBlur",
-      debounce: null,
+      debounce: Option.none(),
       autoSubmit: mode?.autoSubmit === true,
       revalidate,
     };
   }
 
   if (validation === "onChange") {
-    const debounce = mode?.debounce === undefined ? null : Duration.toMillis(mode.debounce);
+    const debounce = Option.map(Option.fromUndefinedOr(mode?.debounce), Duration.toMillis);
     return { validation: "onChange", debounce, autoSubmit: mode?.autoSubmit === true, revalidate };
   }
 
-  return { validation: "onSubmit", debounce: null, autoSubmit: false, revalidate };
+  return { validation: "onSubmit", debounce: Option.none(), autoSubmit: false, revalidate };
 }

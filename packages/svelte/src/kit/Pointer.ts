@@ -32,7 +32,7 @@ const unescapeSegment = (segment: string): string =>
  */
 export const fieldFromPointer = (
   // A JSON:API error object's `source?.pointer`, verbatim: absent is `undefined`.
-  pointer: string | undefined,
+  pointer?: string,
 ): Option.Option<string> => {
   if (pointer === undefined || pointer === "") return Option.none();
   const [data, attributes, field] = pointer.split("/").slice(1).map(unescapeSegment);

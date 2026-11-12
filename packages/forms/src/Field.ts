@@ -131,43 +131,38 @@ function fromAst(ast: SchemaAST.AST): BlankValue {
 }
 
 /** The item AST of an {@link SchemaAST.Arrays} node: the rest (spread) type, or the first tuple element. */
-function arrayElementAst(ast: SchemaAST.Arrays): SchemaAST.AST | undefined {
-  return ast.rest[0] ?? ast.elements[0];
+function arrayElementAst(ast: SchemaAST.Arrays): Option.Option<SchemaAST.AST> {
+  return Option.orElse(Arr.head(ast.rest), () => Arr.head(ast.elements));
 }
 
 /** Descend one array-index path segment from an (already-unwrapped) array AST. */
-function stepIntoArray(ast: SchemaAST.AST): SchemaAST.AST | undefined {
-  if (!SchemaAST.isArrays(ast)) return undefined;
-  const item = arrayElementAst(ast);
-  return item === undefined ? undefined : unwrapToStructured(item);
+function stepIntoArray(ast: SchemaAST.AST): Option.Option<SchemaAST.AST> {
+  if (!SchemaAST.isArrays(ast)) return Option.none();
+  return Option.map(arrayElementAst(ast), unwrapToStructured);
 }
 
 /** Descend one struct-property path segment from an (already-unwrapped) struct AST. */
-function stepIntoStruct(ast: SchemaAST.AST, key: string): SchemaAST.AST | undefined {
-  if (!SchemaAST.isObjects(ast)) return undefined;
-  const ps = ast.propertySignatures.find((p) => String(p.name) === key);
-  return ps === undefined ? undefined : unwrapToStructured(ps.type);
+function stepIntoStruct(ast: SchemaAST.AST, key: string): Option.Option<SchemaAST.AST> {
+  if (!SchemaAST.isObjects(ast)) return Option.none();
+  return Arr.findFirst(ast.propertySignatures, (p) => String(p.name) === key).pipe(
+    Option.map((ps) => unwrapToStructured(ps.type)),
+  );
 }
 
 /**
  * Walk `schema`'s AST along `path` — through struct properties and array
- * elements alike — and return the AST found there, or `undefined` if `path`
- * doesn't resolve (a missing property, or a non-array indexed). Unlike a
- * {@link FieldsRecord} lookup, this works for any nesting depth and for
+ * elements alike — and return the AST found there, or `Option.none()` if
+ * `path` doesn't resolve (a missing property, or a non-array indexed). Unlike
+ * a {@link FieldsRecord} lookup, this works for any nesting depth and for
  * schemas built directly with `Form.make` (no builder involved).
  */
-export function schemaAt(schema: Schema.Top, path: FormPath): SchemaAST.AST | undefined {
-  // Once a step finds no matching AST the accumulator is `undefined`, and
-  // stays so for every later segment.
-  return Arr.reduce<string | number, SchemaAST.AST | undefined>(
-    path,
-    unwrapToStructured(schema.ast),
-    (ast, segment) =>
-      ast === undefined
-        ? undefined
-        : P.isNumber(segment)
-          ? stepIntoArray(ast)
-          : stepIntoStruct(ast, segment),
+export function schemaAt(schema: Schema.Top, path: FormPath): Option.Option<SchemaAST.AST> {
+  // Once a step finds no matching AST the accumulator is `None`, and stays so
+  // for every later segment.
+  return Arr.reduce(path, Option.some(unwrapToStructured(schema.ast)), (current, segment) =>
+    Option.flatMap(current, (ast) =>
+      P.isNumber(segment) ? stepIntoArray(ast) : stepIntoStruct(ast, segment),
+    ),
   );
 }
 
@@ -177,9 +172,11 @@ export function schemaAt(schema: Schema.Top, path: FormPath): SchemaAST.AST | un
  * {@link defaultValue}. Returns `""` when `path` doesn't resolve to an array.
  */
 export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
-  const ast = schemaAt(schema, path);
-  const item = ast !== undefined && SchemaAST.isArrays(ast) ? arrayElementAst(ast) : undefined;
-  return item === undefined ? "" : fromAst(item);
+  return schemaAt(schema, path).pipe(
+    Option.filter(SchemaAST.isArrays),
+    Option.flatMap(arrayElementAst),
+    Option.match({ onNone: () => "", onSome: fromAst }),
+  );
 }
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */

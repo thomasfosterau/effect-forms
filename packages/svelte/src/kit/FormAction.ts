@@ -169,20 +169,20 @@ export interface IdempotentCreateOptions<O, F = never> {
  */
 export interface FormActionOptions<A, O, E = never, F = never> {
   /** Retry a client-id create's own 409 as success (see {@link IdempotentCreateOptions}). */
-  readonly idempotent?: IdempotentCreateOptions<O, F> | undefined;
+  readonly idempotent?: IdempotentCreateOptions<O, F>;
   /**
    * How a command failure is recognised: handed the command's typed error,
    * or a {@link CommandRejected} for a rejection or throw. Defaults to
    * {@link CommandFailure.jsonapiFailure}; compose with it to add an
    * application's own failures.
    */
-  readonly classify?: Classify<E | CommandRejected> | undefined;
+  readonly classify?: Classify<E | CommandRejected>;
   /**
    * Applied to every form state echoed back to the browser (an invalid
    * submission, a routed command failure) — e.g. blanking password fields
    * so a secret never rides a response body.
    */
-  readonly redact?: ((state: FormState<A>) => FormState<A>) | undefined;
+  readonly redact?: (state: FormState<A>) => FormState<A>;
   /**
    * What happens to a command failure the classifier does not recognise:
    * `"error"` (the default) answers an `Error` result at 500 carrying the
@@ -191,7 +191,7 @@ export interface FormActionOptions<A, O, E = never, F = never> {
    * SvelteKit's `handleError`. A defect in an `Effect` command is never
    * classified: it is unrecognised.
    */
-  readonly unrecognised?: "error" | "throw" | undefined;
+  readonly unrecognised?: "error" | "throw";
 }
 
 /** The field path an error object's pointer routes to, or `[]` (the root). */

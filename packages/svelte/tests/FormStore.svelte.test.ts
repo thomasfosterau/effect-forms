@@ -22,6 +22,7 @@
 
 import { Constraints, FormBuilder, Result, State } from "@thomasfosterau/effect-forms";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { flushSync } from "svelte";
@@ -122,7 +123,7 @@ describe("enhanced submit — clicked-button submitter", () => {
 
   it("exposes the clicked button as Submission.submitter", async () => {
     const { node, publishButton } = buildMultiButtonForm();
-    let submitter: HTMLElement | null | undefined;
+    const submitters: Array<Option.Option<HTMLElement>> = [];
     let resolveOnSubmit!: () => void;
     const seen = new Promise<void>((resolve) => {
       resolveOnSubmit = resolve;
@@ -132,7 +133,7 @@ describe("enhanced submit — clicked-button submitter", () => {
       { schema: ActionForm, defaults: { title: "" } },
       {
         onSubmit: ({ submitter: s }) => {
-          submitter = s;
+          submitters.push(s);
           resolveOnSubmit();
         },
         submit: async () => success(makeFormState({ title: "" })),
@@ -143,15 +144,15 @@ describe("enhanced submit — clicked-button submitter", () => {
     node.requestSubmit(publishButton);
     await seen;
 
-    expect(submitter).toBe(publishButton);
+    expect(submitters).toEqual([Option.some(publishButton)]);
   });
 });
 
 describe("auto-submit — no submitter", () => {
-  it("posts without a button value and reports a null submitter", async () => {
+  it("posts without a button value and reports no submitter", async () => {
     const { node, titleInput } = buildMultiButtonForm();
     const bodies: FormData[] = [];
-    let submitter: HTMLElement | null | undefined;
+    const submitters: Array<Option.Option<HTMLElement>> = [];
     let resolveDone!: () => void;
     const done = new Promise<void>((resolve) => {
       resolveDone = resolve;
@@ -162,7 +163,7 @@ describe("auto-submit — no submitter", () => {
       {
         mode: { validation: "onBlur", autoSubmit: true },
         onSubmit: ({ submitter: s }) => {
-          submitter = s;
+          submitters.push(s);
         },
         submit: async (body) => {
           bodies.push(body);
@@ -187,7 +188,7 @@ describe("auto-submit — no submitter", () => {
     expect(bodies).toHaveLength(1);
     expect(bodies[0]?.get("intent")).toBeNull();
     expect(bodies[0]?.get("title")).toBe("changed");
-    expect(submitter).toBeNull();
+    expect(submitters).toEqual([Option.none()]);
   });
 });
 
@@ -380,6 +381,7 @@ describe("move — reorders an array field, carrying per-index state", () => {
     store.move(["tags"], 0, 3);
     store.move(["tags"], -1, 1);
     store.move(["tags"], 1, 1);
+    store.move(["tags"], 0, -1);
     expect(store.valueAt(["tags"])).toEqual(["a", "b", "c"]);
     expect(store.isDirtyAt(["tags"])).toBe(false);
   });

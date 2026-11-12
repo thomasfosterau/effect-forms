@@ -1,3 +1,4 @@
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 import {
@@ -79,7 +80,7 @@ describe("Field.schemaAt / defaultItemAt", () => {
 
   it("resolves a struct property's schema", () => {
     const ast = schemaAt(Form, ["authors", 0, "name"]);
-    expect(ast).toBeDefined();
+    expect(Option.isSome(ast)).toBe(true);
   });
 
   it("returns '' when the path doesn't resolve to an array", () => {

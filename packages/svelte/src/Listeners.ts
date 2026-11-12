@@ -82,7 +82,7 @@ export function changeEvents<A>(before: A, after: A): ListenerEvent[] {
  * leaf's field-level `onChange` if one is registered. Synchronous — debounce
  * is the caller's concern (see the module doc).
  */
-export function dispatchChange<A>(before: A, after: A, listeners: FormListeners | undefined): void {
+export function dispatchChange<A>(before: A, after: A, listeners?: FormListeners): void {
   if (!listeners) return;
   Arr.forEach(changeEvents(before, after), (event) => {
     listeners.onChange?.({ path: event.path, data: after });
