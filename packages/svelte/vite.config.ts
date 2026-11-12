@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite-plus";
 
@@ -24,7 +23,7 @@ const cacheInputs = [
  */
 const siblingBuild = { task: "build", from: "dependencies" as const };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   run: {
     tasks: {
       build: {
@@ -88,12 +87,10 @@ export default defineConfig({
     // Vitest setup): the default `node` condition picks the server build, where
     // `$effect` never runs, so the store's change watchers and listeners would
     // be untestable. Builds keep the default conditions.
-    ...(process.env.VITEST ? { conditions: ["browser"] } : {}),
+    conditions: mode === "test" ? ["browser"] : [],
     alias: {
-      "@thomasfosterau/effect-forms-svelte/kit": fileURLToPath(
-        new URL("./src/kit/index.ts", import.meta.url),
-      ),
-      "$app/forms": fileURLToPath(new URL("./tests/kit/app-forms.stub.ts", import.meta.url)),
+      "@thomasfosterau/effect-forms-svelte/kit": `${import.meta.dirname}/src/kit/index.ts`,
+      "$app/forms": `${import.meta.dirname}/tests/kit/app-forms.stub.ts`,
     },
   },
 
@@ -124,4 +121,4 @@ export default defineConfig({
       thresholds: { statements: 80, branches: 80, functions: 80, lines: 80 },
     },
   },
-});
+}));
