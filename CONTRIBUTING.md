@@ -25,7 +25,7 @@ Hooks are managed by Vite+ (`vp config`, run by `prepare`); the editable [.vite-
 
 ## CI expectations
 
-[ci.yml](.github/workflows/ci.yml) runs one required job, `build`, whose steps are the gate list in [AGENTS.md](AGENTS.md#verification). [release.yml](.github/workflows/release.yml) runs changesets/action on `trunk`: it opens the version PR while unreleased changesets exist and publishes once it merges, via npm OIDC trusted publishing (see [PUBLISHING.md](PUBLISHING.md)). Both workflows are hardened for Dependabot PRs: `permissions: {}` at the top with per-job grants (only the release job holds `id-token: write`, and it never runs for Dependabot), every action pinned to a commit SHA, `persist-credentials: false` where nothing pushes, no secrets in CI, and `zizmor` clean.
+[ci.yml](.github/workflows/ci.yml) runs one required job, `build`, whose steps are the gate list in [AGENTS.md](AGENTS.md#verification). [release.yml](.github/workflows/release.yml) runs changesets/action on `trunk`: it opens the version PR while unreleased changesets exist and publishes once it merges, via npm OIDC trusted publishing (see [PUBLISHING.md](PUBLISHING.md)). Both workflows are hardened for Dependabot PRs: `permissions: {}` at the top with per-job grants (only the release job holds `id-token: write`, and it never runs for Dependabot), every action locked to its commit by `.github/workflows/actions.lock` (exact release tags in `uses:`; regenerate it with `gh actions-lock` after changing a workflow, and the `Lockfile` workflow runs `gh actions-lock --verify`), `persist-credentials: false` where nothing pushes, no secrets in CI, and `zizmor` clean.
 
 ## Pre-PR checklist
 
