@@ -29,7 +29,7 @@ The publish step uses `pnpm publish`, never `npm publish`: it rewrites each pack
 
    Then remove any classic automation tokens for the package. Both packages are already on npm. A **new** package must be published once by hand, because npm only accepts a trusted publisher for a package that already exists: authenticate with a short-lived [granular access token](https://docs.npmjs.com/creating-and-viewing-access-tokens), run `vp run -r build`, then `pnpm publish --access public --no-git-checks` from the package's directory. Then add its trusted publisher.
 
-4. **Protect `trunk`.** Require pull requests and the passing `build` check (CI) before merge, and disallow direct pushes, so a release can only be triggered by merging the reviewed version PR.
+4. **Protect `trunk`.** Require pull requests and the passing `ci` check (CI) before merge, and disallow direct pushes, so a release can only be triggered by merging the reviewed version PR.
 
 ## Manual fallback
 

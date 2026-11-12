@@ -179,6 +179,18 @@ export default defineConfig({
         dependsOn: ["@thomasfosterau/effect-forms#docgen"],
         cache: false,
       },
+      // The whole CI gate, in AGENTS.md "Verification" order (steps 2-7), as
+      // ONE command so local and CI are the same thing: `vp run ci` is the only
+      // command the CI workflow runs after install. `pnpm run prepare` comes
+      // first because CI installs with `--ignore-scripts`, and the `prepare`
+      // step (Vite+ hooks plus the @effect/tsgo patch of `tsc` / `oxlint`) is
+      // what the type-aware lint and the type gate run on. It is fail-fast: the
+      // first failing gate stops the rest.
+      ci: {
+        command:
+          "pnpm run prepare && vp check && vp run check && vp run -r test:unit && vp run -r build && vp run docgen && pnpm audit --audit-level high",
+        cache: false,
+      },
       // Every package's unit suite under one Istanbul coverage map
       // (`coverage/coverage-final.json`), which `fallow audit` reads for exact
       // per-function CRAP scores (`health.coverage` in .fallowrc.json).
