@@ -40,9 +40,10 @@ const UpdateWithStatus = Schema.Struct({
 const statusOptionLabels = { draft: () => "Draft", published: () => "Published" };
 
 // A stand-in widget: EntityForm only stores the reference, so any function
-// object passes for a Component in unit scope.
-const Picker: Component<never> = () => ({});
-const RowsWidget: Component<never> = () => ({});
+// object passes for a Component in unit scope. Its props type is what the
+// builders check a `props()` thunk against.
+const Picker: Component<{ readonly label: string }> = () => ({});
+const RowsWidget: Component<{ readonly label: string }> = () => ({});
 
 // `createInput` / `updateInput` need no decoding services, so they decode synchronously.
 const decodeInput = (input: Command.FormInputField) => Schema.decodeUnknownSync(input);

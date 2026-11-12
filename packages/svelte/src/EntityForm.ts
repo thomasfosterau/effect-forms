@@ -92,17 +92,28 @@ export interface WidgetEntryOptions {
  * are **reserved keys**: the bridge is spread last, so a `props()` thunk or a
  * load-supplied field prop can never silently sever the store binding.
  */
-export interface WidgetEntry {
+export interface WidgetEntry<Props extends Record<string, any> = any> {
   readonly _tag: "widget";
   readonly key: string;
   /** `"value"` bridges a string FK; `"rows"` bridges a controlled row list. */
   readonly bridge: "value" | "rows";
   // reason: the renderer composes arbitrary widgets; per-widget prop checking
   // happens in the definition module via the builder's generic signature.
-  readonly component: Component<any>;
-  readonly props: () => Record<string, unknown>;
+  readonly component: Component<Props>;
+  /** The widget's own props, resolved at render time; the bridge keys are the renderer's. */
+  readonly props: () => WidgetOwnProps<Props>;
   readonly options: WidgetEntryOptions;
 }
+
+/** The widget-contract keys the renderer supplies to every widget (see {@link WidgetEntry}). */
+export type WidgetBridgeKey = "name" | "value" | "onChange" | "errors";
+
+/**
+ * The props a widget entry's `props()` thunk may supply: any of the
+ * component's own props except the {@link WidgetBridgeKey}s, which the
+ * renderer owns.
+ */
+export type WidgetOwnProps<Props> = Partial<Omit<Props, WidgetBridgeKey>>;
 
 /** One ordered entry in an entity form definition. */
 export type EntityFormEntry = ScalarEntry | WidgetEntry | SelectEntry;
@@ -126,8 +137,8 @@ export interface EntityFormDefinition {
   readonly updateInput: Command.FormInputField;
   readonly createDefaults: Readonly<Record<string, string>>;
   readonly updateDefaults: Readonly<Record<string, string>>;
-  readonly adaptCreate: (input: Command.FormInputRecord) => Record<string, unknown>;
-  readonly adaptUpdate: (input: Command.FormInputRecord) => Record<string, unknown>;
+  readonly adaptCreate: (input: Command.FormInputRecord) => Command.CommandPayload;
+  readonly adaptUpdate: (input: Command.FormInputRecord) => Command.CommandPayload;
   readonly submit: SubmitMessages;
   /** The create struct carries a client-generated id (idempotent retries). */
   readonly clientId: boolean;
@@ -164,7 +175,7 @@ export interface EntryBuilders<K extends string> {
   custom<Props extends Record<string, any>>(
     key: K,
     component: Component<Props>,
-    props: () => Readonly<Record<string, unknown>>,
+    props: () => WidgetOwnProps<Props>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
   /**
@@ -176,7 +187,7 @@ export interface EntryBuilders<K extends string> {
   rows<Props extends Record<string, any>>(
     key: K,
     component: Component<Props>,
-    props: () => Readonly<Record<string, unknown>>,
+    props: () => WidgetOwnProps<Props>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
 }

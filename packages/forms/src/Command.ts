@@ -96,12 +96,12 @@ export interface CommandPlan {
 /**
  * Per-field adapter overrides — the escape hatch for genuinely irregular
  * coercion. An override reads the raw multipart value and returns the field's
- * `TriState`, which the adapter encodes exactly as it encodes a
- * default coercion (`Assign` → the value, `Clear` → `null`, `CarryForward` →
- * the key is omitted).
+ * `TriState` of a {@link CommandPayloadValue}, which the adapter encodes
+ * exactly as it encodes a default coercion (`Assign` → the value, `Clear` →
+ * `null`, `CarryForward` → the key is omitted).
  */
 export type AdaptOverrides = Readonly<
-  Record<string, (raw: FormInputValue) => TriState.TriState<unknown>>
+  Record<string, (raw: FormInputValue) => TriState.TriState<CommandPayloadValue>>
 >;
 
 /**
@@ -128,6 +128,28 @@ const FormInputRecord = Schema.Record(Schema.String, FormInputValue);
 
 /** A validated all-string multipart input, as the Form-Input schemas produce it. */
 export type FormInputRecord = typeof FormInputRecord.Type;
+
+/**
+ * The wire shape of one encoded command field, as an adapter emits it: a JSON
+ * value (a set value, or `null` to clear), a {@link JsonRow} list, or
+ * `undefined` to skip (carry the stored value forward).
+ */
+const CommandPayloadValue = Schema.Union([
+  Schema.UndefinedOr(Schema.Json),
+  Schema.Array(Schema.suspend(() => JsonRow)),
+]);
+
+/** One encoded command field's value: a JSON value, a row list, or `undefined` to skip. */
+export type CommandPayloadValue = typeof CommandPayloadValue.Type;
+
+/** The wire shape of an encoded command payload, keyed by command field. */
+const CommandPayload = Schema.Record(Schema.String, CommandPayloadValue);
+
+/**
+ * An encoded command payload, as {@link createAdapter} / {@link updateAdapter}
+ * build it — ready for the command's own decode.
+ */
+export type CommandPayload = typeof CommandPayload.Type;
 
 // ── errors ────────────────────────────────────────────────────────────
 
@@ -466,7 +488,7 @@ export const jsonRowsFromField = (
 };
 
 /** Parse a JSON text (`JSON.parse` semantics) to a success or a failed `Exit`. */
-const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
+const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.Json));
 
 /** Coercion context for one field in one mode. */
 interface CoerceContext {
@@ -543,7 +565,7 @@ const structuredFromField = (
   raw: FormInputValue,
   clearable: boolean,
   label: string,
-): TriState.TriState<unknown> => {
+): TriState.TriState<Schema.Json> => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") {
     return clearable ? TriState.clear : TriState.carryForward;
@@ -567,10 +589,10 @@ const coerce = (
   field: FieldPlan,
   mode: "create" | "update",
   raw: FormInputValue,
-): TriState.TriState<unknown> => {
+): TriState.TriState<CommandPayloadValue> => {
   const ctx = coerceContextFor(field, mode);
   return Match.value(field.kind).pipe(
-    Match.withReturnType<TriState.TriState<unknown>>(),
+    Match.withReturnType<TriState.TriState<CommandPayloadValue>>(),
     Match.when(Match.is("text", "enum"), () => coerceText(ctx, raw)),
     Match.when("id", () => coerceId(ctx, raw)),
     Match.when("number", () => coerceNumber(ctx, raw)),
@@ -589,9 +611,9 @@ const coerce = (
  */
 const toWireEntries = (
   key: string,
-  state: TriState.TriState<unknown>,
-): Array<readonly [string, unknown]> =>
-  TriState.match<unknown, Array<readonly [string, unknown]>>({
+  state: TriState.TriState<CommandPayloadValue>,
+): Array<readonly [string, CommandPayloadValue]> =>
+  TriState.match<CommandPayloadValue, Array<readonly [string, CommandPayloadValue]>>({
     onCarryForward: () => [],
     onClear: () => [[key, null]],
     onAssign: (value) => [[key, value]],
@@ -607,8 +629,8 @@ const adaptFields = (
   overrides: AdaptOverrides,
   mode: "create" | "update",
   input: FormInputRecord,
-): Array<readonly [string, unknown]> =>
-  Arr.flatMap(commandPlan.fields, (field): Array<readonly [string, unknown]> => {
+): Array<readonly [string, CommandPayloadValue]> =>
+  Arr.flatMap(commandPlan.fields, (field): Array<readonly [string, CommandPayloadValue]> => {
     if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
     const override = overrides[field.key];
     const raw = input[field.key];
@@ -624,7 +646,7 @@ const adaptFields = (
  */
 export const createAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
-  (input: FormInputRecord): Record<string, unknown> =>
+  (input: FormInputRecord): CommandPayload =>
     R.fromEntries([
       ...(commandPlan.clientId ? toWireEntries("id", trimToCarryForward(input.id)) : []),
       ...adaptFields(commandPlan, overrides, "create", input),
@@ -638,7 +660,7 @@ export const createAdapter =
  */
 export const updateAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
-  (input: FormInputRecord): Record<string, unknown> =>
+  (input: FormInputRecord): CommandPayload =>
     R.fromEntries([
       ["id", input.id] as const,
       ...adaptFields(commandPlan, overrides, "update", input),

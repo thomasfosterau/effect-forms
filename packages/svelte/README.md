@@ -27,7 +27,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
     schema: Signup,        // enables client-side validation
     resetForm: true,
     taintedMessage: "You have unsaved changes.",
-    onUpdated: ({ form }) => form.valid && toast("Saved"),
+    onUpdated: ({ form }) => form.isValid && toast("Saved"),
   });
 </script>
 
