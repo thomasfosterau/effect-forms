@@ -302,7 +302,8 @@ describe("runFormAction", () => {
   });
 
   it("redacts every echoed state: an invalid submission and a routed failure", async () => {
-    const redact = vi.fn((state: State.FormState<{ readonly name: string }>) => ({
+    type NameState = State.FormState<{ readonly name: string }>;
+    const redact = vi.fn<(state: NameState) => NameState>((state) => ({
       ...state,
       data: { name: "" },
     }));
@@ -329,7 +330,7 @@ describe("runFormAction", () => {
   // ── Idempotent client-id create retry, driven by `idempotent.clientId` ──
 
   it("re-fetches and redirects on a 409 conflict when clientId is true (a double-submit retry)", async () => {
-    const fetchExisting = vi.fn(async (id: string) => id);
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async (id) => id);
     const result = await runFormAction(
       formWithClientId,
       post({ id: "org-1", name: "Acme" }),
@@ -344,7 +345,7 @@ describe("runFormAction", () => {
   });
 
   it("surfaces the original 409 when the re-fetch can't confirm the retry (an unrelated conflict)", async () => {
-    const fetchExisting = vi.fn(async (): Promise<string> => {
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async () => {
       throw testFailure("not found");
     });
     const result = await runFormAction(
@@ -363,7 +364,7 @@ describe("runFormAction", () => {
   });
 
   it("does not wrap the command when clientId is false, even with fetchExisting supplied", async () => {
-    const fetchExisting = vi.fn(async (id: string) => id);
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async (id) => id);
     const result = await runFormAction(
       formWithClientId,
       post({ id: "org-1", name: "Acme" }),

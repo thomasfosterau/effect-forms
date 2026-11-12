@@ -7,7 +7,10 @@ import { enhanceForm } from "../../src/kit/index.ts";
 
 // The two members `enhanceForm` touches: `submitting`, and (through
 // `applyActionResult`) `setServerState`.
-const fakeStore = () => ({ submitting: false, setServerState: vi.fn() });
+const fakeStore = () => ({
+  submitting: false,
+  setServerState: vi.fn<EnhancedStore["setServerState"]>(),
+});
 
 /** The rune store `enhanceForm` accepts. */
 type EnhancedStore = Parameters<typeof enhanceForm>[0];
@@ -63,7 +66,7 @@ describe("enhanceForm", () => {
     const after = submitWith(submit);
     expect(store.submitting).toBe(true);
 
-    const update = vi.fn();
+    const update = vi.fn<Parameters<AfterSubmit>[0]["update"]>();
     await after({
       result: {
         type: "failure",
@@ -82,7 +85,7 @@ describe("enhanceForm", () => {
     const { submit } = attach(store);
     const after = submitWith(submit);
     const result = { type: "redirect", status: 303, location: "/organisations/org-1" };
-    const update = vi.fn(async () => {});
+    const update = vi.fn<Parameters<AfterSubmit>[0]["update"]>(async () => {});
     await after({ result, update });
     expect(store.submitting).toBe(false);
     expect(update).toHaveBeenCalledWith({ reset: false });
