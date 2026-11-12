@@ -65,7 +65,7 @@ catalog:
   # The tagged `TriState` (Assign / Clear / CarryForward) that effect-forms'
   # `Coerce` and `Command` return for partial-update fields, imported from its
   # `/TriState` subpath (a required peer of both packages, see `catalogs.peers`).
-  "@thomasfosterau/effect-ext": ^0.2.0
+  "@thomasfosterau/effect-ext": ^0.3.0
   "@types/node": ^26.6.6
   # Must equal the vitest that vite-plus bundles (see `vitest` below); vite-plus
   # refuses to run coverage on a mismatch.
@@ -117,16 +117,18 @@ catalog:
 # `CommandFailure.ErrorObject` is its `Document.ErrorObject` type, which
 # 0.18.0 first exports (0.16 / 0.17 export only the schema value).
 #
-# `@thomasfosterau/effect-ext` is `^0.1.0 || ^0.2.0`, a required peer of both
+# `@thomasfosterau/effect-ext` is `^0.1.0 || ^0.2.0 || ^0.3.0`, a required peer of both
 # packages: `Coerce` and `Command` build its `TriState` at runtime, and
 # effect-forms-svelte's `defineEntityForm` exposes it through `adaptOverrides`
 # (`Command.AdaptOverrides`). 0.1.0 is the first release with the `/TriState`
-# subpath, and 0.2.0 ships the same module unchanged. Its own `effect` peer is
+# subpath; 0.2.0 ships the same module unchanged, and 0.3.0 only respells
+# `read` / `suppliedValue` / `toNullOr`'s parameter as `field?: Option<A>`
+# (same arguments accepted; this package calls none of them). Its own `effect` peer is
 # `^4.0.0`, so the `effect` floor above stays.
 catalogs:
   peers:
     "@sveltejs/kit": ^3.0.0
-    "@thomasfosterau/effect-ext": ^0.1.0 || ^0.2.0
+    "@thomasfosterau/effect-ext": ^0.1.0 || ^0.2.0 || ^0.3.0
     "@thomasfosterau/effect-jsonapi": ">=0.18.0"
     effect: ^4.0.0
     svelte: ^5.40.0
