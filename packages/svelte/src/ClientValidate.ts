@@ -23,8 +23,8 @@ const { validateValueSync } = Validate;
 import type * as Schema from "effect/Schema";
 
 /** Validate the whole form's data, returning the nested error tree (empty when valid). */
-export function validateData<S extends Schema.Top>(
-  schema: S,
+export function validateData(
+  schema: Schema.Top,
   data: unknown,
   format?: LeafFormatter,
 ): FormErrors {
@@ -38,8 +38,8 @@ export function validateData<S extends Schema.Top>(
  * working; the caller merges the result into its existing error tree for that
  * field only.
  */
-export function validateField<S extends Schema.Top>(
-  schema: S,
+export function validateField(
+  schema: Schema.Top,
   data: unknown,
   path: FormPath,
   format?: LeafFormatter,
