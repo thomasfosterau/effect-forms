@@ -6,6 +6,8 @@
  * sometimes the effect-forms state.
  */
 import { Focus } from "@thomasfosterau/effect-forms";
+import * as Option from "effect/Option";
+import * as P from "effect/Predicate";
 import { describe, expect, it } from "vite-plus/test";
 import { formStateOf, issuesFor, rootIssuesOf, valueOf } from "../../src/kit/index.ts";
 
@@ -30,20 +32,21 @@ const failedSubmission = {
 
 describe("formStateOf", () => {
   it("reads the state a failed form action carried", () => {
-    expect(formStateOf(failedSubmission)?.data?.name).toBe("Balcony");
+    const state = formStateOf(failedSubmission);
+    expect(Option.map(state, ({ data }) => data?.["name"])).toEqual(Option.some("Balcony"));
   });
 
-  it("answers undefined for the first render (`form` is null)", () => {
-    expect(formStateOf(null)).toBeUndefined();
+  it("answers None for the first render (`form` is null)", () => {
+    expect(formStateOf(null)).toEqual(Option.none());
   });
 
-  it("answers undefined for an action result that carried a bare message", () => {
-    expect(formStateOf({ message: "The request could not be completed." })).toBeUndefined();
+  it("answers None for an action result that carried a bare message", () => {
+    expect(formStateOf({ message: "The request could not be completed." })).toEqual(Option.none());
   });
 
   it("drops a malformed error tree rather than the whole state", () => {
     const state = formStateOf({ form: { data: { name: "Balcony" }, errors: { name: [3] } } });
-    expect(state?.errors).toBeUndefined();
+    expect(Option.exists(state, ({ errors }) => P.isUndefined(errors))).toBe(true);
     expect(valueOf(state, field.key("name"))).toBe("Balcony");
   });
 });
@@ -55,7 +58,7 @@ describe("issuesFor", () => {
 
   it("returns none for a field with no messages, and for no state at all", () => {
     expect(issuesFor(formStateOf(failedSubmission), field.key("description"))).toEqual([]);
-    expect(issuesFor(undefined, field.key("name"))).toEqual([]);
+    expect(issuesFor(Option.none(), field.key("name"))).toEqual([]);
   });
 });
 
@@ -84,11 +87,11 @@ describe("valueOf", () => {
 
   it("falls back when the field was never posted", () => {
     expect(valueOf(state, field.key("curator"), "Stored curator")).toBe("Stored curator");
-    expect(valueOf(undefined, field.key("name"), "Stored name")).toBe("Stored name");
+    expect(valueOf(Option.none(), field.key("name"), "Stored name")).toBe("Stored name");
   });
 
   it("falls back to the empty string when no fallback is given", () => {
-    expect(valueOf(undefined, field.key("name"))).toBe("");
+    expect(valueOf(Option.none(), field.key("name"))).toBe("");
   });
 
   it("renders a non-string posted value rather than dropping it", () => {
