@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { assert, describe, expect, it, onTestFinished, vi } from "vite-plus/test";
 import {
   computeDataApplication,
+  isActionResponse,
   objectToEntries,
   objectToFormData,
   parseActionResult,
@@ -213,9 +214,17 @@ describe("parseActionResult", () => {
     const parsed = parseActionResult(state, 400);
     expect(parsed).toMatchObject({ _tag: "Failure" });
   });
+});
 
-  it("returns an Error for an unrecognised body", () => {
-    expect(parseActionResult({ nope: true })).toMatchObject({ _tag: "Error" });
+describe("isActionResponse", () => {
+  it("accepts a tagged action result and a bare FormState", () => {
+    expect(isActionResponse(success(makeFormState({ a: 1 })))).toBe(true);
+    expect(isActionResponse(makeFormState({ a: 1 }))).toBe(true);
+  });
+
+  it("rejects an unrecognised body", () => {
+    expect(isActionResponse({ nope: true })).toBe(false);
+    expect(isActionResponse(null)).toBe(false);
   });
 });
 

@@ -27,7 +27,7 @@ import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import { type Form, Result, State } from "@thomasfosterau/effect-forms";
 import {
   type Classify,
@@ -95,10 +95,11 @@ const isConflict = (cause: unknown): boolean =>
   cause.status === 409 &&
   (P.isTagged(cause, "JsonapiError") || P.isTagged(cause, "ErrorResponse"));
 
-const submittedId = (input: unknown): Option.Option<string> =>
-  P.isObjectOrArray(input) && P.hasProperty(input, "id") && P.isString(input.id) && input.id !== ""
-    ? Option.some(input.id)
-    : Option.none();
+/** A command input carrying the caller's own non-empty client-generated `id`. */
+const SubmittedId = Schema.Struct({ id: Schema.NonEmptyString });
+
+/** Decode a command input's own `id`, `None` when it carries no non-empty string `id`. */
+const decodeSubmittedId = Schema.decodeUnknownOption(SubmittedId);
 
 const retryOwnConflict = <I, O, E, F>(
   create: Command<I, O, E>,
@@ -109,7 +110,7 @@ const retryOwnConflict = <I, O, E, F>(
     Effect.catch((error) =>
       Option.match(
         isConflict(error instanceof CommandRejected ? error.cause : error)
-          ? submittedId(input)
+          ? Option.map(decodeSubmittedId(input), ({ id }) => id)
           : Option.none(),
         {
           onNone: () => Effect.fail(error),

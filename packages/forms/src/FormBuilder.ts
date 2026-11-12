@@ -50,6 +50,7 @@ export type TypeId = typeof TypeId;
 interface SyncRefinement<A> {
   readonly _tag: "sync";
   readonly fn: (values: A) => Schema.FilterOutput;
+  readonly annotations?: Schema.Annotations.Filter;
 }
 
 /** An asynchronous cross-field refinement over values `A` — run by the Effect validate path. */
@@ -97,10 +98,13 @@ export interface FormBuilder<TFields extends FieldsRecord, R> {
   /**
    * Attach a synchronous whole-form validation. The predicate sees the decoded
    * values and returns a {@link Schema.FilterOutput} (`undefined` / `true` to
-   * pass, a message / `{ path, issue }` / list to fail).
+   * pass, a message / `{ path, issue }` / list to fail). `annotations`
+   * (`identifier`, `title`, `description`, …) describe the check in the
+   * resulting schema; without them the check stays anonymous.
    */
   refine(
     predicate: (values: DecodedFromFields<TFields>) => Schema.FilterOutput,
+    annotations?: Schema.Annotations.Filter,
   ): FormBuilder<TFields, R>;
 
   /** Attach an asynchronous whole-form validation (run by the validate path). */
@@ -129,7 +133,13 @@ function build<TFields extends FieldsRecord, R>(
         ...refinements,
         ...other.refinements,
       ]),
-    refine: (predicate) => build(fields, [...refinements, { _tag: "sync", fn: predicate }]),
+    refine: (predicate, annotations) =>
+      build(fields, [
+        ...refinements,
+        annotations === undefined
+          ? { _tag: "sync", fn: predicate }
+          : { _tag: "sync", fn: predicate, annotations },
+      ]),
     refineEffect: <RD>(
       predicate: (
         values: DecodedFromFields<TFields>,
@@ -178,7 +188,9 @@ export function buildSchema<TFields extends FieldsRecord, R>(
   const struct = erased as Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>;
   // Checks leave `Type` and `Encoded` unchanged.
   return Arr.reduce(self.refinements, struct, (refined, refinement) =>
-    P.isTagged(refinement, "sync") ? refined.check(Schema.makeFilter(refinement.fn)) : refined,
+    P.isTagged(refinement, "sync")
+      ? refined.check(Schema.makeFilter(refinement.fn, refinement.annotations))
+      : refined,
   );
 }
 

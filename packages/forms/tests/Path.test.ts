@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 import {
   clearAll,
   fromString,
@@ -78,9 +78,9 @@ describe("Path.toString / fromString", () => {
 });
 
 // Type-level assertions for `FieldPath` / `PathValue` (#756): a mistyped
-// segment or wrong leaf type must be a compile error. Encoded as assignability
-// checks (the models package's `expectTypeOf`-style pattern) that break the
-// build if the projection ever drifts — there is nothing to assert at runtime.
+// segment or wrong leaf type must be a compile error. Encoded as
+// `expectTypeOf` assertions that break the type gate (`vp run check`) if the
+// projection ever drifts — there is nothing to assert at runtime.
 describe("Path.FieldPath / Path.PathValue", () => {
   interface Item {
     readonly label: string;
@@ -93,27 +93,25 @@ describe("Path.FieldPath / Path.PathValue", () => {
   }
 
   it("accepts every valid deep path and rejects invalid ones", () => {
-    const scalar: FieldPath<Data> = "title";
-    const nested: FieldPath<Data> = "author.name";
-    const optionalNested: FieldPath<Data> = "author.bio";
-    const arrayIndex: FieldPath<Data> = "tags[0]";
-    const arrayItemField: FieldPath<Data> = "items[0].label";
-    // @ts-expect-error -- "titel" is not a key of Data
-    const typo: FieldPath<Data> = "titel";
-    // @ts-expect-error -- "author.missing" is not a key of Data["author"]
-    const missingNested: FieldPath<Data> = "author.missing";
-    void [scalar, nested, optionalNested, arrayIndex, arrayItemField, typo, missingNested];
+    expectTypeOf<"title">().toExtend<FieldPath<Data>>();
+    expectTypeOf<"author.name">().toExtend<FieldPath<Data>>();
+    expectTypeOf<"author.bio">().toExtend<FieldPath<Data>>();
+    expectTypeOf<"tags[0]">().toExtend<FieldPath<Data>>();
+    expectTypeOf<"items[0].label">().toExtend<FieldPath<Data>>();
+    // "titel" is not a key of Data
+    expectTypeOf<"titel">().not.toExtend<FieldPath<Data>>();
+    // "author.missing" is not a key of Data["author"]
+    expectTypeOf<"author.missing">().not.toExtend<FieldPath<Data>>();
     expect(true).toBe(true);
   });
 
   it("resolves the leaf type at a path", () => {
-    const title: PathValue<Data, "title"> = "hello";
-    const name: PathValue<Data, "author.name"> = "Ada";
-    const tag: PathValue<Data, "tags[0]"> = "a";
-    const label: PathValue<Data, "items[0].label"> = "x";
-    // @ts-expect-error -- the leaf at "title" is `string`, not `number`
-    const wrongType: PathValue<Data, "title"> = 1;
-    void [title, name, tag, label, wrongType];
+    expectTypeOf<PathValue<Data, "title">>().toEqualTypeOf<string>();
+    expectTypeOf<PathValue<Data, "author.name">>().toEqualTypeOf<string>();
+    expectTypeOf<PathValue<Data, "tags[0]">>().toEqualTypeOf<string>();
+    expectTypeOf<PathValue<Data, "items[0].label">>().toEqualTypeOf<string>();
+    // the leaf at "title" is `string`, not `number`
+    expectTypeOf<PathValue<Data, "title">>().not.toEqualTypeOf<number>();
     expect(true).toBe(true);
   });
 });

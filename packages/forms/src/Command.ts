@@ -115,24 +115,37 @@ class InvalidJsonRowsError extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("InvalidJsonRowsError", { message: Schema.String }) {}
 
+/** A malformed `structured` field payload, as {@link plan}'s default coercion rejects it. */
+class InvalidStructuredJsonError extends Schema.TaggedError<
+  InvalidStructuredJsonError,
+  { readonly brand: unique symbol }
+>()("InvalidStructuredJsonError", { message: Schema.String }) {}
+
 // ── probes ────────────────────────────────────────────────────────────
+
+/**
+ * A sample value a probe feeds a field schema: one representative input per
+ * {@link FieldKind}, plus the absent values (`undefined`, `null`) the
+ * required / clearable checks try.
+ */
+type ProbeInput = ReadonlyArray<never> | boolean | number | string | null | undefined;
 
 /**
  * Run one decode probe: whether the schema accepts the input, plus the decoded
  * value for instance checks (the date probe needs to see a `Date` come out,
  * not just a successful decode).
  */
-const probe = (schema: Schema.Top, input: unknown): Exit.Exit<unknown, unknown> => {
+const probe = (schema: Schema.Top, input: ProbeInput): Exit.Exit<unknown, unknown> => {
   // SAFETY: the cast only drops `schema`'s decoding-service requirement. The
   // decode runs to an `Exit`, so a schema that does need a service (or decodes
   // asynchronously, or throws) yields a failed `Exit` — which a probe reads as
   // "does not decode", exactly as it reads an ordinary schema issue.
   const decoder = schema as Schema.Codec<unknown>;
-  return SchemaParser.decodeUnknownExit(decoder)(input);
+  return SchemaParser.decodeExit(decoder)(input);
 };
 
 /** True when a schema decodes the given input without failing. */
-const decodes = (schema: Schema.Top, input: unknown): boolean =>
+const decodes = (schema: Schema.Top, input: ProbeInput): boolean =>
   Exit.isSuccess(probe(schema, input));
 
 /** A syntactically valid UUID no other field kind accepts as non-text. */
@@ -465,17 +478,25 @@ const coerceBoolean = (ctx: CoerceContext, raw: string | undefined): unknown => 
 /**
  * Parse a JSON-encoded structured document (inline / block ProseKit JSON)
  * from a multipart field. Blank or absent skips (`undefined`) or, on the
- * clearable path, clears (`null`); a present value is `JSON.parse`d and
+ * clearable path, clears (`null`); a present value is decoded as JSON and
  * passed through as-is — shape validation is the command's own decode's job,
  * exactly as {@link jsonRowsFromField} leaves row-shape validation to itself
- * rather than duplicating it here. `JSON.parse` throws a `SyntaxError` on
- * malformed JSON, same as {@link jsonRowsFromField} does on a malformed row
- * list — mapping that onto a framework response is the caller's concern.
+ * rather than duplicating it here. Throws a plain `Error` on malformed JSON,
+ * same as {@link jsonRowsFromField} does on a malformed row list — mapping
+ * that onto a framework response is the caller's concern.
  */
-const structuredFromField = (raw: string | undefined, clearable: boolean): unknown => {
+const structuredFromField = (
+  raw: string | undefined,
+  clearable: boolean,
+  label: string,
+): unknown => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") return clearable ? null : undefined;
-  return JSON.parse(trimmed);
+  const decoded = decodeJson(trimmed);
+  if (Exit.isFailure(decoded)) {
+    throw new InvalidStructuredJsonError({ message: `Invalid ${label} payload — expected JSON` });
+  }
+  return decoded.value;
 };
 
 /** Build one field's {@link CoerceContext} for one mode. */
@@ -495,7 +516,7 @@ const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undef
     Match.when("date", () => coerceDate(ctx, raw)),
     Match.when("jsonArray", () => jsonRowsFromField(raw, field.key)),
     Match.when("boolean", () => coerceBoolean(ctx, raw)),
-    Match.when("structured", () => structuredFromField(raw, ctx.clearable)),
+    Match.when("structured", () => structuredFromField(raw, ctx.clearable, field.key)),
     Match.exhaustive,
   );
 };
