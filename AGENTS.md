@@ -37,7 +37,7 @@ Package-local invariants and terms live in each package's `AGENTS.md` (`packages
 - `vp check` — format (Oxfmt) + lint (Oxlint with the Effect rules), type-aware through oxlint-tsgolint (`typeAware` + `typeCheck`, so it also reports TypeScript errors; it runs on a clean checkout, before any build); `--fix` to autofix. `vp run check` — the type gate: every package's native, Effect-patched `tsc`, svelte-check over `packages/svelte`, and the root config. They are different commands.
 - `vp run -r test:unit` — every package's Vitest suite.
 - `vp run -r build` — `vp pack` (tsdown) → every package's `dist/`.
-- `vp run docgen` — compiles and runs every `@example` in `packages/forms` against `dist/`, and writes the (git-ignored) API reference under `packages/forms/docs/`.
+- `vp run docgen` — compiles and runs every `@example` in `packages/forms` against `dist/`, and writes the (git-ignored) API reference under `packages/forms/docs/`; do not confuse it with the committed guides in the repo-root `docs/`.
 - `vp run test:coverage` — every package's suite under one Istanbul map at `coverage/coverage-final.json`, which `fallow audit` reads for exact per-function CRAP scores.
 - `pnpm changeset` — add a changeset.
 
@@ -80,7 +80,7 @@ These packages target **Effect v4**: a single `effect` package. Development and 
 
 ## Documentation surfaces
 
-The root `README.md` is the landing page; each package `README.md` is the npm API reference (the `/kit` guide is the `## /kit` section of `packages/svelte/README.md`); each package `AGENTS.md` carries its boundary and invariants (not published); `.claude/CLAUDE.md` carries the Claude Code session specifics; `CONTRIBUTING.md` carries human setup, hooks and single-check commands; `PUBLISHING.md` the release pipeline and its one-time owner setup; `SECURITY.md` the reporting channel and supply-chain posture; `.changeset/*.md` are the release notes. No `docs/` tree is committed (`packages/forms/docs/` is docgen output); decisions and findings go in issue comments.
+The root `README.md` is the landing page; each package `README.md` is a short npm landing page (what it is, install, one example, a table of guides, links) whose links to guides are absolute `https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/...` URLs because it renders on npm; the repo-root `docs/` holds the committed guides (`docs/forms/*.md`, `docs/svelte/*.md` including `kit.md`, indexed by `docs/README.md`; links inside it are relative); the doc comment on each export is the API reference (docgen builds the git-ignored `packages/forms/docs/` from it); each package `AGENTS.md` carries its boundary and invariants (not published); `.claude/CLAUDE.md` carries the Claude Code session specifics; `CONTRIBUTING.md` carries human setup, hooks and single-check commands; `PUBLISHING.md` the release pipeline and its one-time owner setup; `SECURITY.md` the reporting channel and supply-chain posture; `.changeset/*.md` are the release notes. Decisions and findings go in issue comments.
 
 ---
 
