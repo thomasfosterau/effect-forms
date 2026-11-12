@@ -20,7 +20,7 @@
  * @module tests/FormStore.svelte
  */
 
-import { Constraints, FormBuilder, Result, State } from "@thomasfosterau/effect-forms";
+import { Constraints, FormBuilder, Result, State, Validate } from "@thomasfosterau/effect-forms";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
@@ -182,7 +182,7 @@ describe("auto-submit — no submitter", () => {
     // underlying `$state` is mutable at runtime regardless — this simulates a
     // live input change the way taint detection observes it.
     (store.data as { title: string }).title = "changed";
-    store.handleBlur(["title"]);
+    store.handleBlur((o) => o.key("title"));
     await done;
 
     expect(bodies).toHaveLength(1);
@@ -336,7 +336,7 @@ describe("submission failures", () => {
   });
 });
 
-describe("setValue on the deeply-proxied store data", () => {
+describe("set on the deeply-proxied store data", () => {
   it("does not throw DataCloneError and keeps the value + dirty tracking (regression)", () => {
     // `data` is a deep `$state` proxy; every path-addressed write re-snapshots
     // `#previousData` for diffing. `structuredClone` rejects proxies, so the
@@ -347,11 +347,11 @@ describe("setValue on the deeply-proxied store data", () => {
       schema: Schema.Struct({ title: Schema.optional(Schema.String) }),
       defaults: { title: "" },
     });
-    expect(() => store.setValue(["title"], "typed")).not.toThrow();
-    expect(store.valueAt(["title"])).toBe("typed");
-    expect(store.isDirtyAt(["title"])).toBe(true);
-    expect(() => store.setValue(["title"], "typed more")).not.toThrow();
-    expect(store.valueAt(["title"])).toBe("typed more");
+    expect(() => store.set((o) => o.key("title"), "typed")).not.toThrow();
+    expect(store.get((o) => o.key("title"))).toBe("typed");
+    expect(store.isDirtyAt((o) => o.key("title"))).toBe(true);
+    expect(() => store.set((o) => o.key("title"), "typed more")).not.toThrow();
+    expect(store.get((o) => o.key("title"))).toBe("typed more");
   });
 });
 
@@ -402,7 +402,7 @@ describe("enhance — change listeners and teardown", () => {
     const action = store.enhance(mount());
     flushSync();
 
-    store.setValue(["title"], "Hello");
+    store.set((o) => o.key("title"), "Hello");
     flushSync();
     expect(seen).toEqual(["title"]);
 
@@ -427,7 +427,7 @@ describe("enhance — change listeners and teardown", () => {
     flushSync();
     action.destroy();
 
-    store.setValue(["title"], "Hello");
+    store.set((o) => o.key("title"), "Hello");
     flushSync();
     // Keep the detached form from attempting a native navigation.
     node.addEventListener("submit", (event) => event.preventDefault());
@@ -467,39 +467,39 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
   it("hands the refinement the decoded value, as the server path does", async () => {
     seen.length = 0;
     const store = createForm(builder);
-    store.setValue(["age"], "42");
+    store.set((o) => o.key("age"), "42");
     store.validate();
     await settled(store);
 
     expect(seen).toEqual([42]);
-    expect(store.errorsAt(["age"])).toEqual([]);
+    expect(store.errorsAt((o) => o.key("age"))).toEqual([]);
     expect(store.isValid).toBe(true);
   });
 
   it("skips the refinement when the values don't decode (the field errors report that)", async () => {
     seen.length = 0;
     const store = createForm(builder);
-    store.setValue(["age"], "not a number");
+    store.set((o) => o.key("age"), "not a number");
     store.validate();
     await settled(store);
 
     expect(seen).toEqual([]);
-    expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
+    expect(store.errorsAt((o) => o.key("age"))).not.toContain("must be the number 42");
     expect(store.isValid).toBe(false);
   });
 
   it("clears a previous run's refinement errors once the values stop decoding", async () => {
     seen.length = 0;
     const store = createForm(builder);
-    store.setValue(["age"], "7");
+    store.set((o) => o.key("age"), "7");
     store.validate();
     await settled(store);
-    expect(store.errorsAt(["age"])).toEqual(["must be the number 42"]);
+    expect(store.errorsAt((o) => o.key("age"))).toEqual(["must be the number 42"]);
 
-    store.setValue(["age"], "oops");
+    store.set((o) => o.key("age"), "oops");
     store.validate();
     await settled(store);
-    expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
+    expect(store.errorsAt((o) => o.key("age"))).not.toContain("must be the number 42");
   });
 });
 
@@ -512,21 +512,192 @@ const makeTagsStore = () =>
 describe("move — reorders an array field, carrying per-index state", () => {
   it("moves the item and its touched flag to the new index", () => {
     const store = makeTagsStore();
-    store.setTouched(["tags", 0]);
-    store.move(["tags"], 0, 2);
-    expect(store.valueAt(["tags"])).toEqual(["b", "c", "a"]);
-    expect(store.isTouchedAt(["tags", 2])).toBe(true);
-    expect(store.isTouchedAt(["tags", 0])).toBe(false);
-    expect(store.isDirtyAt(["tags"])).toBe(true);
+    store.setTouched((o) => o.key("tags").at(0));
+    store.move((o) => o.key("tags"), 0, 2);
+    expect(store.get((o) => o.key("tags"))).toEqual(["b", "c", "a"]);
+    expect(store.isTouchedAt((o) => o.key("tags").at(2))).toBe(true);
+    expect(store.isTouchedAt((o) => o.key("tags").at(0))).toBe(false);
+    expect(store.isDirtyAt((o) => o.key("tags"))).toBe(true);
   });
 
   it("ignores an out-of-range or no-op move", () => {
     const store = makeTagsStore();
-    store.move(["tags"], 0, 3);
-    store.move(["tags"], -1, 1);
-    store.move(["tags"], 1, 1);
-    store.move(["tags"], 0, -1);
-    expect(store.valueAt(["tags"])).toEqual(["a", "b", "c"]);
-    expect(store.isDirtyAt(["tags"])).toBe(false);
+    store.move((o) => o.key("tags"), 0, 3);
+    store.move((o) => o.key("tags"), -1, 1);
+    store.move((o) => o.key("tags"), 1, 1);
+    store.move((o) => o.key("tags"), 0, -1);
+    expect(store.get((o) => o.key("tags"))).toEqual(["a", "b", "c"]);
+    expect(store.isDirtyAt((o) => o.key("tags"))).toBe(false);
+  });
+});
+// ── Typed focuses (#140): the store's path-taking API takes `Focus`es ─────
+
+const Post = Schema.Struct({
+  title: Schema.String,
+  author: Schema.Struct({ name: Schema.String }),
+  editor: Schema.optional(Schema.Struct({ name: Schema.String })),
+  tags: Schema.Array(Schema.String),
+  links: Schema.Array(Schema.Struct({ url: Schema.String })),
+});
+
+const makePostStore = () =>
+  createForm({
+    schema: Post,
+    defaults: { title: "", author: { name: "Ada" }, tags: ["a", "b"], links: [{ url: "" }] },
+  });
+
+describe("focus reads and writes through the deep $state proxy", () => {
+  it("gets and sets nested values, typed, through Optic's copy-on-write", () => {
+    const store = makePostStore();
+    const name = store.root.key("author").key("name");
+    expect(store.get(name)).toBe("Ada");
+    store.set(name, "Grace");
+    expect(store.data.author.name).toBe("Grace");
+    expect(store.isDirtyAt(name)).toBe(true);
+    store.set((o) => o.key("links").at(0).key("url"), "https://a.example");
+    expect(store.data.links).toEqual([{ url: "https://a.example" }]);
+    // Writing a fresh tree must not throw on the proxied containers it copies.
+    expect(() => store.set((o) => o.key("tags").at(1), "z")).not.toThrow();
+    expect(store.data.tags).toEqual(["a", "z"]);
+  });
+
+  it("leaves the data unchanged where an optional focus finds nothing", () => {
+    const store = makePostStore();
+    store.set((o) => o.key("tags").at(5), "never");
+    store.set((o) => o.key("editor").defined().key("name"), "never");
+    expect(store.data.tags).toEqual(["a", "b"]);
+    expect(store.data.editor).toBeUndefined();
+    expect(store.getOption((o) => o.key("tags").at(5))).toEqual(Option.none());
+    expect(store.getOption((o) => o.key("tags").at(0))).toEqual(Option.some("a"));
+  });
+});
+
+describe("field handles over focuses", () => {
+  it("binds a typed value, name, errors and meta", () => {
+    const store = createForm({
+      schema: Schema.Struct({ author: Schema.Struct({ name: Schema.NonEmptyString }) }),
+      defaults: { author: { name: "Ada" } },
+    });
+    const name = store.field((o) => o.key("author").key("name"));
+    expect(name.name).toBe("author.name");
+    expect(name.value).toBe("Ada");
+    name.value = "";
+    expect(store.data.author.name).toBe("");
+    store.validate();
+    expect(name.errors.length).toBeGreaterThan(0);
+    expect(name.meta.isDirty).toBe(true);
+    expect(name.constraints).toEqual(store.constraintAt((o) => o.key("author").key("name")));
+    name.handleBlur();
+    expect(name.meta.isBlurred).toBe(true);
+    expect(name.meta.isTouched).toBe(true);
+  });
+
+  it("handles an array item through an optional focus with a fallback", () => {
+    const store = makePostStore();
+    const second = store.field((o) => o.key("tags").at(1).orElse(""));
+    const missing = store.field((o) => o.key("tags").at(9).orElse(""));
+    expect(second.name).toBe("tags[1]");
+    expect(second.value).toBe("b");
+    expect(missing.value).toBe("");
+    second.value = "c";
+    expect(store.data.tags).toEqual(["a", "c"]);
+  });
+});
+
+describe("error access through focuses", () => {
+  const errors = {
+    _errors: ["Form-level"],
+    author: { name: ["Required"] },
+    tags: { _errors: ["Too few"], "1": ["Too short"] },
+  };
+  const hydrated = () =>
+    createForm(
+      makeFormState(
+        { title: "", author: { name: "" }, tags: ["a", "b"], links: [] },
+        { errors, isPosted: true },
+      ),
+      { schema: Post },
+    );
+
+  it("reads nested, array-item, array-level and form-level messages", () => {
+    const store = hydrated();
+    expect(store.errorsAt((o) => o.key("author").key("name"))).toEqual(["Required"]);
+    expect(store.errorsAt((o) => o.key("tags").at(1))).toEqual(["Too short"]);
+    expect(store.errorsAt((o) => o.key("tags"))).toEqual(["Too few"]);
+    expect(store.errorsAt((o) => o.key("title"))).toEqual([]);
+    expect(store.formErrors).toEqual(["Form-level"]);
+    expect(store.errors).toEqual(errors);
+    expect(store.serverErrors).toEqual(errors);
+    expect(store.clientErrors).toEqual({});
+  });
+
+  it("summarises a section's messages", () => {
+    const store = hydrated();
+    // An integer key orders first in a JS object, so compare as a set.
+    const under = store.errorsUnder((o) => o.key("tags"));
+    expect(under).toHaveLength(2);
+    expect(under).toContainEqual({ path: [], message: "Too few" });
+    expect(under).toContainEqual({ path: [1], message: "Too short" });
+    expect(store.hasErrorsAt((o) => o.key("author"))).toBe(true);
+    expect(store.hasErrorsAt((o) => o.key("title"))).toBe(false);
+    expect(store.visibleErrorsAt((o) => o.key("author").key("name"))).toEqual(["Required"]);
+    expect(store.isValidatingAt((o) => o.key("title"))).toBe(false);
+    expect(store.validateField((o) => o.key("author").key("name"))).toEqual([]);
+  });
+});
+
+describe("array mutators over a focus", () => {
+  it("appends, inserts, replaces, swaps, removes and clears", () => {
+    const store = makePostStore();
+    const tags = store.root.key("tags");
+    store.append(tags, "c");
+    expect(store.data.tags).toEqual(["a", "b", "c"]);
+    store.insertItem(tags, 0, "z");
+    expect(store.data.tags).toEqual(["z", "a", "b", "c"]);
+    store.replaceItem(tags, 1, "y");
+    expect(store.data.tags).toEqual(["z", "y", "b", "c"]);
+    store.swap(tags, 0, 3);
+    expect(store.data.tags).toEqual(["c", "y", "b", "z"]);
+    store.removeItem(tags, 1);
+    expect(store.data.tags).toEqual(["c", "b", "z"]);
+    store.clearItems(tags);
+    expect(store.data.tags).toEqual([]);
+    expect(store.isDirtyAt(tags)).toBe(true);
+  });
+
+  it("derives a schema blank for an array's items", () => {
+    const store = makePostStore();
+    expect(store.blankItemAt((o) => o.key("tags"))).toBe("");
+    expect(store.blankItemAt((o) => o.key("links"))).toEqual({ url: "" });
+  });
+});
+
+describe("validators bound to focuses", () => {
+  it("runs a typed sync validator on change, and a registered one dynamically", () => {
+    const seen: Array<string> = [];
+    const store = createForm(
+      { schema: Post, defaults: { title: "", author: { name: "" }, tags: [], links: [] } },
+      {
+        validators: (o) => [
+          Validate.on(o.key("title"), {
+            onChange: (title) => {
+              seen.push(title);
+              return title.length >= 3 || "At least 3 characters";
+            },
+          }),
+        ],
+      },
+    );
+    store.set((o) => o.key("title"), "ab");
+    expect(seen).toEqual(["ab"]);
+    expect(store.errorsAt((o) => o.key("title"))).toEqual(["At least 3 characters"]);
+    store.set((o) => o.key("title"), "abc");
+    expect(store.errorsAt((o) => o.key("title"))).toEqual([]);
+
+    store.setFieldValidators((o) => o.key("author").key("name"), {
+      onBlur: (name) => name !== "" || "Required",
+    });
+    store.handleBlur((o) => o.key("author").key("name"));
+    expect(store.errorsAt((o) => o.key("author").key("name"))).toEqual(["Required"]);
   });
 });

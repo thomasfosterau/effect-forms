@@ -27,10 +27,12 @@ import type * as Schema from "effect/Schema";
 import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import { type FormErrors, issuesToErrors } from "./Errors.ts";
+import type { Focus } from "./Focus.ts";
 import type { FormValue } from "./Path.ts";
 import {
   filterOutputToFormIssues,
   type FormIssue,
+  type FormPath,
   type LeafFormatter,
   schemaIssuesToFormIssues,
 } from "./Issues.ts";
@@ -199,5 +201,72 @@ export function resolveFieldTrigger<A, R = never>(
       trigger === "change" ? validators?.onChangeAsync : validators?.onBlurAsync,
     ),
     asyncDebounceMs: validators?.asyncDebounceMs ?? 0,
+  };
+}
+
+/**
+ * One trigger's validator runs for a {@link BoundFieldValidators} field, as
+ * {@link BoundFieldValidators.resolve} answers them: the sync validator's
+ * issues (already run), and the async validator's debounced run, each `None`
+ * when no such validator is registered or the field's focus finds no value.
+ */
+export interface FieldRun<R = never> {
+  /** The sync validator's issues for the trigger. */
+  readonly sync: Option.Option<ReadonlyArray<FormIssue>>;
+  /** The async validator's run for the trigger (its debounce included). */
+  readonly async: Option.Option<Effect.Effect<ReadonlyArray<FormIssue>, never, R>>;
+}
+
+/**
+ * A field's {@link FieldValidators} bound to the {@link Focus} they validate,
+ * built by {@link on}. The value's type stays inside: a reactive store holds
+ * these for fields of different types side by side, keyed by `path`, and
+ * runs one against its whole data `S`.
+ */
+export interface BoundFieldValidators<S, R = never> {
+  /** The validated field's path (its error-tree address). */
+  readonly path: FormPath;
+  /** The runs that apply for `trigger`, against the field's current value in `data`. */
+  readonly resolve: (trigger: FieldTrigger, data: S) => FieldRun<R>;
+}
+
+/**
+ * Bind `validators` to the field `focus` names. Each validator receives the
+ * field's value as the focus types it (`V`), read from the form data at run
+ * time; a focus that finds no value (an array item that no longer exists)
+ * runs nothing.
+ *
+ * @example
+ * ```ts
+ * import { Focus, Validate } from "@thomasfosterau/effect-forms"
+ * import * as Option from "effect/Option"
+ *
+ * type Signup = { readonly username: string }
+ * const username = Validate.on(Focus.root<Signup>().key("username"), {
+ *   onChange: (value) => value.length >= 3 || "At least 3 characters",
+ * })
+ *
+ * const run = username.resolve("change", { username: "ab" })
+ * console.log(Option.getOrElse(run.sync, () => [])) // [{ path: [], message: "At least 3 characters" }]
+ * ```
+ */
+export function on<S, V, R = never>(
+  focus: Focus<S, V>,
+  validators: FieldValidators<V, R>,
+): BoundFieldValidators<S, R> {
+  return {
+    path: focus.path,
+    resolve: (trigger, data) => {
+      const resolved = resolveFieldTrigger(trigger, validators);
+      return Option.match(focus.getOption(data), {
+        onNone: (): FieldRun<R> => ({ sync: Option.none(), async: Option.none() }),
+        onSome: (value): FieldRun<R> => ({
+          sync: Option.map(resolved.sync, (validator) => runSyncFieldValidator(validator, value)),
+          async: Option.map(resolved.async, (validator) =>
+            runAsyncFieldValidator(validator, value, resolved.asyncDebounceMs),
+          ),
+        }),
+      });
+    },
   };
 }

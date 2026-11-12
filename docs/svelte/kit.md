@@ -7,10 +7,11 @@
 | `formAction(form, run, locationFor, options?)`             | A page action: validate, run the command, then `redirect(303)`, `fail(status, { form })` or `fail(500, { message })` |
 | `runFormAction(form, request, run, locationFor, options?)` | The same, as a framework-neutral `Result.FormActionResult`                                                           |
 | `fieldFromPointer(pointer)`                                | `/data/attributes/<field>…` → `Option<field>`                                                                        |
+| `pathFromPointer(pointer)` | `/data/attributes/<field>/…` → `Option<FormPath>` (the whole attribute path, integers as indices) |
 | `idempotentCreate(create, fetchExisting)`                  | A 409 on the caller's own client id resolves as success                                                              |
 | `CommandFailure.*`, `jsonapiFailure`                       | Classify a command failure into routed JSON:API errors or a root message                                             |
 | `enhanceForm(store)`                                       | Spreadable `<form>` props on `$app/forms` `enhance`                                                                  |
-| `formStateOf` / `issuesFor` / `rootIssuesOf` / `valueOf`   | Total readers over `PageProps["form"]`                                                                               |
+| `formStateOf` / `issuesFor` / `rootIssuesOf` / `valueOf`   | Total readers over `PageProps["form"]`; `issuesFor` / `valueOf` take a field's `Focus`                                                                               |
 | `userFixableMessage` / `withFailureParams`                 | Redirect-with-query failure routing for routes that have no page                                                     |
 
 ### Peers
@@ -26,7 +27,7 @@ A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command mu
 
 `jsonapiFailure`, the default classifier, recognises:
 
-- `{ _tag: "JsonapiError", status, errors }`: effect-jsonapi's `ServerErrors.JsonapiError`, or any error of the same shape. Each error object goes to the field its `source.pointer` names, or to the root (`form.errors._errors`), at the cause's own status.
+- `{ _tag: "JsonapiError", status, errors }`: effect-jsonapi's `ServerErrors.JsonapiError`, or any error of the same shape. Each error object goes to the field its `source.pointer` names (the whole attribute path: `/data/attributes/address/street` lands on `address.street`, `/data/attributes/tags/0` on `tags[0]`; see `pathFromPointer`), or to the root (the store's `formErrors`, `_errors` in the tree), at the cause's own status.
 - `{ _tag: "ErrorResponse", status, message, document }`: effect-jsonapi's client-side decoded error. The document's error objects are routed as above. With no document, the message goes to the root.
 - An `Error` with a numeric `status`, such as a transport's 413: its message goes to the root.
 - A `CommandRejected`: its `cause`, by the rules above.
@@ -90,15 +91,18 @@ The page renders server state without a client store:
 
 ```svelte
 <script lang="ts">
+  import { Focus } from "@thomasfosterau/effect-forms";
   import { formStateOf, issuesFor, rootIssuesOf, valueOf } from "@thomasfosterau/effect-forms-svelte/kit";
+  import type { Login } from "#lib/schemas";
   let { form } = $props();
   const state = $derived(formStateOf(form));
+  const email = Focus.root<typeof Login.Encoded>().key("email");
 </script>
 
 <form method="post">
   {#each rootIssuesOf(state) as message}<p role="alert">{message}</p>{/each}
-  <input name="email" value={valueOf(state, "email")} />
-  {#each issuesFor(state, "email") as message}<small>{message}</small>{/each}
+  <input name={Focus.name(email)} value={valueOf(state, email)} />
+  {#each issuesFor(state, email) as message}<small>{message}</small>{/each}
   <input name="password" type="password" />
 </form>
 ```

@@ -1,8 +1,9 @@
 /**
  * The nested form-error tree and its operations.
  *
- * {@link FormErrors} is a nested error tree so a UI can read
- * `errors.author.name` or `errors.tags[0]` directly. The representation is:
+ * {@link FormErrors} is a nested error tree keyed by field path: a UI reads a
+ * field's messages with {@link getError} at that field's path (a typed
+ * {@link module:effect-forms/Focus} carries it). The representation is:
  *
  * - a **leaf** field's messages are a `string[]` keyed by the field name
  *   (`{ title: ["Required"] }`);
@@ -24,8 +25,9 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
+import * as Result from "effect/Result";
 import type { FormIssue, FormPath } from "./Issues.ts";
-import { type IndexMap, remapIndex } from "./Path.ts";
+import { type IndexMap, isUnder, remapIndex } from "./Path.ts";
 
 /** The root key under which a branch's own (non-field) messages are stored. */
 export const ROOT_ERROR_KEY = "_errors";
@@ -39,22 +41,6 @@ export interface FormErrors {
   readonly [ROOT_ERROR_KEY]?: readonly string[];
   readonly [key: string]: FormErrors | readonly string[] | undefined;
 }
-
-/**
- * A {@link FormErrors} tree typed to the shape of `A`, so fields are accessed
- * by name with type-safety: for `A = { name: string; author: { bio: string } }`,
- * `errors.name` is `readonly string[] | undefined` and `errors.author?.bio`
- * likewise. A branch's own (cross-field) messages live under `_errors`. The
- * runtime value is an ordinary {@link FormErrors} — this only refines the type.
- */
-export type TypedFormErrors<A> = [NonNullable<A>] extends [ReadonlyArray<infer E>]
-  ? {
-      readonly [index: number]: TypedFormErrors<E> | undefined;
-      readonly _errors?: readonly string[];
-    }
-  : [NonNullable<A>] extends [object]
-    ? { readonly [K in keyof A]?: TypedFormErrors<A[K]> } & { readonly _errors?: readonly string[] }
-    : readonly string[];
 
 const isMessageList = <T>(value: T): value is Extract<T, readonly string[]> =>
   Arr.isArray(value) && Arr.every(value, P.isString);
@@ -135,6 +121,30 @@ export function flattenErrors(errors: FormErrors): FormIssue[] {
     });
 
   return walk(errors, []);
+}
+
+/**
+ * Every message at or beneath `path`, as {@link FormIssue}s whose paths are
+ * relative to `path` (a message at `path` itself has the empty path), in
+ * depth-first order. For "what is wrong anywhere in this section" displays.
+ *
+ * @example
+ * ```ts
+ * import { Errors } from "@thomasfosterau/effect-forms"
+ *
+ * const errors = Errors.issuesToErrors([
+ *   { path: ["author", "name"], message: "Required" },
+ *   { path: ["title"], message: "Too short" },
+ * ])
+ * console.log(Errors.issuesUnder(errors, ["author"])) // [{ path: ["name"], message: "Required" }]
+ * ```
+ */
+export function issuesUnder(errors: FormErrors, path: FormPath): FormIssue[] {
+  return Arr.filterMap(flattenErrors(errors), (issue) =>
+    isUnder(issue.path, path)
+      ? Result.succeed({ path: issue.path.slice(path.length), message: issue.message })
+      : Result.failVoid,
+  );
 }
 
 /** Whether the tree carries any message anywhere. */

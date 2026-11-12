@@ -4,8 +4,10 @@
  * {@link createForm} binds a schema to a reactive, rune-backed {@link FormStore}.
  * Give it either `{ schema, defaults }` (it wraps the core's `Form.make` to seed
  * an empty form) or a server-produced {@link FormState} to hydrate from. The
- * store exposes mutable `data` (bind inputs to it), typed `errors`
- * (`form.errors.name`), `submitting` / `delayed` / `message` / `isValid`, tainted
+ * store exposes mutable `data` (bind inputs to it), typed field access
+ * through {@link Focus} focuses (`form.field((o) => o.key("name"))`,
+ * `form.errorsAt((o) => o.key("name"))`), the plain `errors` tree,
+ * `submitting` / `delayed` / `message` / `isValid`, tainted
  * tracking, and a spreadable {@link FormStore.props} for `<form {...form.props}>`
  * that wires progressive-enhancement submission (a Svelte attachment).
  *
@@ -25,8 +27,8 @@
  * `serverErrors` expose the per-source trees for a UI that wants to style
  * them differently.
  *
- * `validators` (keyed by {@link Path.toString}) attach per-field sync/async
- * validators (the `FieldValidators` shape — TanStack Form's `onChange(Async)`
+ * `validators` (each bound to its field's focus with `Validate.on`) attach
+ * per-field sync/async validators (the `FieldValidators` shape — TanStack Form's `onChange(Async)`
  * / `onBlur(Async)` vocabulary). Async validators run as Effect fibers: a new
  * value interrupts the field's in-flight fiber before forking the next run —
  * debounce + "latest wins" cancellation fall out of that alone (see
@@ -49,6 +51,7 @@ import {
   Constraints,
   Errors,
   Field,
+  Focus,
   Form,
   FormBuilder,
   Issues,
@@ -98,7 +101,6 @@ type FormErrors = Errors.FormErrors;
 type FormPath = Issues.FormPath;
 type FormIssue = Issues.FormIssue;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
-type TypedFormErrors<A> = Errors.TypedFormErrors<A>;
 type InputConstraint = Constraints.InputConstraint;
 type InputConstraints = Constraints.InputConstraints;
 type LeafFormatter = Issues.LeafFormatter;
@@ -108,7 +110,7 @@ export type FormMode = Mode.FormMode;
 export type FieldValidators<A, R = never> = Validate.FieldValidators<A, R>;
 const { clearSourceAt, emptySourced, hasErrors, mergeSourced, noErrors, replaceAt, setSourceAt } =
   Errors;
-const { getAt, setAt } = Path;
+const { getAt } = Path;
 const makeForm = Form.make;
 
 /** `T` with its `readonly` modifiers dropped, for building an options object field by field. */
@@ -148,12 +150,22 @@ export function refinementsOf<F extends FormFields, RefineR>(
   );
 }
 
-/** View a runtime {@link FormErrors} tree through the data-shaped {@link TypedFormErrors} lens. */
-const typedErrors = <A>(errors: FormErrors): TypedFormErrors<A> => {
-  // SAFETY: `TypedFormErrors<A>` is a compile-time projection of `FormErrors`
-  // onto `A`'s field names (the same runtime tree), so no value is reinterpreted.
-  return errors as TypedFormErrors<A>;
-};
+/**
+ * Where a store method reads or writes: a {@link Focus} into the store's data
+ * `A`, or a function building one from the store's {@link FormStore.root}
+ * (`(o) => o.key("author").key("name")`).
+ */
+export type At<A, V> = Focus.Focus<A, V> | ((root: Focus.Lens<A, A>) => Focus.Focus<A, V>);
+
+/** An {@link At} that always finds its value: a {@link Focus.Lens}, or a function building one. */
+export type LensAt<A, V> = Focus.Lens<A, V> | ((root: Focus.Lens<A, A>) => Focus.Lens<A, V>);
+
+/** Resolve an {@link At} (or {@link LensAt}) against `root`. */
+function resolveAt<A, V>(at: LensAt<A, V>, root: Focus.Lens<A, A>): Focus.Lens<A, V>;
+function resolveAt<A, V>(at: At<A, V>, root: Focus.Lens<A, A>): Focus.Focus<A, V>;
+function resolveAt<A, V>(at: At<A, V>, root: Focus.Lens<A, A>): Focus.Focus<A, V> {
+  return P.isFunction(at) ? at(root) : at;
+}
 
 /** Per-field state exposed on a {@link FieldHandle}, mirroring TanStack Form's field meta. */
 export interface FieldMeta {
@@ -173,14 +185,14 @@ export interface FieldMeta {
 }
 
 /**
- * The path-addressed slice of a {@link FormStore} a {@link FieldHandle} reads
- * and writes through. Independent of the store's type parameters, so every
- * `FormStore` is one as it stands.
+ * The slice of a {@link FormStore} over data `A` a {@link FieldHandle} reads
+ * and writes through. Independent of the store's other type parameters, so
+ * every `FormStore` over `A` is one as it stands.
  */
-export type FieldHost = Pick<
-  FormStore<Validate.ServiceFreeSchema, Path.FormValue>,
-  | "valueAt"
-  | "setValue"
+export type FieldHost<A extends Path.FormValue> = Pick<
+  FormStore<Validate.ServiceFreeSchema, A>,
+  | "get"
+  | "set"
   | "errorsAt"
   | "visibleErrorsAt"
   | "constraintAt"
@@ -194,64 +206,62 @@ export type FieldHost = Pick<
  * A typed, reactive handle to one field, returned by {@link FormStore.field}.
  * Bundles everything a single input needs — `bind:value={field.value}`,
  * `name={field.name}`, `onblur={field.handleBlur}`, `{...field.constraints}`,
- * `field.visibleErrors`, `field.meta` — instead of wiring each by hand against
- * an untyped {@link FormPath}. See {@link Path.FieldPath} for how the path is
- * type-checked.
+ * `field.visibleErrors`, `field.meta` — instead of wiring each by hand. The
+ * field is named by a {@link Focus.Lens} into the store's data `A`, so
+ * `value` is the field's own type `V`.
  */
-export class FieldHandle<V extends Path.FormValue> {
-  readonly #store: FieldHost;
-  readonly #path: FormPath;
+export class FieldHandle<A extends Path.FormValue, V> {
+  readonly #store: FieldHost<A>;
+  readonly #focus: Focus.Lens<A, V>;
   /** The path in flat field-name notation — use as the input's `name` attribute. */
   readonly name: string;
 
-  constructor(store: FieldHost, path: FormPath) {
+  /** A handle on `focus` in `store`; {@link FormStore.field} builds these. */
+  constructor(store: FieldHost<A>, focus: Focus.Lens<A, V>) {
     this.#store = store;
-    this.#path = path;
-    this.name = Path.toString(path);
+    this.#focus = focus;
+    this.name = Focus.name(focus);
   }
 
   /** The field's current value. Assignable — `bind:value={field.value}` works. */
   get value(): V {
-    // SAFETY: a `FieldHandle<V>` is only constructed by `FormStore.field<P>`,
-    // whose `V` is `Path.PathValue<A, P>` — the static type at `#path` in the
-    // store's data `A`.
-    return this.#store.valueAt(this.#path) as V;
+    return this.#store.get(this.#focus);
   }
 
   set value(next: V) {
-    this.#store.setValue(this.#path, next);
+    this.#store.set(this.#focus, next);
   }
 
   /** All messages currently attached to this field. */
   get errors(): readonly string[] {
-    return this.#store.errorsAt(this.#path);
+    return this.#store.errorsAt(this.#focus);
   }
 
   /** This field's messages, gated by the form's validation mode (see {@link FormStore.shouldShowError}). */
   get visibleErrors(): readonly string[] {
-    return this.#store.visibleErrorsAt(this.#path);
+    return this.#store.visibleErrorsAt(this.#focus);
   }
 
   /** Native validation attributes for this field — spread onto the `<input>`. */
   get constraints(): InputConstraint {
-    return this.#store.constraintAt(this.#path);
+    return this.#store.constraintAt(this.#focus);
   }
 
   /** This field's {@link FieldMeta}. */
   get meta(): FieldMeta {
-    const isBlurred = this.#store.isTouchedAt(this.#path);
-    const isDirty = this.#store.isDirtyAt(this.#path);
+    const isBlurred = this.#store.isTouchedAt(this.#focus);
+    const isDirty = this.#store.isDirtyAt(this.#focus);
     return {
       isTouched: isBlurred || isDirty,
       isBlurred,
       isDirty,
-      isDefaultValue: this.#store.isDefaultValueAt(this.#path),
+      isDefaultValue: this.#store.isDefaultValueAt(this.#focus),
     };
   }
 
   /** Mark this field blurred — see {@link FormStore.handleBlur}. */
   handleBlur = (): void => {
-    this.#store.handleBlur(this.#path);
+    this.#store.handleBlur(this.#focus);
   };
 }
 
@@ -328,14 +338,16 @@ export interface FormOptions<S extends Validate.ServiceFreeSchema, A, Message, R
   /** Override how a submission is sent (default: `fetch` to the form's action). */
   readonly submit?: SubmitFn<A, Message>;
   /**
-   * Per-field sync/async validators, keyed by {@link Path.toString} (e.g.
-   * `"author.name"`, `"tags[0]"`). See {@link FormStore.setFieldValidators} to
-   * register these dynamically instead (e.g. once an array item exists). A
-   * validator sees the field's current value as the {@link Path.FormValue} it
-   * is at runtime (a path keyed by string carries no static type), so it
-   * narrows the value itself.
+   * Per-field sync/async validators, each bound to its field's focus with
+   * `Validate.on`, built from the store's root focus:
+   * `validators: (o) => [Validate.on(o.key("username"), { onChange: … })]`.
+   * A validator receives the field's value as the focus types it. See
+   * {@link FormStore.setFieldValidators} to register one dynamically instead
+   * (e.g. once an array item exists).
    */
-  readonly validators?: Readonly<Record<string, FieldValidators<Path.FormValue, R>>>;
+  readonly validators?: (
+    root: Focus.Lens<A, A>,
+  ) => ReadonlyArray<Validate.BoundFieldValidators<A, R>>;
   /**
    * Services an async field validator or a builder's `refineEffect`
    * refinement needs on its `R` channel. A `ManagedRuntime` is built from
@@ -450,10 +462,6 @@ const defaultSubmit = <A, Message>(
 /** Whether `index` is a valid position in an array of `length`. */
 const inRange = (index: number, length: number): boolean => index >= 0 && index < length;
 
-/** Whether a form value is an array of values. */
-const isList = (value: Path.FormValue): value is ReadonlyArray<Path.FormValue> =>
-  Arr.isArray(value);
-
 /** A field trigger a validator or the revalidate mode reacts to. */
 type FieldTrigger = "change" | "blur";
 
@@ -505,7 +513,7 @@ export class FormStore<
   #touched: Partial<Record<string, boolean>> = $state({});
   /**
    * Per-field persistent dirty flags, keyed by {@link Path.toString}. Set once
-   * a field's value is changed away from its default via {@link setValue} or
+   * a field's value is changed away from its default via {@link set} or
    * an array mutator (`append` / `removeItem` / `swap` / `move`), and never
    * cleared except by {@link reset} — unlike {@link taintedAt}, a revert to the
    * default value does not clear it. Backs {@link FieldMeta.isDirty}. Only
@@ -543,8 +551,8 @@ export class FormStore<
   #validateTimer: Option.Option<ReturnType<typeof setTimeout>> = Option.none();
   /** Per-field-listener debounce timers, keyed by `"change:<path>"` / `"blur:<path>"`. */
   #listenerTimers: Record<string, ReturnType<typeof setTimeout>> = {};
-  /** Per-field validators, keyed by {@link Path.toString}; seeded from `options.validators`. */
-  #fieldValidators: Record<string, FieldValidators<Path.FormValue, R>>;
+  /** Per-field validators, keyed by {@link Path.toString} of their path; seeded from `options.validators`. */
+  #fieldValidators: Record<string, Validate.BoundFieldValidators<A, R>>;
   /** In-flight async-validator fibers, keyed by `"<path>:<trigger>"` (fields) or `""` (whole-form `refineEffect`). */
   #fibers: Record<string, Fiber.Fiber<unknown>> = {};
   /** The error paths the last `refineEffect` run set, so the next run can clear exactly those before merging fresh ones. */
@@ -557,15 +565,23 @@ export class FormStore<
 
   /** The runtime error tree behind {@link errors}: server errors merged with client errors. */
   readonly #mergedErrors: FormErrors = $derived(mergeSourced(this.#sourced));
-  /** The current nested error tree (server errors merged with client errors), typed to the form data's shape. */
-  readonly errors: TypedFormErrors<A> = $derived.by(() => typedErrors<A>(this.#mergedErrors));
+  /**
+   * The current nested error tree (server errors merged with client errors),
+   * as the plain JSON `FormErrors` it is. Read one field's messages with
+   * {@link errorsAt}, and the form-level ones with {@link formErrors}.
+   */
+  readonly errors: FormErrors = $derived(this.#mergedErrors);
   /** Client-side-sourced errors only (schema, per-field validators, `refineEffect`). */
-  readonly clientErrors: TypedFormErrors<A> = $derived.by(() =>
-    typedErrors<A>(this.#sourced.client),
-  );
+  readonly clientErrors: FormErrors = $derived(this.#sourced.client);
   /** Server-sourced errors only (the last submission's response). */
-  readonly serverErrors: TypedFormErrors<A> = $derived.by(() =>
-    typedErrors<A>(this.#sourced.server),
+  readonly serverErrors: FormErrors = $derived(this.#sourced.server);
+  /**
+   * The form-level messages: the ones attached to the form as a whole (the
+   * error tree's root `_errors` — a 409, a rejected command, a cross-field
+   * refinement on the root).
+   */
+  readonly formErrors: readonly string[] = $derived(
+    Option.getOrElse(Errors.getError(this.#mergedErrors, []), () => []),
   );
   /** Whether any async field validator or `refineEffect` run is currently in flight. */
   readonly isValidating: boolean = $derived(Arr.some(R.values(this.#validating), Boolean));
@@ -612,7 +628,9 @@ export class FormStore<
     this.#options = options;
     this.#mode = Mode.parse(options.mode);
     this.#runtime = ManagedRuntime.make(options.layer);
-    this.#fieldValidators = { ...options.validators };
+    this.#fieldValidators = R.fromEntries(
+      Arr.map(options.validators?.(this.root) ?? [], (bound) => [Path.toString(bound.path), bound]),
+    );
     this.#sourced = { client: noErrors, server: initial.errors ?? noErrors };
     this.message = initial.message;
     // The `{ schema, defaults }` overload always arrives with `constraints`
@@ -644,29 +662,61 @@ export class FormStore<
       : { method: "post", action, [this.#attachmentKey]: this.#enhanceAttachment };
   }
 
-  /** Whether the field at `path` (or anything beneath it) is tainted. */
-  taintedAt(path: FormPath): boolean {
-    return isTaintedAt(this.tainted, path);
+  /**
+   * The focus on the whole of the form's data: the root every other focus is
+   * built from (`form.root.key("author").key("name")`). A store method also
+   * accepts a function of it (`(o) => o.key("author")`).
+   */
+  readonly root: Focus.Lens<A, A> = Focus.root<A>();
+
+  /** The path an {@link At} names. */
+  #pathOf<V>(at: At<A, V>): FormPath {
+    return resolveAt(at, this.root).path;
   }
 
-  /** The messages currently attached to `path` (for dynamic / nested paths). */
-  errorsAt(path: FormPath): readonly string[] {
+  /** Whether the field `at` names (or anything beneath it) is tainted. */
+  taintedAt<V>(at: At<A, V>): boolean {
+    return isTaintedAt(this.tainted, this.#pathOf(at));
+  }
+
+  /** The messages attached directly to the field `at` names (an array's or a branch's own messages for one). */
+  errorsAt<V>(at: At<A, V>): readonly string[] {
+    return this.#errorsAtPath(this.#pathOf(at));
+  }
+
+  /** The messages attached directly to `path` in the merged tree. */
+  #errorsAtPath(path: FormPath): readonly string[] {
     return Option.getOrElse(Errors.getError(this.#mergedErrors, path), () => []);
   }
 
-  /** Whether the async validator(s) at `path` are currently running. */
-  isValidatingAt(path: FormPath): boolean {
-    const key = Path.toString(path);
+  /**
+   * Every message at or beneath the field `at` names, with paths relative to
+   * it — for a "something in this section is wrong" summary.
+   */
+  errorsUnder<V>(at: At<A, V>): ReadonlyArray<FormIssue> {
+    return Errors.issuesUnder(this.#mergedErrors, this.#pathOf(at));
+  }
+
+  /** Whether any message sits at or beneath the field `at` names. */
+  hasErrorsAt<V>(at: At<A, V>): boolean {
+    return Arr.isReadonlyArrayNonEmpty(this.errorsUnder(at));
+  }
+
+  /** Whether the async validator(s) of the field `at` names are currently running. */
+  isValidatingAt<V>(at: At<A, V>): boolean {
+    const key = Path.toString(this.#pathOf(at));
     return this.#validating[`${key}:change`] === true || this.#validating[`${key}:blur`] === true;
   }
 
   /**
-   * Register (or replace) `path`'s validators — the option-driven equivalent
-   * of attaching `validators` at {@link createForm} time, for fields that
-   * don't exist until later (e.g. an appended array item).
+   * Register (or replace) the validators of the field `at` names — the
+   * dynamic equivalent of `options.validators`, for fields that don't exist
+   * until later (e.g. an appended array item). Each validator receives the
+   * field's value as the focus types it.
    */
-  setFieldValidators(path: FormPath, validators: FieldValidators<Path.FormValue, R>): void {
-    this.#fieldValidators = { ...this.#fieldValidators, [Path.toString(path)]: validators };
+  setFieldValidators<V>(at: At<A, V>, validators: FieldValidators<NoInfer<V>, R>): void {
+    const bound = Validate.on(resolveAt(at, this.root), validators);
+    this.#fieldValidators = { ...this.#fieldValidators, [Path.toString(bound.path)]: bound };
   }
 
   /** Re-validate the whole form against the schema (if one was supplied), plus a builder's `refineEffect` refinements. */
@@ -685,86 +735,113 @@ export class FormStore<
     return this.isValid;
   }
 
-  /** Validate a single field against the schema, returning that field's messages. */
-  validateField(path: FormPath): readonly string[] {
-    if (!this.#options.schema) return this.errorsAt(path);
+  /** Validate the field `at` names against the schema, returning that field's messages. */
+  validateField<V>(at: At<A, V>): readonly string[] {
+    return this.#validateFieldAt(this.#pathOf(at));
+  }
+
+  /** {@link validateField} at a runtime path. */
+  #validateFieldAt(path: FormPath): readonly string[] {
+    if (!this.#options.schema) return this.#errorsAtPath(path);
     return validateField(this.#options.schema, this.data, path, this.#options.validationFormat);
   }
 
-  /** Set the value at `path` (path-addressed, immutable). Bind directly to `data` otherwise. */
-  setValue(path: FormPath, value: Path.FormValue): void {
-    this.data = setAt(this.data, path, value);
+  /** The value of the field the lens `at` names. */
+  get<V>(at: LensAt<A, V>): V {
+    return resolveAt(at, this.root).get(this.data);
+  }
+
+  /** The value of the field `at` names, or `None` where its focus finds nothing. */
+  getOption<V>(at: At<A, V>): Option.Option<V> {
+    return resolveAt(at, this.root).getOption(this.data);
+  }
+
+  /**
+   * Set the value of the field `at` names (immutably; a focus that finds
+   * nothing leaves the data unchanged), marking it dirty and running its
+   * change validators. Bind directly to `data` otherwise.
+   */
+  set<V>(at: At<A, V>, value: NoInfer<V>): void {
+    const focus = resolveAt(at, this.root);
+    this.data = focus.replace(value, this.data);
+    this.#afterWrite(focus.path);
+  }
+
+  /** The bookkeeping after a write at `path`: dirty flag, field-change snapshot, change validators. */
+  #afterWrite(path: FormPath): void {
     this.#markDirty(path);
     this.#previousData = this.#detachedData();
     this.#onFieldChanged(path);
   }
 
-  /** Read the value at `path`. */
-  valueAt(path: FormPath): Path.FormValue {
-    return getAt(this.data, path);
+  /** Mark the field `at` names touched (defaults to `true`) — drives `onBlur` display. */
+  setTouched<V>(at: At<A, V>, touched = true): void {
+    this.#setTouchedAt(this.#pathOf(at), touched);
   }
 
-  /** Mark the field at `path` touched (defaults to `true`) — drives `onBlur` display. */
-  setTouched(path: FormPath, touched = true): void {
+  #setTouchedAt(path: FormPath, touched: boolean): void {
     this.#touched = { ...this.#touched, [Path.toString(path)]: touched };
   }
 
-  /** Whether the field at `path` has been touched. */
-  isTouchedAt(path: FormPath): boolean {
+  /** Whether the field `at` names has been touched (blurred). */
+  isTouchedAt<V>(at: At<A, V>): boolean {
+    return this.#isTouchedAtPath(this.#pathOf(at));
+  }
+
+  #isTouchedAtPath(path: FormPath): boolean {
     return this.#touched[Path.toString(path)] === true;
   }
 
   /**
    * Once a change away from the default at `path` is seen (per the current
-   * `data`, against `taintedAt`), sticks until {@link reset}. Called after
+   * `data`, against the tainted tree), sticks until {@link reset}. Called after
    * `data` has already been updated, by every method that writes it
-   * (`setValue` and the array mutators below) — writing `data` directly
+   * (`set` and the array mutators below) — writing `data` directly
    * (`bind:value={form.data.x}`) bypasses this, same as it bypasses `tainted`
    * recomputing off anything but `data` itself would.
    */
   #markDirty(path: FormPath): void {
     const key = Path.toString(path);
-    if (!this.#dirtied[key] && this.taintedAt(path)) {
+    if (!this.#dirtied[key] && isTaintedAt(this.tainted, path)) {
       this.#dirtied = { ...this.#dirtied, [key]: true };
     }
   }
 
-  /** Whether the field at `path` was ever changed away from its default — see {@link FieldMeta.isDirty}. */
-  isDirtyAt(path: FormPath): boolean {
-    return this.#dirtied[Path.toString(path)] === true;
+  /** Whether the field `at` names was ever changed away from its default — see {@link FieldMeta.isDirty}. */
+  isDirtyAt<V>(at: At<A, V>): boolean {
+    return this.#dirtied[Path.toString(this.#pathOf(at))] === true;
   }
 
-  /** Whether the field at `path` currently holds its default value — the negation of {@link taintedAt}. */
-  isDefaultValueAt(path: FormPath): boolean {
-    return !this.taintedAt(path);
+  /** Whether the field `at` names currently holds its default value — the negation of {@link taintedAt}. */
+  isDefaultValueAt<V>(at: At<A, V>): boolean {
+    return !this.taintedAt(at);
   }
 
-  /** The native validation attributes for `path` (a leaf of {@link constraints}). */
-  constraintAt(path: FormPath): InputConstraint {
-    return Constraints.constraintAt(this.constraints, path);
-  }
-
-  /**
-   * A typed, reactive handle to the field at `path` — see {@link FieldHandle}.
-   * `path` is type-checked against the form data's shape (see {@link
-   * Path.FieldPath}); a typo'd segment or wrong-shaped path is a compile error.
-   */
-  field<P extends Path.FieldPath<A>>(
-    path: P,
-  ): FieldHandle<Extract<Path.PathValue<A, P>, Path.FormValue>> {
-    return new FieldHandle(this, Path.fromString(path));
+  /** The native validation attributes of the field `at` names (a leaf of {@link constraints}). */
+  constraintAt<V>(at: At<A, V>): InputConstraint {
+    return Constraints.constraintAt(this.constraints, this.#pathOf(at));
   }
 
   /**
-   * Handle a field losing focus: mark it touched, run its `onBlur` /
-   * `onBlurAsync` validators (or, once posted, the revalidate-on-blur mode),
-   * fire that field's `onBlur` listener (if any, debounced per its config),
-   * and — in `onBlur` validation mode — validate the whole form
-   * (auto-submitting if configured and something changed since the last
-   * submit).
+   * A typed, reactive handle to the field the lens `at` names — see
+   * {@link FieldHandle}. For an array item, give the item's optional focus a
+   * fallback: `form.field((o) => o.key("tags").at(i).orElse(""))`.
    */
-  handleBlur(path: FormPath): void {
-    this.setTouched(path, true);
+  field<V>(at: LensAt<A, V>): FieldHandle<A, V> {
+    return new FieldHandle(this, resolveAt(at, this.root));
+  }
+
+  /**
+   * Handle the field `at` names losing focus: mark it touched, run its
+   * `onBlur` / `onBlurAsync` validators (or, once posted, the
+   * revalidate-on-blur mode), fire that field's `onBlur` listener (if any,
+   * debounced per its config), and — in `onBlur` validation mode — validate
+   * the whole form (auto-submitting if configured and something changed since
+   * the last submit).
+   */
+  handleBlur<V>(at: At<A, V>): void {
+    const path = this.#pathOf(at);
+    this.#setTouchedAt(path, true);
     this.#onFieldBlurred(path);
     const key = Path.toString(path);
     const field = this.#options.listeners?.fields?.[key];
@@ -772,7 +849,7 @@ export class FormStore<
       // Capture the value at blur time, not at timer-fire time — otherwise a
       // debounced listener would report whatever the field holds *now*, not
       // what it held when it was blurred.
-      const value = this.valueAt(path);
+      const value = getAt(this.data, path);
       this.#scheduleListener(`blur:${key}`, () => field.onBlur?.({ path, value }), field.debounce);
     }
     if (this.#mode.validation === "onBlur") {
@@ -838,124 +915,137 @@ export class FormStore<
   }
 
   /**
-   * Whether an error at `path` should be shown yet, per the validation mode:
-   * always after a submit; in `onChange` once the field is tainted; in `onBlur`
-   * once it is touched; never in `onSubmit` before posting.
+   * Whether an error on the field `at` names should be shown yet, per the
+   * validation mode: always after a submit; in `onChange` once the field is
+   * tainted; in `onBlur` once it is touched; never in `onSubmit` before
+   * posting.
    */
-  shouldShowError(path: FormPath): boolean {
+  shouldShowError<V>(at: At<A, V>): boolean {
     if (this.isPosted) return true;
-    if (this.#mode.validation === "onChange") return this.taintedAt(path);
-    if (this.#mode.validation === "onBlur") return this.isTouchedAt(path);
+    if (this.#mode.validation === "onChange") return this.taintedAt(at);
+    if (this.#mode.validation === "onBlur") return this.isTouchedAt(at);
     return false;
   }
 
-  /** The messages at `path`, but only when {@link shouldShowError} allows it. */
-  visibleErrorsAt(path: FormPath): readonly string[] {
-    return this.shouldShowError(path) ? this.errorsAt(path) : [];
-  }
-
-  /** Read the array at `path` (empty when absent, or when `path` holds no array). */
-  #arrayAt(path: FormPath): ReadonlyArray<Path.FormValue> {
-    const value = getAt(this.data, path);
-    return isList(value) ? value : [];
-  }
-
-  /** Append an item to the array at `path` (a blank item is derived when omitted). */
-  append(path: FormPath, value?: Path.FormValue): void {
-    const current = this.#arrayAt(path);
-    const item = value !== undefined ? value : this.#defaultItem(path);
-    this.data = setAt(this.data, path, [...current, item]);
-    this.#markDirty(path);
-    this.#previousData = this.#detachedData();
-    this.#onFieldChanged(path);
+  /** The messages on the field `at` names, but only when {@link shouldShowError} allows it. */
+  visibleErrorsAt<V>(at: At<A, V>): readonly string[] {
+    return this.shouldShowError(at) ? this.errorsAt(at) : [];
   }
 
   /**
-   * Insert an item into the array at `path` at `index` (clamped to the
-   * array's bounds; a non-finite `index` inserts at the end), shifting later
-   * items — and their per-index touched flags / errors — up by one. A blank
-   * item is derived when `value` is omitted.
+   * The schema-derived blank item for the array `at` names (any nesting
+   * depth, e.g. `authors[0].emails`): what a new row starts as. Typed as the
+   * {@link Field.BlankValue} it is — a blank need not be a valid item — so it
+   * can be passed to {@link append} / {@link insertItem} exactly where the
+   * array's items admit it (a {@link DraftData} array of `FormValue`s).
    */
-  insertItem(path: FormPath, index: number, value?: Path.FormValue): void {
-    const current = this.#arrayAt(path);
-    const at = Math.max(
-      0,
-      Math.min(Number.isFinite(index) ? index : current.length, current.length),
-    );
-    const item = value !== undefined ? value : this.#defaultItem(path);
-    this.data = setAt(this.data, path, [...current.slice(0, at), item, ...current.slice(at)]);
-    this.#markDirty(path);
-    this.#remapArrayIndices(path, Path.insertAt(at));
+  blankItemAt<E>(at: At<A, ReadonlyArray<E>>): Field.BlankValue {
+    return this.#defaultItem(this.#pathOf(at));
+  }
+
+  /** Write `next` (computed from the current array) to the array `focus` names, then the write bookkeeping. */
+  #writeArray<E>(
+    focus: Focus.Focus<A, ReadonlyArray<E>>,
+    next: (current: ReadonlyArray<E>) => ReadonlyArray<E>,
+  ): void {
+    this.data = focus.modify(next)(this.data);
+    this.#markDirty(focus.path);
+  }
+
+  /** The array `focus` names (empty when it finds none). */
+  #arrayAt<E>(focus: Focus.Focus<A, ReadonlyArray<E>>): ReadonlyArray<E> {
+    return Option.getOrElse(focus.getOption(this.data), (): ReadonlyArray<E> => []);
   }
 
   /**
-   * Replace the item at `index` in the array at `path` in place. Drops that
+   * Append `value` to the array `at` names (see {@link blankItemAt} for a
+   * schema-derived blank). The field must be a `ReadonlyArray`, as every
+   * schema-derived array is; a mutable `T[]` field does not fit.
+   */
+  append<E>(at: At<A, ReadonlyArray<E>>, value: NoInfer<E>): void {
+    const focus = resolveAt(at, this.root);
+    this.#writeArray(focus, (current) => [...current, value]);
+    this.#previousData = this.#detachedData();
+    this.#onFieldChanged(focus.path);
+  }
+
+  /**
+   * Insert `value` into the array `at` names at `index` (clamped to the
+   * array's bounds; a non-finite `index` inserts at the end), shifting later
+   * items — and their per-index touched flags / errors — up by one.
+   */
+  insertItem<E>(at: At<A, ReadonlyArray<E>>, index: number, value: NoInfer<E>): void {
+    const focus = resolveAt(at, this.root);
+    const length = this.#arrayAt(focus).length;
+    const position = Math.max(0, Math.min(Number.isFinite(index) ? index : length, length));
+    this.#writeArray(focus, (current) => [
+      ...current.slice(0, position),
+      value,
+      ...current.slice(position),
+    ]);
+    this.#remapArrayIndices(focus.path, Path.insertAt(position));
+  }
+
+  /**
+   * Replace the item at `index` in the array `at` names, in place. Drops that
    * index's own touched flag / errors (they described the old value); other
    * indices are untouched.
    */
-  replaceItem(path: FormPath, index: number, value: Path.FormValue): void {
-    const current = this.#arrayAt(path);
-    if (!inRange(index, current.length)) return;
-    const next = [...current];
-    next[index] = value;
-    this.data = setAt(this.data, path, next);
-    this.#markDirty(path);
-    this.#remapArrayIndices(path, Path.replaceAt(index));
+  replaceItem<E>(at: At<A, ReadonlyArray<E>>, index: number, value: NoInfer<E>): void {
+    const focus = resolveAt(at, this.root);
+    if (!inRange(index, this.#arrayAt(focus).length)) return;
+    this.#writeArray(focus, (current) => current.map((item, i) => (i === index ? value : item)));
+    this.#remapArrayIndices(focus.path, Path.replaceAt(index));
   }
 
-  /** Remove every item from the array at `path`, dropping all of its per-index state. */
-  clearItems(path: FormPath): void {
-    this.data = setAt(this.data, path, []);
-    this.#markDirty(path);
-    this.#remapArrayIndices(path, Path.clearAll);
+  /** Remove every item from the array `at` names, dropping all of its per-index state. */
+  clearItems<E>(at: At<A, ReadonlyArray<E>>): void {
+    const focus = resolveAt(at, this.root);
+    this.#writeArray(focus, (): ReadonlyArray<E> => []);
+    this.#remapArrayIndices(focus.path, Path.clearAll);
   }
 
   /**
-   * Remove the item at `index` from the array at `path`, shifting later
+   * Remove the item at `index` from the array `at` names, shifting later
    * items' per-index touched flags / errors down by one so they keep
    * following their row.
    */
-  removeItem(path: FormPath, index: number): void {
-    const current = this.#arrayAt(path);
-    if (!inRange(index, current.length)) return;
-    this.data = setAt(
-      this.data,
-      path,
-      current.filter((_, i) => i !== index),
+  removeItem<E>(at: At<A, ReadonlyArray<E>>, index: number): void {
+    const focus = resolveAt(at, this.root);
+    if (!inRange(index, this.#arrayAt(focus).length)) return;
+    this.#writeArray(focus, (current) => current.filter((_, i) => i !== index));
+    this.#remapArrayIndices(focus.path, Path.removeAt(index));
+    this.#previousData = this.#detachedData();
+    this.#onFieldChanged(focus.path);
+  }
+
+  /** Swap two items in the array `at` names, swapping their per-index touched flags / errors too. */
+  swap<E>(at: At<A, ReadonlyArray<E>>, indexA: number, indexB: number): void {
+    const focus = resolveAt(at, this.root);
+    const length = this.#arrayAt(focus).length;
+    if (!inRange(indexA, length) || !inRange(indexB, length) || indexA === indexB) return;
+    this.#writeArray(focus, (current) =>
+      current.map((item, i) =>
+        i === indexA ? current[indexB] : i === indexB ? current[indexA] : item,
+      ),
     );
-    this.#markDirty(path);
-    this.#remapArrayIndices(path, Path.removeAt(index));
+    this.#remapArrayIndices(focus.path, Path.swapAt(indexA, indexB));
     this.#previousData = this.#detachedData();
-    this.#onFieldChanged(path);
+    this.#onFieldChanged(focus.path);
   }
 
-  /** Swap two items in the array at `path`, swapping their per-index touched flags / errors too. */
-  swap(path: FormPath, indexA: number, indexB: number): void {
-    const current = this.#arrayAt(path);
-    if (!inRange(indexA, current.length) || !inRange(indexB, current.length) || indexA === indexB) {
-      return;
-    }
-    const next = [...current];
-    [next[indexA], next[indexB]] = [next[indexB], next[indexA]];
-    this.data = setAt(this.data, path, next);
-    this.#markDirty(path);
-    this.#remapArrayIndices(path, Path.swapAt(indexA, indexB));
+  /** Move the item at `from` to `to` within the array `at` names, carrying its per-index state along. */
+  move<E>(at: At<A, ReadonlyArray<E>>, from: number, to: number): void {
+    const focus = resolveAt(at, this.root);
+    const length = this.#arrayAt(focus).length;
+    if (!inRange(from, length) || to < 0 || to >= length || from === to) return;
+    this.#writeArray(focus, (current) => {
+      const rest = current.filter((_, i) => i !== from);
+      return [...rest.slice(0, to), current[from], ...rest.slice(to)];
+    });
+    this.#remapArrayIndices(focus.path, Path.moveAt(from, to));
     this.#previousData = this.#detachedData();
-    this.#onFieldChanged(path);
-  }
-
-  /** Move the item at `from` to `to` within the array at `path`, carrying its per-index state along. */
-  move(path: FormPath, from: number, to: number): void {
-    const current = this.#arrayAt(path);
-    if (!inRange(from, current.length) || to < 0 || to >= current.length || from === to) return;
-    const next = [...current];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    this.data = setAt(this.data, path, next);
-    this.#markDirty(path);
-    this.#remapArrayIndices(path, Path.moveAt(from, to));
-    this.#previousData = this.#detachedData();
-    this.#onFieldChanged(path);
+    this.#onFieldChanged(focus.path);
   }
 
   /**
@@ -988,7 +1078,7 @@ export class FormStore<
    * one is available, falling back to a top-level {@link FormOptions.fields}
    * lookup, else `""`.
    */
-  #defaultItem(path: FormPath) {
+  #defaultItem(path: FormPath): Field.BlankValue {
     if (this.#options.schema) return Field.defaultItemAt(this.#options.schema, path);
     const fields = this.#options.fields;
     if (fields && path.length === 1 && P.isString(path[0])) {
@@ -1103,43 +1193,31 @@ export class FormStore<
   }
 
   /**
-   * Run `path`'s sync + async validators for `trigger` (resolved by {@link
-   * Validate.resolveFieldTrigger}). When neither is registered, falls back to
-   * a whole-schema {@link validateField} re-run once the form has been
-   * posted and {@link Mode.ParsedMode.revalidate} names this trigger — the
-   * "fixing a field clears its error without a resubmit" behaviour.
+   * Run `path`'s sync + async validators for `trigger` (resolved by its
+   * `Validate.on` binding, against the current data). When no sync validator
+   * applies, falls back to a whole-schema {@link validateField} re-run once
+   * the form has been posted and {@link Mode.ParsedMode.revalidate} names
+   * this trigger — the "fixing a field clears its error without a resubmit"
+   * behaviour.
    */
   #runFieldTrigger(path: FormPath, trigger: FieldTrigger): void {
-    const validators = this.#fieldValidators[Path.toString(path)];
-    const value = getAt(this.data, path);
-    const resolved = Validate.resolveFieldTrigger(trigger, validators);
+    const bound = this.#fieldValidators[Path.toString(path)];
+    const run: Validate.FieldRun<R> =
+      bound === undefined
+        ? { sync: Option.none(), async: Option.none() }
+        : bound.resolve(trigger, this.data);
 
-    if (Option.isSome(resolved.sync)) {
-      this.#applySyncFieldValidator(path, resolved.sync.value, value);
+    if (Option.isSome(run.sync)) {
+      this.#setClientMessagesAt(path, run.sync.value);
+      this.#hasValidated = true;
     } else if (this.#shouldFallBackToRevalidate(trigger)) {
       this.#applyRevalidateFallback(path);
     }
 
-    if (Option.isSome(resolved.async)) {
+    if (Option.isSome(run.async)) {
       this.#hasValidated = true;
-      this.#runAsyncFieldValidator(
-        path,
-        trigger,
-        resolved.async.value,
-        value,
-        resolved.asyncDebounceMs,
-      );
+      this.#runAsyncFieldValidator(path, trigger, run.async.value);
     }
-  }
-
-  /** Run a field's registered sync validator and set its client messages. */
-  #applySyncFieldValidator<V>(
-    path: FormPath,
-    validator: Validate.SyncFieldValidator<V>,
-    value: V,
-  ): void {
-    this.#setClientMessagesAt(path, Validate.runSyncFieldValidator(validator, value));
-    this.#hasValidated = true;
   }
 
   /** Whether, absent a registered validator, a whole-schema fallback revalidation applies for `trigger`. */
@@ -1149,7 +1227,12 @@ export class FormStore<
 
   /** Re-run the whole-schema client validation and adopt just `path`'s messages. */
   #applyRevalidateFallback(path: FormPath): void {
-    this.#sourced = setSourceAt(this.#sourcedSnapshot(), "client", path, this.validateField(path));
+    this.#sourced = setSourceAt(
+      this.#sourcedSnapshot(),
+      "client",
+      path,
+      this.#validateFieldAt(path),
+    );
     this.#hasValidated = true;
   }
 
@@ -1164,22 +1247,20 @@ export class FormStore<
   }
 
   /**
-   * Run `path`'s `trigger` async validator as an interrupt-on-supersede
-   * fiber (via {@link FormStore.#runValidatorFiber}) — the result (unless
-   * the fiber is itself later interrupted) replaces the field's client
-   * messages.
+   * Run `path`'s `trigger` async validator run (debounce included) as an
+   * interrupt-on-supersede fiber (via {@link FormStore.#runValidatorFiber}) —
+   * the result (unless the fiber is itself later interrupted) replaces the
+   * field's client messages.
    */
-  #runAsyncFieldValidator<V>(
+  #runAsyncFieldValidator(
     path: FormPath,
     trigger: FieldTrigger,
-    validator: Validate.AsyncFieldValidator<V, R>,
-    value: V,
-    debounceMs: number,
+    run: Effect.Effect<ReadonlyArray<FormIssue>, never, R>,
   ): void {
     const fiberKey = `${Path.toString(path)}:${trigger}`;
     this.#runValidatorFiber(
       fiberKey,
-      Validate.runAsyncFieldValidator(validator, value, debounceMs).pipe(
+      run.pipe(
         Effect.tap((issues) =>
           Effect.sync(() => {
             this.#setClientMessagesAt(path, issues);

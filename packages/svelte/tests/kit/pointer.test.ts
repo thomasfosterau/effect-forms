@@ -1,6 +1,6 @@
 import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
-import { fieldFromPointer } from "../../src/kit/index.ts";
+import { fieldFromPointer, pathFromPointer } from "../../src/kit/index.ts";
 
 describe("fieldFromPointer", () => {
   it("names the attribute a /data/attributes pointer points at", () => {
@@ -31,5 +31,25 @@ describe("fieldFromPointer", () => {
 
   it("is None for an empty field segment", () => {
     expect(fieldFromPointer("/data/attributes/")).toEqual(Option.none());
+  });
+});
+
+describe("pathFromPointer", () => {
+  it("routes to the whole attribute path, integer segments as indices", () => {
+    expect(pathFromPointer("/data/attributes/name")).toEqual(Option.some(["name"]));
+    expect(pathFromPointer("/data/attributes/address/street")).toEqual(
+      Option.some(["address", "street"]),
+    );
+    expect(pathFromPointer("/data/attributes/tags/0")).toEqual(Option.some(["tags", 0]));
+  });
+
+  it("decodes escapes in deeper segments and skips empty ones", () => {
+    expect(pathFromPointer("/data/attributes/a/b~1c/")).toEqual(Option.some(["a", "b/c"]));
+  });
+
+  it("is None wherever fieldFromPointer is", () => {
+    expect(pathFromPointer(undefined)).toEqual(Option.none());
+    expect(pathFromPointer("/data/relationships/author")).toEqual(Option.none());
+    expect(pathFromPointer("/data/attributes/")).toEqual(Option.none());
   });
 });

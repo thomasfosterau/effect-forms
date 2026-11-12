@@ -1,5 +1,5 @@
 import * as Option from "effect/Option";
-import { describe, expect, expectTypeOf, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import {
   clearAll,
   fromString,
@@ -15,7 +15,6 @@ import {
   swapAt,
   toString,
 } from "../src/Path.ts";
-import type { FieldPath, PathValue } from "../src/Path.ts";
 
 describe("Path.getAt", () => {
   const data = { author: { name: "Ada" }, tags: ["a", "b"] };
@@ -41,7 +40,7 @@ describe("Path.setAt", () => {
     const next = setAt(data, ["author", "name"], "Bob");
     expect(next).toEqual({ author: { name: "Bob" }, tags: ["a", "b"] });
     expect(data.author.name).toBe("Ada"); // original untouched
-    expect(next.tags).toBe(data.tags); // structural sharing of untouched branches
+    expect(getAt(next, ["tags"])).toBe(data.tags); // structural sharing of untouched branches
   });
 
   it("replaces an array element", () => {
@@ -75,45 +74,6 @@ describe("Path.toString / fromString", () => {
     expect(toString(["author", "name"])).toBe("author.name");
     expect(fromString("tags[0]")).toEqual(["tags", 0]);
     expect(fromString("author.name")).toEqual(["author", "name"]);
-  });
-});
-
-// Type-level assertions for `FieldPath` / `PathValue` (#756): a mistyped
-// segment or wrong leaf type must be a compile error. Encoded as
-// `expectTypeOf` assertions that break the type gate (`vp run check`) if the
-// projection ever drifts — there is nothing to assert at runtime.
-describe("Path.FieldPath / Path.PathValue", () => {
-  interface Item {
-    readonly label: string;
-  }
-  interface Data {
-    readonly title: string;
-    readonly author: { readonly name: string; readonly bio?: string };
-    readonly tags: readonly string[];
-    readonly items: readonly Item[];
-  }
-
-  it("accepts every valid deep path and rejects invalid ones", () => {
-    expectTypeOf<"title">().toExtend<FieldPath<Data>>();
-    expectTypeOf<"author.name">().toExtend<FieldPath<Data>>();
-    expectTypeOf<"author.bio">().toExtend<FieldPath<Data>>();
-    expectTypeOf<"tags[0]">().toExtend<FieldPath<Data>>();
-    expectTypeOf<"items[0].label">().toExtend<FieldPath<Data>>();
-    // "titel" is not a key of Data
-    expectTypeOf<"titel">().not.toExtend<FieldPath<Data>>();
-    // "author.missing" is not a key of Data["author"]
-    expectTypeOf<"author.missing">().not.toExtend<FieldPath<Data>>();
-    expect(true).toBe(true);
-  });
-
-  it("resolves the leaf type at a path", () => {
-    expectTypeOf<PathValue<Data, "title">>().toEqualTypeOf<string>();
-    expectTypeOf<PathValue<Data, "author.name">>().toEqualTypeOf<string>();
-    expectTypeOf<PathValue<Data, "tags[0]">>().toEqualTypeOf<string>();
-    expectTypeOf<PathValue<Data, "items[0].label">>().toEqualTypeOf<string>();
-    // the leaf at "title" is `string`, not `number`
-    expectTypeOf<PathValue<Data, "title">>().not.toEqualTypeOf<number>();
-    expect(true).toBe(true);
   });
 });
 
