@@ -61,7 +61,7 @@ catalog:
   # Type-only: the `/kit` entry routes a command failure's JSON:API error
   # objects by effect-jsonapi's `Document.ErrorObject` shape (an optional
   # peer). Nothing imports it at runtime.
-  "@thomasfosterau/effect-jsonapi": ^0.20.0
+  "@thomasfosterau/effect-jsonapi": ^0.21.0
   # The tagged `TriState` (Assign / Clear / CarryForward) that effect-forms'
   # `Coerce` and `Command` return for partial-update fields, imported from its
   # `/TriState` subpath (a required peer of both packages, see `catalogs.peers`).
