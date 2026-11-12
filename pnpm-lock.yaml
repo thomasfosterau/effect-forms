@@ -10,8 +10,8 @@ catalogs:
       specifier: ^3.0.3
       version: 3.0.3
     '@effect/docgen':
-      specifier: ^4.1.2
-      version: 4.1.2
+      specifier: ^4.1.4
+      version: 4.1.4
     '@effect/language-service':
       specifier: ^0.87.5
       version: 0.87.5
@@ -91,7 +91,7 @@ importers:
         version: 3.0.3
       '@effect/docgen':
         specifier: 'catalog:'
-        version: 4.1.2(@typescript/typescript6@6.0.2)(redis@6.3.0)(tsx@4.23.15)
+        version: 4.1.4(@typescript/typescript6@6.0.2)(redis@6.3.0)(tsx@4.23.15)
       '@effect/language-service':
         specifier: 'catalog:'
         version: 0.87.5
@@ -155,7 +155,7 @@ importers:
         version: 4.1.3(effect@4.1.3)(vitest@5.0.5)
       '@thomasfosterau/effect-ext':
         specifier: 'catalog:'
-        version: 0.2.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)
+        version: 0.2.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)
 
   packages/svelte:
     dependencies:
@@ -174,10 +174,10 @@ importers:
         version: 3.2.0(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@1.4.0(@types/node@26.6.6)(@typescript/typescript6@6.0.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))(svelte@5.57.1))(@typescript/typescript6@6.0.2)(@voidzero-dev/vite-plus-core@1.4.0(@types/node@26.6.6)(@typescript/typescript6@6.0.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))(svelte@5.57.1)
       '@thomasfosterau/effect-ext':
         specifier: 'catalog:'
-        version: 0.2.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)
+        version: 0.2.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)
       '@thomasfosterau/effect-jsonapi':
         specifier: 'catalog:'
-        version: 0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)
+        version: 0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)
 
 packages:
 
@@ -335,8 +335,8 @@ packages:
     resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
     engines: {node: '>= 20.12.0'}
 
-  '@effect/docgen@4.1.2':
-    resolution: {integrity: sha512-R4e0mxxY9B5v8Sdr2tWjjQL9nIlOwT0J8baQ3zgF4wth89rmVcDH7NA2r1ojwlArq17h/Y8ZgLi2ViQgsenRfw==}
+  '@effect/docgen@4.1.4':
+    resolution: {integrity: sha512-ROTVPve76XrqsL5YKlw6Wngv1tt/yX0nfq9HaT6WbibFDTQiZcDiaB0FwJWr53Usx2QSgJbpnwMXo8E3XlH+eg==}
     engines: {node: '>=22.19.0'}
     hasBin: true
     peerDependencies:
@@ -352,14 +352,14 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
-  '@effect/platform-node-shared@4.1.2':
-    resolution: {integrity: sha512-wSwl9A/G1hcVvF8nLI+YfB3EyOIDvWS6+lsTZBkmgDnPBL7m8YWZF+1HD+mdEsb52SUGfukip46Q3gRwSdk3QA==}
+  '@effect/platform-node-shared@4.1.4':
+    resolution: {integrity: sha512-DWdfphHGOFJNj/mYadgpT3jIm8aRXDcPrQiGXFBH4p2H4XmA7iYMrPsI8NxVgZ7kNX0q1+FGJZJama0tINHRAg==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
       effect: 4.1.3
 
-  '@effect/platform-node@4.1.2':
-    resolution: {integrity: sha512-ye0UjxORdd5Qu3paZ1LljgGOALWHt7muP9VTpjUSCNfcesiB/Hm7wPJIvZeu4gnwpTe5BtEnO1VHngWqjJp8mA==}
+  '@effect/platform-node@4.1.4':
+    resolution: {integrity: sha512-h7QExTPq/RfYtHP/8tMlgfBvqYsuJKhxfkU6w0+NaF/ihqQ8Y3GH9t28ltupQjoqMM7P6W5gy8rOji7F0qVrmg==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
       effect: 4.1.3
@@ -1726,8 +1726,8 @@ packages:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
 
-  glob@14.0.3:
-    resolution: {integrity: sha512-A1vjIwC3qpdCso45Iw127gnp7sPhqgY8lUQhDrArIs+GbmfaaVPFuoyy7WyLT9EPZCRZ7j7aLdwUhQmHWesEow==}
+  glob@14.0.5:
+    resolution: {integrity: sha512-nbKW5Sl53DEM5PkmZ5Jwfeyss1ohuqcgOBjOarSjz1fp8W4ss4EOOvKADQRbApD6JmVBX+HkpZYfBez4wXbeQQ==}
     engines: {node: 18 || 20 || >=22}
 
   gray-matter@3.1.1:
@@ -1956,8 +1956,8 @@ packages:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
     engines: {node: 18 || 20 || >=22}
 
-  minimatch@11.0.4:
-    resolution: {integrity: sha512-/UJ1dEoVQTjPNDh6SGlUo+ueLMmoHTas4q+8yaAR/5t6nLAIiBDJtoYUh20IYleix7ehiQkgczb84PE3uzHkxg==}
+  minimatch@11.0.8:
+    resolution: {integrity: sha512-nFQuYSTVrGvysVBps5Ih+0BdnYFN/Cj3C816r6+p7yK+FHrVLGE4O4N9AFwykrlNlvM2HYt+Rad1Uiro6h88Ig==}
     engines: {node: 20 || >=22}
 
   minimist@1.2.8:
@@ -2238,8 +2238,8 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  undici@8.12.3:
-    resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   update-browserslist-db@1.3.4:
@@ -2595,15 +2595,15 @@ snapshots:
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
 
-  '@effect/docgen@4.1.2(@typescript/typescript6@6.0.2)(redis@6.3.0)(tsx@4.23.15)':
+  '@effect/docgen@4.1.4(@typescript/typescript6@6.0.2)(redis@6.3.0)(tsx@4.23.15)':
     dependencies:
       '@babel/code-frame': 8.0.6
       '@effect/markdown-toc': 0.1.0
-      '@effect/platform-node': 4.1.2(effect@4.1.3)(redis@6.3.0)
+      '@effect/platform-node': 4.1.4(effect@4.1.3)(redis@6.3.0)
       chalk: 6.0.1
       doctrine: 3.0.0
       effect: 4.1.3
-      glob: 14.0.3
+      glob: 14.0.5
       prettier: 3.9.10
       ts-morph: 28.0.0
       tsconfck: 3.1.6(@typescript/typescript6@6.0.2)
@@ -2631,7 +2631,7 @@ snapshots:
       repeat-string: 1.6.1
       strip-color: 0.1.0
 
-  '@effect/platform-node-shared@4.1.2(effect@4.1.3)':
+  '@effect/platform-node-shared@4.1.4(effect@4.1.3)':
     dependencies:
       '@types/ws': 8.18.2
       effect: 4.1.3
@@ -2640,12 +2640,12 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0)':
+  '@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0)':
     dependencies:
-      '@effect/platform-node-shared': 4.1.2(effect@4.1.3)
+      '@effect/platform-node-shared': 4.1.4(effect@4.1.3)
       effect: 4.1.3
       redis: 6.3.0
-      undici: 8.12.3
+      undici: 8.12.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3057,23 +3057,23 @@ snapshots:
     dependencies:
       '@testing-library/dom': 10.4.2
 
-  '@thomasfosterau/effect-ext@0.1.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)':
+  '@thomasfosterau/effect-ext@0.1.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)':
     dependencies:
       effect: 4.1.3
     optionalDependencies:
-      '@effect/platform-node': 4.1.2(effect@4.1.3)(redis@6.3.0)
-      '@thomasfosterau/effect-jsonapi': 0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)
+      '@effect/platform-node': 4.1.4(effect@4.1.3)(redis@6.3.0)
+      '@thomasfosterau/effect-jsonapi': 0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)
 
-  '@thomasfosterau/effect-ext@0.2.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)':
+  '@thomasfosterau/effect-ext@0.2.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)':
     dependencies:
       effect: 4.1.3
     optionalDependencies:
-      '@effect/platform-node': 4.1.2(effect@4.1.3)(redis@6.3.0)
-      '@thomasfosterau/effect-jsonapi': 0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)
+      '@effect/platform-node': 4.1.4(effect@4.1.3)(redis@6.3.0)
+      '@thomasfosterau/effect-jsonapi': 0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)
 
-  '@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)':
+  '@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3)':
     dependencies:
-      '@thomasfosterau/effect-ext': 0.1.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.2(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)
+      '@thomasfosterau/effect-ext': 0.1.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.21.0(@effect/platform-node@4.1.4(effect@4.1.3)(redis@6.3.0))(effect@4.1.3))(effect@4.1.3)
       effect: 4.1.3
     transitivePeerDependencies:
       - '@effect/platform-browser'
@@ -3582,9 +3582,9 @@ snapshots:
 
   gensync@1.0.0-beta.2: {}
 
-  glob@14.0.3:
+  glob@14.0.5:
     dependencies:
-      minimatch: 11.0.4
+      minimatch: 11.0.8
       minipass: 7.1.3
       path-scurry: 3.0.0
 
@@ -3783,7 +3783,7 @@ snapshots:
     dependencies:
       brace-expansion: 5.0.12
 
-  minimatch@11.0.4:
+  minimatch@11.0.8:
     dependencies:
       '@isaacs/nonrecursive-glob-match': 1.1.0
       brace-expansion: 5.0.12
@@ -4104,7 +4104,7 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@8.12.3: {}
+  undici@8.12.4: {}
 
   update-browserslist-db@1.3.4(browserslist@4.29.4):
     dependencies:
