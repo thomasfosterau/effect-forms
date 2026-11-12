@@ -95,12 +95,13 @@ describe("defineEntityForm", () => {
 
   it("throws on an unknown, duplicate, or missing entry key", () => {
     expect(() =>
-      defineEntityForm({ create: CreateThing, update: UpdateThing, submit }, (f) => [
-        // SAFETY: "typo" deliberately bypasses the key type to reach the runtime
-        // unknown-key guard under test; defineEntityForm throws before using it.
-        f.text("typo" as never, { label: () => "x" }),
-      ]),
-    ).toThrow('entry "typo" is not a field');
+      defineEntityForm(
+        { create: CreateThing, update: UpdateThing, submit, omit: ["note"] },
+        // "note" stays a valid key at the type level but is omitted from the
+        // plan, which reaches the runtime unknown-key guard under test.
+        (f) => [f.text("note", { label: () => "x" })],
+      ),
+    ).toThrow('entry "note" is not a field');
     expect(() =>
       defineEntityForm({ create: CreateThing, update: UpdateThing, submit }, (f) => [
         f.text("title", { label: () => "x" }),
