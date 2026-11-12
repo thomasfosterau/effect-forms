@@ -10,3 +10,4 @@ Remove unchecked type assertions from the Svelte bindings, tightening a few publ
 - `FieldHandle`'s constructor takes a `FieldHost` (newly exported): the path-addressed methods of a `FormStore` it calls. Any `FormStore` is a `FieldHost`.
 - Spreading `FormStore.props` onto an element other than a `<form>` now throws a `TypeError` when the attachment runs. Before, the store attached anyway and failed later, at submit.
 - The array mutators (`append`, `insertItem`, `replaceItem`, `removeItem`, `swap`, `move`) treat a non-array value at `path` as an empty array. Before, they spread whatever was there.
+- `EntityFormDefinition.createInput` / `updateInput` are typed `Command.FormInputField` (a schema with no services) instead of `Schema.Top`, and `inputOverrides.create` / `.update` accept only such schemas. `Schema.decodeUnknownSync(definition.createInput)` and `Form.make(definition.createInput)` with `formAction` now type-check without a cast.
