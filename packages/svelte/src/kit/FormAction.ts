@@ -10,9 +10,11 @@
  * store applies back via `applyActionResult` / {@link enhanceForm}.
  *
  * A command is either a Promise-returning function (an API client call) or
- * an `Effect` with no requirements; a failure on either is classified by
- * {@link CommandFailure.jsonapiFailure} (or a caller's own classifier) and
- * routed onto the form's fields by each JSON:API error's `source.pointer`.
+ * an `Effect` with no requirements; a failure on either (a rejection as a
+ * {@link CommandRejected}, an `Effect`'s typed failure as itself) is
+ * classified by {@link CommandFailure.jsonapiFailure} (or a caller's own
+ * classifier) and routed onto the form's fields by each JSON:API error's
+ * `source.pointer`.
  *
  * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/FormAction
@@ -25,11 +27,12 @@ import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import { type Form, Result, State } from "@thomasfosterau/effect-forms";
 import {
   type Classify,
   type CommandFailure,
+  CommandRejected,
   DEFAULT_MESSAGE,
   detailOf,
   type ErrorObject,
@@ -50,19 +53,39 @@ export type ServiceFreeSchema = Schema.Top & { readonly DecodingServices: never 
 
 /**
  * A command: a Promise-returning function or one returning an `Effect` with
- * no requirements (provide them first, e.g. through a `ManagedRuntime`).
+ * no requirements (provide them first, e.g. through a `ManagedRuntime`)
+ * that fails with `E`.
+ *
+ * A Promise's rejection, or a synchronous throw, reaches the classifier as a
+ * {@link CommandRejected} whose `cause` is the original value.
  */
-export type Command<I, O> = (input: I) => Promise<O> | Effect.Effect<O, unknown>;
+export type Command<I, O, E = never> = (input: I) => Promise<O> | Effect.Effect<O, E>;
 
-const toEffect = <O>(
-  thunk: () => Promise<O> | Effect.Effect<O, unknown>,
-): Effect.Effect<O, unknown> =>
-  Effect.suspend(() => {
-    const out = thunk();
-    return Effect.isEffect(out)
-      ? out
-      : Effect.tryPromise({ try: () => out, catch: (cause) => cause });
-  });
+const toEffect = <O, E>(
+  thunk: () => Promise<O> | Effect.Effect<O, E>,
+): Effect.Effect<O, E | CommandRejected> =>
+  // `Effect.try` makes a synchronous throw a rejection too; the command's own
+  // Effect (or its Promise, lifted) is then flattened in.
+  Effect.flatten(
+    Effect.try({
+      try: (): Effect.Effect<O, E | CommandRejected> => {
+        const out = thunk();
+        return Effect.isEffect(out)
+          ? out
+          : Effect.tryPromise({ try: () => out, catch: (cause) => new CommandRejected({ cause }) });
+      },
+      catch: (cause) => new CommandRejected({ cause }),
+    }),
+  );
+
+/**
+ * A Promise boundary's rejection: throw the squashed cause, unwrapping a
+ * {@link CommandRejected} so the caller sees what the command rejected with.
+ */
+const rethrow = <E>(cause: Cause.Cause<E>): never => {
+  const squashed = Cause.squash(cause);
+  throw squashed instanceof CommandRejected ? squashed.cause : squashed;
+};
 
 // ── Idempotent client-id create retry ──────────────────────────────────
 
@@ -72,23 +95,29 @@ const isConflict = (cause: unknown): boolean =>
   cause.status === 409 &&
   (P.isTagged(cause, "JsonapiError") || P.isTagged(cause, "ErrorResponse"));
 
-const submittedId = (input: unknown): Option.Option<string> =>
-  P.isObjectOrArray(input) && P.hasProperty(input, "id") && P.isString(input.id) && input.id !== ""
-    ? Option.some(input.id)
-    : Option.none();
+/** A command input carrying the caller's own non-empty client-generated `id`. */
+const SubmittedId = Schema.Struct({ id: Schema.NonEmptyString });
 
-const retryOwnConflict = <I, O>(
-  create: Command<I, O>,
-  fetchExisting: (id: string) => Promise<O> | Effect.Effect<O, unknown>,
+/** Decode a command input's own `id`, `None` when it carries no non-empty string `id`. */
+const decodeSubmittedId = Schema.decodeUnknownOption(SubmittedId);
+
+const retryOwnConflict = <I, O, E, F>(
+  create: Command<I, O, E>,
+  fetchExisting: (id: string) => Promise<O> | Effect.Effect<O, F>,
   input: I,
-): Effect.Effect<O, unknown> =>
+): Effect.Effect<O, E | CommandRejected> =>
   toEffect(() => create(input)).pipe(
-    Effect.catch((cause) =>
-      Option.match(isConflict(cause) ? submittedId(input) : Option.none(), {
-        onNone: () => Effect.fail(cause),
-        // The re-fetch failing rethrows the ORIGINAL conflict, not its own error.
-        onSome: (id) => toEffect(() => fetchExisting(id)).pipe(Effect.mapError(() => cause)),
-      }),
+    Effect.catch((error) =>
+      Option.match(
+        isConflict(error instanceof CommandRejected ? error.cause : error)
+          ? Option.map(decodeSubmittedId(input), ({ id }) => id)
+          : Option.none(),
+        {
+          onNone: () => Effect.fail(error),
+          // The re-fetch failing rethrows the ORIGINAL conflict, not its own error.
+          onSome: (id) => toEffect(() => fetchExisting(id)).pipe(Effect.mapError(() => error)),
+        },
+      ),
     ),
   );
 
@@ -114,9 +143,11 @@ export function idempotentCreate<Input, Output>(
   fetchExisting: (id: string) => Promise<Output>,
 ): (input: Input) => Promise<Output> {
   return async (input) => {
-    const exit = await Effect.runPromiseExit(retryOwnConflict(create, fetchExisting, input));
+    const exit = await Effect.runPromiseExit(
+      retryOwnConflict<Input, Output, never, never>(create, fetchExisting, input),
+    );
     if (Exit.isSuccess(exit)) return exit.value;
-    throw Cause.squash(exit.cause);
+    return rethrow(exit.cause);
   };
 }
 
@@ -125,22 +156,27 @@ export function idempotentCreate<Input, Output>(
  * wrap to commands whose input actually carries a client-generated `id` (an
  * entity form definition's own `clientId`, from `defineEntityForm`);
  * `fetchExisting` re-fetches the submitted id (see {@link idempotentCreate}).
+ * The re-fetch's own failure `F` is discarded: the original conflict stands.
  */
-export interface IdempotentCreateOptions<O> {
+export interface IdempotentCreateOptions<O, F = never> {
   readonly clientId: boolean;
-  readonly fetchExisting: (id: string) => Promise<O> | Effect.Effect<O, unknown>;
+  readonly fetchExisting: (id: string) => Promise<O> | Effect.Effect<O, F>;
 }
 
-/** Options for {@link runFormAction} and {@link formAction}. */
-export interface FormActionOptions<A, O> {
+/**
+ * Options for {@link runFormAction} and {@link formAction}, for a command
+ * that outputs `O` and fails with `E` (and a re-fetch that fails with `F`).
+ */
+export interface FormActionOptions<A, O, E = never, F = never> {
   /** Retry a client-id create's own 409 as success (see {@link IdempotentCreateOptions}). */
-  readonly idempotent?: IdempotentCreateOptions<O> | undefined;
+  readonly idempotent?: IdempotentCreateOptions<O, F> | undefined;
   /**
-   * How a command failure is recognised. Defaults to
+   * How a command failure is recognised: handed the command's typed error,
+   * or a {@link CommandRejected} for a rejection or throw. Defaults to
    * {@link CommandFailure.jsonapiFailure}; compose with it to add an
    * application's own failures.
    */
-  readonly classify?: Classify | undefined;
+  readonly classify?: Classify<E | CommandRejected> | undefined;
   /**
    * Applied to every form state echoed back to the browser (an invalid
    * submission, a routed command failure) — e.g. blanking password fields
@@ -150,8 +186,10 @@ export interface FormActionOptions<A, O> {
   /**
    * What happens to a command failure the classifier does not recognise:
    * `"error"` (the default) answers an `Error` result at 500 carrying the
-   * cause's message; `"throw"` rethrows the cause, leaving it to SvelteKit's
-   * `handleError`.
+   * cause's message; `"throw"` rethrows the cause (a rejection's original
+   * reason, not its {@link CommandRejected} wrapper), leaving it to
+   * SvelteKit's `handleError`. A defect in an `Effect` command is never
+   * classified: it is unrecognised.
    */
   readonly unrecognised?: "error" | "throw" | undefined;
 }
@@ -196,18 +234,24 @@ const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormStat
  * check it. {@link formAction} hands it to SvelteKit's `redirect`, which
  * accepts only a same-origin location (see there).
  */
-export async function runFormAction<S extends ServiceFreeSchema, O, Message = unknown>(
+export async function runFormAction<
+  S extends ServiceFreeSchema,
+  O,
+  Message = unknown,
+  E = never,
+  F = never,
+>(
   form: Form.Form<S, Message>,
   request: Request,
-  run: Command<S["Type"], O>,
+  run: Command<S["Type"], O, E>,
   locationFor: (output: O, input: S["Type"]) => string,
-  options: FormActionOptions<S["Type"], O> = {},
+  options: FormActionOptions<S["Type"], O, E, F> = {},
 ): Promise<FormActionResult<S["Type"]>> {
   const redact = options.redact ?? ((state: FormState<S["Type"]>) => state);
   const classify = options.classify ?? jsonapiFailure;
   const program = Effect.flatMap(
     form.validate(request),
-    (state): Effect.Effect<FormActionResult<S["Type"]>, unknown> => {
+    (state): Effect.Effect<FormActionResult<S["Type"]>, E | CommandRejected> => {
       if (!state.valid) return Effect.succeed(Result.failure(redact(state), 400));
       const idempotent = options.idempotent;
       const command =
@@ -219,18 +263,22 @@ export async function runFormAction<S extends ServiceFreeSchema, O, Message = un
           Effect.sync(() => Result.redirect(locationFor(output, state.data), 303)),
         onFailure: (commandCause) =>
           Effect.suspend(() => {
-            const cause = Cause.squash(commandCause);
-            return Option.match(classify(cause), {
-              onSome: (failure) =>
+            // A typed failure is classified; a defect (or an interruption) is
+            // unrecognised by definition.
+            const failure = Option.flatMap(Cause.findErrorOption(commandCause), classify);
+            return Option.match(failure, {
+              onSome: (recognised) =>
                 Effect.sync(() =>
-                  Result.failure(redact(routeFailure(state, failure)), failure.status),
+                  Result.failure(redact(routeFailure(state, recognised)), recognised.status),
                 ),
-              onNone: () =>
-                options.unrecognised === "throw"
-                  ? Effect.fail(cause)
-                  : Effect.succeed(
-                      Result.errorResult(P.isError(cause) ? cause.message : DEFAULT_MESSAGE, 500),
-                    ),
+              onNone: () => {
+                if (options.unrecognised === "throw") return Effect.failCause(commandCause);
+                const squashed = Cause.squash(commandCause);
+                const cause = squashed instanceof CommandRejected ? squashed.cause : squashed;
+                return Effect.succeed(
+                  Result.errorResult(P.isError(cause) ? cause.message : DEFAULT_MESSAGE, 500),
+                );
+              },
             });
           }),
       });
@@ -240,17 +288,17 @@ export async function runFormAction<S extends ServiceFreeSchema, O, Message = un
   // anywhere above) rejects with the squashed cause, as a thrown value would.
   const exit = await Effect.runPromiseExit(program);
   if (Exit.isSuccess(exit)) return exit.value;
-  throw Cause.squash(exit.cause);
+  return rethrow(exit.cause);
 }
 
 /**
  * A command for {@link formAction}: like {@link Command}, and also handed the
  * `RequestEvent` (for `locals`, `cookies`, `fetch`).
  */
-export type ActionCommand<I, O> = (
+export type ActionCommand<I, O, E = never> = (
   input: I,
   event: RequestEvent,
-) => Promise<O> | Effect.Effect<O, unknown>;
+) => Promise<O> | Effect.Effect<O, E>;
 
 /** Pin an action's return to {@link FormActionData}, so every branch types alike. */
 const actionData = <A>(data: FormActionData<A>): FormActionData<A> => data;
@@ -292,11 +340,11 @@ const actionData = <A>(data: FormActionData<A>): FormActionData<A> => data;
  * };
  * ```
  */
-export function formAction<S extends ServiceFreeSchema, O, Message = unknown>(
+export function formAction<S extends ServiceFreeSchema, O, Message = unknown, E = never, F = never>(
   form: Form.Form<S, Message>,
-  run: ActionCommand<S["Type"], O>,
+  run: ActionCommand<S["Type"], O, E>,
   locationFor: (output: O, input: S["Type"]) => string,
-  options?: FormActionOptions<S["Type"], O>,
+  options?: FormActionOptions<S["Type"], O, E, F>,
 ) {
   return async (event: RequestEvent) => {
     const result = await runFormAction(

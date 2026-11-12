@@ -277,7 +277,76 @@ describe("runFormAction", () => {
     expect(result).toEqual({ _tag: "Error", status: 500, message: "invariant broken" });
   });
 
+  it("rethrows an Effect command's defect as-is under unrecognised: throw", async () => {
+    const defect = testFailure("invariant broken");
+    await expect(
+      runFormAction(form, post({ name: "Acme" }), () => Effect.die(defect), String, {
+        unrecognised: "throw",
+      }),
+    ).rejects.toBe(defect);
+  });
+
+  it("routes a synchronous throw like a rejection", async () => {
+    const result = await runFormAction(
+      form,
+      post({ name: "Acme" }),
+      (): Promise<string> => {
+        throw conflict409("Taken");
+      },
+      String,
+    );
+    expect(result).toMatchObject({ _tag: "Failure", status: 409 });
+  });
+
   // ── Options: classify, redact ──────────────────────────────────────────
+
+  it("hands a classifier a rejection as a CommandRejected carrying the original cause", async () => {
+    const rejection = testFailure("boom");
+    const seen: Array<unknown> = [];
+    await runFormAction(
+      form,
+      post({ name: "Acme" }),
+      async () => {
+        throw rejection;
+      },
+      String,
+      {
+        classify: (error) => {
+          seen.push(error);
+          return Option.none();
+        },
+      },
+    );
+    expect(seen).toHaveLength(1);
+    const [error] = seen;
+    assert.instanceOf(error, CommandFailure.CommandRejected);
+    expect(error.cause).toBe(rejection);
+  });
+
+  it("hands a classifier an Effect command's typed failure as itself", async () => {
+    class Taken extends Schema.TaggedError<Taken, { readonly brand: unique symbol }>()("Taken", {
+      field: Schema.String,
+    }) {}
+    const result = await runFormAction(
+      form,
+      post({ name: "Acme" }),
+      () => Effect.fail(new Taken({ field: "name" })),
+      String,
+      {
+        classify: (error) =>
+          error instanceof Taken
+            ? Option.some(
+                CommandFailure.routed(422, [
+                  { detail: "Taken", source: { pointer: `/data/attributes/${error.field}` } },
+                ]),
+              )
+            : CommandFailure.jsonapiFailure(error),
+      },
+    );
+    expect(result).toMatchObject({ _tag: "Failure", status: 422 });
+    assert(P.isTagged(result, "Failure"));
+    expect(result.state.errors.name).toEqual(["Taken"]);
+  });
 
   it("uses a caller's classifier, composed with the default", async () => {
     class SessionCallError extends Error {
@@ -285,10 +354,12 @@ describe("runFormAction", () => {
         super(`session call failed (${code})`);
       }
     }
-    const classify: CommandFailure.Classify = (cause) =>
-      cause instanceof SessionCallError && cause.code === 401
+    const classify: CommandFailure.Classify = (error) =>
+      error instanceof CommandFailure.CommandRejected &&
+      error.cause instanceof SessionCallError &&
+      error.cause.code === 401
         ? Option.some(CommandFailure.message(401, "Invalid email or password"))
-        : CommandFailure.jsonapiFailure(cause);
+        : CommandFailure.jsonapiFailure(error);
     const result = await runFormAction(
       form,
       post({ name: "Acme" }),
