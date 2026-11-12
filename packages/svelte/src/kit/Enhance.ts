@@ -17,8 +17,15 @@
 
 import { enhance } from "$app/forms";
 import { type Attachment, createAttachmentKey } from "svelte/attachments";
-import type { FormStore } from "../FormStore.svelte.ts";
-import { applyActionResult } from "../SvelteKit.ts";
+import { applyActionResult, type ServerStateTarget } from "../SvelteKit.ts";
+
+/**
+ * The store {@link enhanceForm} drives: its `submitting` flag plus the
+ * failure write {@link applyActionResult} makes (every `FormStore` is one).
+ */
+export interface EnhanceTarget<A> extends ServerStateTarget<A> {
+  submitting: boolean;
+}
 
 /** The spreadable `<form>` props: the POST method plus the enhance attachment under its symbol key. */
 export interface EnhancedFormProps {
@@ -47,10 +54,7 @@ export interface EnhancedFormProps {
  * <form {...enhanceForm(form)}>…</form>
  * ```
  */
-export function enhanceForm(
-  // oxlint-disable-next-line typescript/no-explicit-any -- accepts any concrete store
-  form: FormStore<any, any, any>,
-): EnhancedFormProps {
+export function enhanceForm<A>(form: EnhanceTarget<A>): EnhancedFormProps {
   return {
     method: "post",
     [createAttachmentKey()]: (node: HTMLFormElement) => {

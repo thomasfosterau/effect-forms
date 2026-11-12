@@ -54,7 +54,9 @@ describe("FormBuilder sync refine (cross-field)", () => {
     .addField("confirm", Schema.String)
     .refine((v) =>
       v.password === v.confirm ? undefined : { path: ["confirm"], issue: "must match" },
-    );
+    )
+    // A field added after the refinement: it still runs against the wider values.
+    .addField("hint", Schema.optional(Schema.String));
   const form = fromBuilder(builder);
 
   it.effect("passes when the cross-field rule holds", () =>
@@ -109,7 +111,9 @@ describe("FormBuilder async refineEffect", () => {
     .addField("name", Schema.String)
     .refineEffect((v) =>
       Effect.succeed(v.name === "taken" ? { path: ["name"], issue: "already taken" } : undefined),
-    );
+    )
+    // A field added after the refinement: it still runs against the wider values.
+    .addField("nickname", Schema.optional(Schema.String));
   const form = fromBuilder(builder);
 
   it.effect("passes when the async rule holds", () =>

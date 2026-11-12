@@ -8,9 +8,8 @@
  * @module effect-forms-svelte/SvelteKit
  */
 
-import type { Result, State } from "@thomasfosterau/effect-forms";
+import type { Errors, Result, State } from "@thomasfosterau/effect-forms";
 import * as P from "effect/Predicate";
-import type { FormStore } from "./FormStore.svelte.ts";
 
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
@@ -29,7 +28,21 @@ export interface ServerActionResult {
   readonly data?: unknown;
 }
 
-const isFormActionData = (data: unknown): data is FormActionData & { form: FormState<unknown> } =>
+/**
+ * What {@link applyActionResult} writes a failure into: any store whose data
+ * is `A` (every `FormStore` is one).
+ */
+export interface ServerStateTarget<A> {
+  /** Apply server-sourced `data` + `errors` directly — see `FormStore.setServerState`. */
+  setServerState(data: A, errors: Errors.FormErrors): void;
+}
+
+/**
+ * Whether a result payload carries a {@link FormActionData} `form`. Only the
+ * key is checked: `A` is the caller's declared expectation of the action's
+ * form data, as with `EnhanceCore.isActionResponse`.
+ */
+const isFormActionData = <A>(data: unknown): data is FormActionData<A> & { form: FormState<A> } =>
   P.isObjectOrArray(data) && P.hasProperty(data, "form") && Boolean(data.form);
 
 /**
@@ -40,12 +53,11 @@ const isFormActionData = (data: unknown): data is FormActionData & { form: FormS
  * (which applies the result to `page.form` once, so an earlier submit's
  * `page.form` doesn't outlive this one), and don't also call `applyAction`.
  */
-export function applyActionResult(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accepts any concrete store
-  form: FormStore<any, any, any>,
+export function applyActionResult<A>(
+  form: ServerStateTarget<A>,
   result: ServerActionResult,
 ): boolean {
-  if (result.type !== "failure" || !isFormActionData(result.data)) return false;
+  if (result.type !== "failure" || !isFormActionData<A>(result.data)) return false;
   const state = result.data.form;
   form.setServerState(state.data, state.errors);
   return true;

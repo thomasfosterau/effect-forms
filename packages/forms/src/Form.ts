@@ -30,13 +30,25 @@ import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { constraintsFromSchema, type InputConstraints } from "./Constraints.ts";
-import { defaultEncodedValues } from "./Field.ts";
+import { blankValues, type Blanks } from "./Field.ts";
 import { issuesToErrors } from "./Errors.ts";
-import { buildSchema, type FormBuilder, runAsyncRefinements } from "./FormBuilder.ts";
-import type { DecodedFromFields, EncodedFromFields, FieldsRecord } from "./Field.ts";
+import {
+  buildSchema,
+  type Encoded as BuilderEncoded,
+  type FormBuilder,
+  runAsyncRefinements,
+  type Values,
+} from "./FormBuilder.ts";
 import { type FormBodyRecord, formDataToObject, requestToObject } from "./FormData.ts";
 import { type LeafFormatter, schemaIssuesToFormIssues } from "./Issues.ts";
-import { type FormState, make as makeFormState, type MakeFormStateOptions } from "./State.ts";
+import {
+  type FormState,
+  make as makeFormState,
+  invalid,
+  valid,
+  type MakeFormStateOptions,
+  type ValidatedFormState,
+} from "./State.ts";
 
 /**
  * Everything {@link Form.validate} accepts: a posted body (`FormData`,
@@ -60,13 +72,24 @@ export interface MakeFormOptions<S extends Schema.Top> {
   readonly deriveConstraints?: boolean;
 }
 
-/** A schema bound to a form: a validator plus an empty-state factory. */
-export interface Form<S extends Schema.Top, Message = unknown> {
+/**
+ * A schema bound to a form: a validator plus an empty-state factory. `Blank`
+ * is the type of the blank form's data ({@link make}'s `defaults`, the
+ * schema's decoded type; a builder form's encoded defaults or derived
+ * blanks), and `R` the services `validate` needs (the schema's decoding
+ * services, plus a builder's `refineEffect` services).
+ */
+export interface Form<
+  S extends Schema.Top,
+  Message = unknown,
+  Blank = S["Type"],
+  R = S["DecodingServices"],
+> {
   readonly schema: S;
   readonly id: string;
   readonly constraints: InputConstraints;
   /** Seed a blank, unposted form from the defaults. */
-  empty(overrides?: MakeFormStateOptions<Message>): FormState<S["Type"], Message>;
+  empty(overrides?: MakeFormStateOptions<Message>): FormState<Blank, Message>;
   /**
    * Parse a form body (no decode) into a structured object; an
    * already-structured object passes through.
@@ -81,7 +104,7 @@ export interface Form<S extends Schema.Top, Message = unknown> {
    */
   validate(
     input?: FormInput<S["Encoded"]>,
-  ): Effect.Effect<FormState<S["Type"], Message>, never, S["DecodingServices"]>;
+  ): Effect.Effect<ValidatedFormState<S["Type"], Blank, Message>, never, R>;
 }
 
 /** {@link Form.parse}: flatten a posted body, pass a plain record through. */
@@ -147,8 +170,17 @@ export function make<S extends Schema.Top, Message = unknown>(
   schema: S,
   options: MakeFormOptions<S>,
 ): Form<S, Message> {
+  return bind<S, Message, S["Type"]>(schema, options, options.defaults);
+}
+
+/** {@link make} over blank-form values `defaults` of any type `Blank`. */
+function bind<S extends Schema.Top, Message, Blank>(
+  schema: S,
+  options: Omit<MakeFormOptions<S>, "defaults">,
+  defaults: Blank,
+): Form<S, Message, Blank> {
   const id = options.id ?? "default";
-  const { defaults, leafFormatter } = options;
+  const { leafFormatter } = options;
   const constraints =
     options.deriveConstraints === false
       ? (options.constraints ?? {})
@@ -157,8 +189,8 @@ export function make<S extends Schema.Top, Message = unknown>(
   // than stopping at the first, so the whole form lights up at once.
   const decode = SchemaParser.decodeUnknownEffect(schema, { errors: "all" });
 
-  const empty: Form<S, Message>["empty"] = (overrides = {}) =>
-    makeFormState<S["Type"], Message>(defaults, {
+  const empty: Form<S, Message, Blank>["empty"] = (overrides = {}) =>
+    makeFormState<Blank, Message>(defaults, {
       id,
       isValid: false,
       isPosted: false,
@@ -166,21 +198,24 @@ export function make<S extends Schema.Top, Message = unknown>(
       ...overrides,
     });
 
-  const parse: Form<S, Message>["parse"] = parseInput;
+  const parse: Form<S, Message, Blank>["parse"] = parseInput;
 
-  const validate: Form<S, Message>["validate"] = (input) =>
+  const validate: Form<S, Message, Blank>["validate"] = (input) =>
     toStructured(input).pipe(
       Effect.flatMap((submitted) =>
         Option.match(submitted, {
-          onNone: () => Effect.succeed(empty()),
+          onNone: () =>
+            Effect.succeed<ValidatedFormState<S["Type"], Blank, Message>>({
+              ...empty(),
+              isValid: false,
+            }),
           onSome: (object) =>
             decode(object).pipe(
               Effect.matchEffect({
                 onSuccess: (data) =>
                   Effect.succeed(
-                    makeFormState<S["Type"], Message>(data, {
+                    valid<S["Type"], Message>(data, {
                       id,
-                      isValid: true,
                       isPosted: true,
                       constraints,
                     }),
@@ -198,9 +233,8 @@ export function make<S extends Schema.Top, Message = unknown>(
                       : { ...postedFields }
                   ) as S["Type"];
                   return Effect.succeed(
-                    makeFormState<S["Type"], Message>(posted, {
+                    invalid<S["Type"], Message>(posted, {
                       id,
-                      isValid: false,
                       isPosted: true,
                       constraints,
                       errors: issuesToErrors(schemaIssuesToFormIssues(issue, leafFormatter)),
@@ -217,11 +251,11 @@ export function make<S extends Schema.Top, Message = unknown>(
 }
 
 /** Options for {@link fromBuilder}. Like {@link MakeFormOptions} but `defaults` is optional. */
-export interface FromBuilderOptions<TFields extends FieldsRecord> {
+export interface FromBuilderOptions<F extends Schema.Struct.Fields> {
   /** Distinguishes multiple forms on a page. Defaults to `"default"`. */
   readonly id?: string;
-  /** Blank-form values. Defaults to a schema-derived encoded blank per field. */
-  readonly defaults?: EncodedFromFields<TFields>;
+  /** Blank-form values. Defaults to a schema-derived blank per field ({@link Blanks}). */
+  readonly defaults?: BuilderEncoded<F>;
   /** Override the per-leaf message rendering. */
   readonly leafFormatter?: LeafFormatter;
   /** Constraint overrides deep-merged over the AST-derived tree. */
@@ -231,38 +265,67 @@ export interface FromBuilderOptions<TFields extends FieldsRecord> {
 }
 
 /**
+ * The {@link Form} {@link fromBuilder} binds a builder over the struct fields
+ * `F` to: its schema is the builder's `Schema.Struct<F>`, its blank data is
+ * `Blank`, and `validate` needs the fields' decoding services plus the
+ * `refineEffect` refinements' `RefineR`.
+ */
+export type BuilderForm<F extends Schema.Struct.Fields, RefineR, Message, Blank> = Form<
+  Schema.Struct<F>,
+  Message,
+  Blank,
+  Schema.Struct<F>["DecodingServices"] | RefineR
+>;
+
+/**
  * Bind a {@link FormBuilder} to a {@link Form}. Collapses the builder to a
  * schema (see {@link buildSchema}), then behaves like {@link make} — except its
  * `validate` also runs the builder's *asynchronous* refinements after a
- * successful decode, folding any failures into the same nested error tree. When
- * `defaults` is omitted it is derived from the fields (blank encoded values).
+ * successful decode, folding any failures into the same nested error tree.
+ *
+ * Given `defaults` (encoded values), the blank form holds them. Without, it
+ * holds a schema-derived blank per field, typed as what it is ({@link Blanks}:
+ * `""`, `[]` or a struct of blanks), since a blank need not be a valid encoded
+ * value.
  */
-export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
-  builder: FormBuilder<TFields, R>,
-  options: FromBuilderOptions<TFields> = {},
-): Form<Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>, Message> {
+export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = unknown>(
+  builder: FormBuilder<F, RefineR>,
+  options: FromBuilderOptions<F> & { readonly defaults: BuilderEncoded<F> },
+): BuilderForm<F, RefineR, Message, BuilderEncoded<F>>;
+export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = unknown>(
+  builder: FormBuilder<F, RefineR>,
+  options?: FromBuilderOptions<F> & { readonly defaults?: never },
+): BuilderForm<F, RefineR, Message, Blanks<F>>;
+export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = unknown>(
+  builder: FormBuilder<F, RefineR>,
+  options: FromBuilderOptions<F> = {},
+): BuilderForm<F, RefineR, Message, BuilderEncoded<F> | Blanks<F>> {
   const schema = buildSchema(builder);
-  // SAFETY: `defaultEncodedValues` seeds exactly one entry per field of
-  // `builder.fields` — `[]` for an array field, the schema's blank form input
-  // otherwise — the documented "schema-derived encoded blank per field" that
-  // stands in for `EncodedFromFields<TFields>`.
-  const defaults =
-    options.defaults ?? (defaultEncodedValues(builder.fields) as EncodedFromFields<TFields>);
-  const base = make<typeof schema, Message>(schema, { ...options, defaults });
+  const defaults: BuilderEncoded<F> | Blanks<F> =
+    options.defaults ?? blankValues(builder.structFields);
+  const base = bind<Schema.Struct<F>, Message, BuilderEncoded<F> | Blanks<F>>(
+    schema,
+    options,
+    defaults,
+  );
 
   const decode = SchemaParser.decodeUnknownEffect(schema, { errors: "all" });
 
-  const validate: Form<typeof schema, Message>["validate"] = (input) =>
+  const validate: BuilderForm<F, RefineR, Message, BuilderEncoded<F> | Blanks<F>>["validate"] = (
+    input,
+  ) =>
     toStructured(input).pipe(
       Effect.flatMap((submitted) =>
         Option.match(submitted, {
-          onNone: () => Effect.succeed(base.empty()),
+          onNone: () =>
+            Effect.succeed<ValidatedFormState<Values<F>, BuilderEncoded<F> | Blanks<F>, Message>>({
+              ...base.empty(),
+              isValid: false,
+            }),
           onSome: (object) => {
-            // SAFETY: `FormState.data` on a failed validation is, by its documented
-            // contract, the posted values merged over the defaults (so the form
-            // re-renders what the user typed), typed as the decoded type though
-            // not decoded.
-            const posted = { ...defaults, ...object } as DecodedFromFields<TFields>;
+            // On a failed validation the state carries the posted values merged
+            // over the blank, so the form re-renders what the user typed.
+            const posted = { ...defaults, ...object };
             return decode(object).pipe(
               Effect.matchEffect({
                 onSuccess: (data) =>
@@ -270,16 +333,14 @@ export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
                     Effect.map((issues) =>
                       Arr.match(issues, {
                         onEmpty: () =>
-                          makeFormState<DecodedFromFields<TFields>, Message>(data, {
+                          valid<Values<F>, Message>(data, {
                             id: base.id,
-                            isValid: true,
                             isPosted: true,
                             constraints: base.constraints,
                           }),
                         onNonEmpty: (failures) =>
-                          makeFormState<DecodedFromFields<TFields>, Message>(posted, {
+                          invalid<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
                             id: base.id,
-                            isValid: false,
                             isPosted: true,
                             constraints: base.constraints,
                             errors: issuesToErrors(failures),
@@ -289,9 +350,8 @@ export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
                   ),
                 onFailure: (issue) =>
                   Effect.succeed(
-                    makeFormState<DecodedFromFields<TFields>, Message>(posted, {
+                    invalid<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
                       id: base.id,
-                      isValid: false,
                       isPosted: true,
                       constraints: base.constraints,
                       errors: issuesToErrors(
