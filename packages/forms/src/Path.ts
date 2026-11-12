@@ -28,31 +28,62 @@ import { parseFieldPath } from "./FormData.ts";
 import type { FormPath } from "./Issues.ts";
 
 /**
- * Read the value at `path`. Returns `undefined` if any segment is missing or
- * traverses a non-object. The empty path returns the object itself.
+ * A leaf of a form data tree: a scalar an input holds, `null` / `undefined`
+ * for a blank, a `Date`, or a `Blob` / `File` from a file input.
  */
-export function getAt(obj: unknown, path: FormPath): unknown {
-  // Once a segment lands on a non-object the accumulator is `undefined`, which
-  // is itself a non-object, so every later segment keeps it `undefined`.
-  // A missing key reads as `undefined` either way, so guarding on `in` first
-  // matches a plain property read on any object or array.
+export type FormLeaf = string | number | boolean | bigint | null | undefined | Date | Blob;
+
+/**
+ * A form data tree: a {@link FormLeaf}, an array of trees, or a record of
+ * trees. Every value a form holds, posts or validates is one, so it is what
+ * {@link getAt} / {@link setAt} walk and what the reactive bindings serialise
+ * into a form body. A parsed body (`FormData.FormBodyValue`: strings, `File`s,
+ * arrays and records) is one; so is a `Field.BlankValue`.
+ */
+export type FormValue = FormLeaf | ReadonlyArray<FormValue> | { readonly [key: string]: FormValue };
+
+/** A {@link FormValue} that holds children: an array or a record of trees. */
+type Container = ReadonlyArray<FormValue> | { readonly [key: string]: FormValue };
+
+/** Whether `value` is a `Blob` (a `File` is one); holds in a runtime without a global `Blob`. */
+const isBlob = (value: FormValue): value is Blob =>
+  !P.isUndefined(globalThis.Blob) && value instanceof Blob;
+
+/** Whether `value` holds children (a `Date` or `Blob` leaf is an object, but not a container). */
+const isContainer = (value: FormValue): value is Container =>
+  P.isObjectOrArray(value) && !(value instanceof Date) && !isBlob(value);
+
+/** The child of `container` at `segment`, or `undefined` when it has none. */
+const childAt = (container: Container, segment: string | number): FormValue => {
+  if (isList(container)) return P.isNumber(segment) ? container[segment] : undefined;
+  return Object.hasOwn(container, segment) ? container[String(segment)] : undefined;
+};
+
+/** Whether a {@link Container} is the array kind. */
+const isList = (container: Container): container is ReadonlyArray<FormValue> =>
+  Arr.isArray(container);
+
+/**
+ * Read the value at `path`. Returns `undefined` if any segment is missing or
+ * traverses a leaf. The empty path returns the tree itself.
+ */
+export function getAt(obj: FormValue, path: FormPath): FormValue {
+  // Once a segment lands on a leaf the accumulator is `undefined`, which is
+  // itself a leaf, so every later segment keeps it `undefined`.
   return Arr.reduce(path, obj, (current, segment) =>
-    P.isObjectOrArray(current) && P.hasProperty(current, segment) ? current[segment] : undefined,
+    isContainer(current) ? childAt(current, segment) : undefined,
   );
 }
-
-/** An object or array a {@link setAt} write copies along its path. */
-type Container = Readonly<Record<PropertyKey, unknown>> | Array<unknown>;
 
 /**
  * The untyped core of {@link setAt}: the copy of the container `obj` with
  * `value` written at `path` (the empty path yields `value` itself). An array
  * is copied as an array (a string segment on it lands on the copy as a
- * property, as a write would) and any other object as a plain object of its
- * own enumerable properties; a missing or primitive container further down is
- * replaced by a fresh one.
+ * property, as a write would) and a record as a plain object of its own
+ * enumerable properties; a missing or leaf container further down is replaced
+ * by a fresh one.
  */
-const setIn = <V>(obj: Container, path: FormPath, value: V): V | Container =>
+const setIn = (obj: Container, path: FormPath, value: FormValue): FormValue =>
   Arr.match(path, {
     onEmpty: () => value,
     onNonEmpty: ([head, ...rest]) => {
@@ -60,16 +91,10 @@ const setIn = <V>(obj: Container, path: FormPath, value: V): V | Container =>
         onEmpty: () => value,
         onNonEmpty: (tail) => {
           const child = getAt(obj, [head]);
-          return setIn(
-            P.isObjectOrArray(child) ? child : P.isNumber(tail[0]) ? [] : {},
-            tail,
-            value,
-          );
+          return setIn(isContainer(child) ? child : P.isNumber(tail[0]) ? [] : {}, tail, value);
         },
       });
-      return Arr.isArray(obj)
-        ? Object.assign([...obj], { [head]: next })
-        : { ...obj, [head]: next };
+      return isList(obj) ? Object.assign([...obj], { [head]: next }) : { ...obj, [head]: next };
     },
   });
 
@@ -89,15 +114,15 @@ const setIn = <V>(obj: Container, path: FormPath, value: V): V | Container =>
  * console.log(before.authors[0]?.name) // "Ada" — the input is untouched
  * ```
  */
-export function setAt<T>(obj: T, path: FormPath, value: unknown): T {
+export function setAt<T extends FormValue>(obj: T, path: FormPath, value: FormValue): T {
   // SAFETY: `setIn` returns a copy of `obj` that differs only at `path`, where
-  // `value` was written (a root that is not an object or array has no
-  // properties to keep, so it starts from an empty object). `setAt`'s documented contract is that the caller
+  // `value` was written (a leaf root has no properties to keep, so it starts
+  // from an empty record). `setAt`'s documented contract is that the caller
   // writes a value of the type `T` holds at `path` (at the empty path, `T`
-  // itself), so the copy is still a `T`. `value` is `unknown` on purpose — the
-  // reactive bindings write untyped input values — so no type relates it to
-  // `T`, and this is the single point where that caller contract is assumed.
-  return setIn(P.isObjectOrArray(obj) ? obj : {}, path, value) as T;
+  // itself), so the copy is still a `T`. A runtime `FormPath` carries no static
+  // type, so TypeScript cannot relate `value` to `T` at `path`: this is the one
+  // point where that caller contract is assumed.
+  return setIn(isContainer(obj) ? obj : {}, path, value) as T;
 }
 
 /** Whether `path` is `root` or nested beneath it. */

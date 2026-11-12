@@ -52,6 +52,7 @@ import {
   trimToClear,
 } from "./Coerce.ts";
 import * as TriState from "@thomasfosterau/effect-ext/TriState";
+import type { ServiceFreeSchema } from "./Validate.ts";
 
 /** How a command field renders and coerces at the form boundary. */
 export type FieldKind =
@@ -185,17 +186,14 @@ type ProbeInput = ReadonlyArray<never> | boolean | number | string | null | unde
  * value for instance checks (the date probe needs to see a `Date` come out,
  * not just a successful decode).
  */
-const probe = (schema: Schema.Top, input: ProbeInput): Exit.Exit<unknown, unknown> => {
-  // SAFETY: the cast only drops `schema`'s decoding-service requirement. The
-  // decode runs to an `Exit`, so a schema that does need a service (or decodes
-  // asynchronously, or throws) yields a failed `Exit` — which a probe reads as
-  // "does not decode", exactly as it reads an ordinary schema issue.
-  const decoder = schema as Schema.Codec<unknown>;
-  return SchemaParser.decodeExit(decoder)(input);
-};
+const probe = (schema: ServiceFreeSchema, input: ProbeInput): Exit.Exit<unknown, unknown> =>
+  // The decode runs to an `Exit`, so a schema that decodes asynchronously (or
+  // throws) yields a failed `Exit` — which a probe reads as "does not decode",
+  // exactly as it reads an ordinary schema issue.
+  SchemaParser.decodeExit(schema)(input);
 
 /** True when a schema decodes the given input without failing. */
-const decodes = (schema: Schema.Top, input: ProbeInput): boolean =>
+const decodes = (schema: ServiceFreeSchema, input: ProbeInput): boolean =>
   Exit.isSuccess(probe(schema, input));
 
 /** A syntactically valid UUID no other field kind accepts as non-text. */
@@ -287,7 +285,7 @@ interface Classification {
  * the schema accepts none of them, so {@link classify} can fall through to
  * its AST-based checks (`enum`, `structured`).
  */
-const probeKind = (schema: Schema.Top): Option.Option<FieldKind> => {
+const probeKind = (schema: ServiceFreeSchema): Option.Option<FieldKind> => {
   if (decodes(schema, [])) return Option.some("jsonArray");
   if (decodes(schema, true)) return Option.some("boolean");
   if (decodes(schema, 42)) return Option.some("number");
@@ -315,10 +313,12 @@ const probeKind = (schema: Schema.Top): Option.Option<FieldKind> => {
  * (`Schema.declare`d — `UploadedDocument`, `Image`) throws at module load so
  * the gap surfaces when the plan is declared, not on a live submission.
  */
-const classify = (key: string, schema: Schema.Top): Classification => {
+const classify = (key: string, schema: ServiceFreeSchema): Classification => {
   const encodedSide = optionEncodedSide(schema.ast);
   if (Option.isSome(encodedSide)) {
-    return classify(key, Schema.make<Schema.Top>(encodedSide.value));
+    // The encoded side is the tail of `schema`'s own encoding chain, so it
+    // needs no decoding service `schema` itself doesn't.
+    return classify(key, Schema.make<ServiceFreeSchema>(encodedSide.value));
   }
   const options = enumOptions(schema.ast);
   if (Option.isSome(options)) return { kind: "enum", options: options.value };
@@ -334,7 +334,7 @@ const classify = (key: string, schema: Schema.Top): Classification => {
 
 /** Minimal runtime shape of a command `Schema.Struct`. */
 interface StructLike {
-  readonly fields: Record<string, Schema.Top>;
+  readonly fields: Readonly<Record<string, ServiceFreeSchema>>;
 }
 
 /**
