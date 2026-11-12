@@ -142,10 +142,10 @@ const proto = {
   },
 };
 
-function build(
-  fields: FieldsRecord,
+function build<TFields extends FieldsRecord, R>(
+  fields: TFields,
   refinements: ReadonlyArray<Refinement>,
-): FormBuilder<FieldsRecord, unknown> {
+): FormBuilder<TFields, R> {
   const self = Object.create(proto);
   self.fields = fields;
   self.refinements = refinements;
@@ -156,11 +156,11 @@ function build(
 export const isFormBuilder = (u: unknown): u is FormBuilder<FieldsRecord, unknown> =>
   P.isObjectOrArray(u) && P.hasProperty(u, TypeId);
 
+/** The field record of a builder with no fields yet — what {@link make} starts from. */
+export type NoFields = { readonly [key in never]: AnyFieldDef };
+
 /** The empty builder — the starting point for {@link FormBuilder.addField}. */
-// SAFETY: a builder with no fields and no refinements is exactly
-// `FormBuilder<{}, never>`; `build` merely erases the field-record and `R`
-// types its shared implementation works over.
-export const make = build({}, []) as FormBuilder<Record<never, never>, never>;
+export const make: FormBuilder<NoFields, never> = build<NoFields, never>({}, []);
 
 /** Alias of {@link make} — the empty builder. */
 export const empty = make;
