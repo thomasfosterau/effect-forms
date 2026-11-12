@@ -56,7 +56,7 @@ Before you report work as done, run the gates below in order and quote each comm
 7. `pnpm audit --audit-level high` (network)
 8. `vp run test:coverage`, then `vp exec fallow audit --format json --quiet --explain --gate-marker agent --base origin/trunk` (the fallow gate below; not a CI step).
 
-Steps 2–7 are CI's `build` job, in its order ([ci.yml](.github/workflows/ci.yml)). Neither type-checker reports Svelte's rune compile errors in `*.svelte.ts` (`state_invalid_export`, `rune_missing_parentheses`, …); `vp run -r test:unit` does, because `tests/FormStore.svelte.test.ts` imports `FormStore.svelte.ts` through the `svelte()` Vite plugin.
+Steps 2–7 are the root `ci` task (`vp run ci`, in `vite.config.ts`), in this order and fail-fast; CI runs exactly that task, on the current LTS and the latest released Node.js ([ci.yml](.github/workflows/ci.yml)). Neither type-checker reports Svelte's rune compile errors in `*.svelte.ts` (`state_invalid_export`, `rune_missing_parentheses`, …); `vp run -r test:unit` does, because `tests/FormStore.svelte.test.ts` imports `FormStore.svelte.ts` through the `svelte()` Vite plugin.
 
 ## Branches and pull requests
 
