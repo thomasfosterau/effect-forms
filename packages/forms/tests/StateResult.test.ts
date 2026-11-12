@@ -1,3 +1,4 @@
+import * as Option from "effect/Option";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
@@ -35,7 +36,7 @@ describe("withMessage / withError", () => {
   it("withError adds a field error and forces invalid", () => {
     const state = withError(make({ email: "x" }), ["email"], "Already taken");
     expect(state.valid).toBe(false);
-    expect(getError(state.errors, ["email"])).toEqual(["Already taken"]);
+    expect(getError(state.errors, ["email"])).toEqual(Option.some(["Already taken"]));
   });
 });
 

@@ -13,6 +13,7 @@
  */
 
 import { Errors, Issues, Validate } from "@thomasfosterau/effect-forms";
+import * as Option from "effect/Option";
 
 // Terse local aliases onto the namespaced core exports.
 type FormErrors = Errors.FormErrors;
@@ -45,5 +46,5 @@ export function validateField(
   format?: LeafFormatter,
 ): readonly string[] {
   const errors = validateData(schema, data, format);
-  return getError(errors, path) ?? [];
+  return Option.getOrElse(getError(errors, path), () => []);
 }

@@ -46,7 +46,12 @@ export const userFixableMessage = (cause: unknown, fallback: string): Option.Opt
   return jsonapiFailure(cause).pipe(
     Option.filter((failure) => HashSet.has(USER_FIXABLE_STATUSES, failure.status)),
     Option.map((failure) =>
-      P.isTagged(failure, "Routed") ? detailOf(failure.errors[0], fallback) : failure.message,
+      P.isTagged(failure, "Routed")
+        ? Option.match(Arr.head(failure.errors), {
+            onNone: () => fallback,
+            onSome: (error) => detailOf(error, fallback),
+          })
+        : failure.message,
     ),
   );
 };

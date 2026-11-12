@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { getError } from "../src/Errors.ts";
@@ -53,11 +54,11 @@ describe("Form.make → validate", () => {
     expect(state.posted).toBe(true);
     // posted values are preserved so the form re-renders user input
     expect(state.data.name).toBe("A");
-    expect(getError(state.errors, ["name"])).toBeDefined();
+    expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
   });
 
-  it("treats null input as an empty (unposted) form", () => {
-    const state = run(form.validate(null));
+  it("treats no input as an empty (unposted) form", () => {
+    const state = run(form.validate());
     expect(state.posted).toBe(false);
     expect(state.valid).toBe(false);
   });

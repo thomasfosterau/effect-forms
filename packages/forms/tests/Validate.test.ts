@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { TestClock } from "effect/testing";
@@ -57,7 +58,7 @@ describe("validateValueSync", () => {
     const result = validateValueSync(Struct, { email: "x" });
     expect(result.valid).toBe(false);
     assert(!result.valid);
-    expect(getError(result.errors, ["email"])).toBeDefined();
+    expect(Option.isSome(getError(result.errors, ["email"]))).toBe(true);
   });
 });
 
@@ -210,38 +211,52 @@ describe("runAsyncFieldValidator", () => {
 
 describe("resolveFieldTrigger", () => {
   it("picks onChange / onChangeAsync for the change trigger", () => {
-    const resolved = resolveFieldTrigger(
-      { onChange, onBlur, onChangeAsync, onBlurAsync, asyncDebounceMs: 300 },
-      "change",
-    );
-    expect(resolved).toEqual({ sync: onChange, async: onChangeAsync, asyncDebounceMs: 300 });
+    const resolved = resolveFieldTrigger("change", {
+      onChange,
+      onBlur,
+      onChangeAsync,
+      onBlurAsync,
+      asyncDebounceMs: 300,
+    });
+    expect(resolved).toEqual({
+      sync: Option.some(onChange),
+      async: Option.some(onChangeAsync),
+      asyncDebounceMs: 300,
+    });
   });
 
   it("picks onBlur / onBlurAsync for the blur trigger", () => {
-    const resolved = resolveFieldTrigger(
-      { onChange, onBlur, onChangeAsync, onBlurAsync, asyncDebounceMs: 300 },
-      "blur",
-    );
-    expect(resolved).toEqual({ sync: onBlur, async: onBlurAsync, asyncDebounceMs: 300 });
+    const resolved = resolveFieldTrigger("blur", {
+      onChange,
+      onBlur,
+      onChangeAsync,
+      onBlurAsync,
+      asyncDebounceMs: 300,
+    });
+    expect(resolved).toEqual({
+      sync: Option.some(onBlur),
+      async: Option.some(onBlurAsync),
+      asyncDebounceMs: 300,
+    });
   });
 
-  it("resolves to undefined validators and a 0ms debounce when none are registered", () => {
-    expect(resolveFieldTrigger(undefined, "change")).toEqual({
-      sync: undefined,
-      async: undefined,
+  it("resolves to no validators and a 0ms debounce when none are registered", () => {
+    expect(resolveFieldTrigger("change")).toEqual({
+      sync: Option.none(),
+      async: Option.none(),
       asyncDebounceMs: 0,
     });
   });
 
   it("resolves partially-declared validators independently", () => {
-    expect(resolveFieldTrigger({ onChange }, "change")).toEqual({
-      sync: onChange,
-      async: undefined,
+    expect(resolveFieldTrigger("change", { onChange })).toEqual({
+      sync: Option.some(onChange),
+      async: Option.none(),
       asyncDebounceMs: 0,
     });
-    expect(resolveFieldTrigger({ onChange }, "blur")).toEqual({
-      sync: undefined,
-      async: undefined,
+    expect(resolveFieldTrigger("blur", { onChange })).toEqual({
+      sync: Option.none(),
+      async: Option.none(),
       asyncDebounceMs: 0,
     });
   });

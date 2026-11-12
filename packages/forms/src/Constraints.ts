@@ -87,7 +87,7 @@ function unwrapOptional(type: SchemaAST.AST): SchemaAST.AST {
 
 /** Flatten a `Checks` array (recursing into `FilterGroup`s) into individual filters. */
 function flattenChecks(
-  checks: ReadonlyArray<SchemaAST.Check<never>> | undefined,
+  checks?: ReadonlyArray<SchemaAST.Check<never>>,
 ): Array<SchemaAST.Filter<never>> {
   if (checks === undefined) return [];
   return Arr.flatMap(checks, (check) =>
@@ -212,12 +212,13 @@ function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): Input
  * constraint, which this leaf-per-key tree can't represent, so it's left to
  * `overrides`.
  */
-function homogeneousItem(ast: SchemaAST.Arrays): SchemaAST.AST | undefined {
-  if (ast.rest.length !== 1) return undefined;
+function homogeneousItem(ast: SchemaAST.Arrays): Option.Option<SchemaAST.AST> {
+  if (ast.rest.length !== 1) return Option.none();
   const [item] = ast.rest;
   return Arr.match(ast.elements, {
-    onEmpty: () => item,
-    onNonEmpty: (elements) => (elements.length === 1 && elements[0] === item ? item : undefined),
+    onEmpty: () => Option.some(item),
+    onNonEmpty: (elements) =>
+      elements.length === 1 && elements[0] === item ? Option.some(item) : Option.none(),
   });
 }
 
@@ -237,12 +238,15 @@ function constraintsForType(type: SchemaAST.AST): InputConstraint | InputConstra
     return constraintsForObjects(inner);
   }
   if (SchemaAST.isArrays(inner)) {
-    const item = homogeneousItem(inner);
-    if (!item) return { required };
-    const itemConstraints = constraintsForType(item);
-    return isLeafConstraint(itemConstraints)
-      ? { ...itemConstraints, required: required && itemConstraints.required !== false }
-      : itemConstraints;
+    return Option.match(homogeneousItem(inner), {
+      onNone: (): InputConstraint => ({ required }),
+      onSome: (item) => {
+        const itemConstraints = constraintsForType(item);
+        return isLeafConstraint(itemConstraints)
+          ? { ...itemConstraints, required: required && itemConstraints.required !== false }
+          : itemConstraints;
+      },
+    });
   }
   return { required, ...constraintFromChecks(type, inner) };
 }
@@ -317,15 +321,18 @@ export function constraintsFromSchema(
 export function constraintAt(constraints: InputConstraints, path: FormPath): InputConstraint {
   // Index segments are skipped (a list's items share one constraint). Once a
   // string segment runs past a leaf or off the tree the accumulator is
-  // `undefined`, and stays so for every later segment.
-  const node = Arr.reduce<string | number, InputConstraint | InputConstraints | undefined>(
+  // `None`, and stays so for every later segment.
+  return Arr.reduce(
     path,
-    constraints,
-    (current, segment) => {
-      if (P.isNumber(segment)) return current;
-      if (current === undefined || isLeafConstraint(current)) return undefined;
-      return current[segment];
-    },
+    Option.some<InputConstraint | InputConstraints>(constraints),
+    (current, segment) =>
+      P.isNumber(segment)
+        ? current
+        : Option.flatMap(current, (node) =>
+            isLeafConstraint(node) ? Option.none() : Option.fromUndefinedOr(node[segment]),
+          ),
+  ).pipe(
+    Option.filter(isLeafConstraint),
+    Option.getOrElse((): InputConstraint => ({})),
   );
-  return node !== undefined && isLeafConstraint(node) ? node : {};
 }

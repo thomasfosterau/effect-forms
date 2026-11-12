@@ -93,8 +93,8 @@ export type Classify<E = unknown> = (error: E) => Option.Option<CommandFailure>;
 export const DEFAULT_MESSAGE = "Request could not be completed";
 
 /** An error object's human message: its `detail`, else its `title`, else `fallback`. */
-export const detailOf = (error: ErrorObject | undefined, fallback = DEFAULT_MESSAGE): string =>
-  error?.detail ?? error?.title ?? fallback;
+export const detailOf = (error: ErrorObject, fallback = DEFAULT_MESSAGE): string =>
+  error.detail ?? error.title ?? fallback;
 
 const isStatus = (u: unknown): u is number => P.isNumber(u) && Number.isInteger(u);
 

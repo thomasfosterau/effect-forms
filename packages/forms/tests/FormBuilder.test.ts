@@ -1,3 +1,4 @@
+import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
@@ -61,7 +62,7 @@ describe("FormBuilder sync refine (cross-field)", () => {
   it("routes a cross-field failure to the targeted field", () => {
     const state = run(form.validate({ password: "secret", confirm: "nope" }));
     expect(state.valid).toBe(false);
-    expect(getError(state.errors, ["confirm"])).toEqual(["must match"]);
+    expect(getError(state.errors, ["confirm"])).toEqual(Option.some(["must match"]));
   });
 });
 
@@ -90,7 +91,7 @@ describe("Form.fromBuilder", () => {
     const state = run(form.validate({ name: "A", tags: ["x"] }));
     expect(state.valid).toBe(false);
     expect(state.data.name).toBe("A");
-    expect(getError(state.errors, ["name"])).toBeDefined();
+    expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
   });
 });
 
@@ -110,6 +111,6 @@ describe("FormBuilder async refineEffect", () => {
   it("folds an async failure into the error tree", () => {
     const state = run(form.validate({ name: "taken" }));
     expect(state.valid).toBe(false);
-    expect(getError(state.errors, ["name"])).toEqual(["already taken"]);
+    expect(getError(state.errors, ["name"])).toEqual(Option.some(["already taken"]));
   });
 });

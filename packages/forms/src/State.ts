@@ -37,8 +37,8 @@ export interface FormState<A, Message = unknown> {
   readonly posted: boolean;
   readonly data: A;
   readonly errors: FormErrors;
-  readonly message?: Message | undefined;
-  readonly constraints?: InputConstraints | undefined;
+  readonly message?: Message;
+  readonly constraints?: InputConstraints;
 }
 
 /** Options for {@link make}. */

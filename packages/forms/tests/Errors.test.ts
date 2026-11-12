@@ -1,3 +1,4 @@
+import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
 import {
   clearSourceAt,
@@ -77,9 +78,9 @@ describe("hasErrors / getError / setError / mergeErrors", () => {
 
   it("reads a leaf's messages", () => {
     const errors = { author: { name: ["Required"] } };
-    expect(getError(errors, ["author", "name"])).toEqual(["Required"]);
-    expect(getError(errors, ["author"])).toBeUndefined();
-    expect(getError(errors, ["missing"])).toBeUndefined();
+    expect(getError(errors, ["author", "name"])).toEqual(Option.some(["Required"]));
+    expect(getError(errors, ["author"])).toEqual(Option.none());
+    expect(getError(errors, ["missing"])).toEqual(Option.none());
   });
 
   it("reads a branch's own _errors", () => {
@@ -87,14 +88,14 @@ describe("hasErrors / getError / setError / mergeErrors", () => {
       { path: ["tags"], message: "Need one" },
       { path: ["tags", 0], message: "Bad" },
     ]);
-    expect(getError(errors, ["tags"])).toEqual(["Need one"]);
+    expect(getError(errors, ["tags"])).toEqual(Option.some(["Need one"]));
   });
 
   it("setError is pure and returns a new tree", () => {
     const before = { title: ["Required"] };
     const after = setError(before, ["author", "name"], "Required");
     expect(before).toEqual({ title: ["Required"] });
-    expect(getError(after, ["author", "name"])).toEqual(["Required"]);
+    expect(getError(after, ["author", "name"])).toEqual(Option.some(["Required"]));
   });
 
   it("mergeErrors combines two trees", () => {
@@ -108,8 +109,8 @@ describe("remapIndices", () => {
     // tags[2] has an error; removing tags[0] should leave that error at tags[1].
     const errors = issuesToErrors([{ path: ["tags", 2], message: "Too short" }]);
     const next = remapIndices(errors, ["tags"], removeAt(0));
-    expect(getError(next, ["tags", 1])).toEqual(["Too short"]);
-    expect(getError(next, ["tags", 2])).toBeUndefined();
+    expect(getError(next, ["tags", 1])).toEqual(Option.some(["Too short"]));
+    expect(getError(next, ["tags", 2])).toEqual(Option.none());
   });
 
   it("drops the error for the removed row itself", () => {
@@ -127,20 +128,20 @@ describe("remapIndices", () => {
       { path: ["title"], message: "Required" },
     ]);
     const next = remapIndices(errors, ["tags"], insertAt(0));
-    expect(getError(next, ["tags", 1])).toEqual(["Bad"]);
-    expect(getError(next, ["title"])).toEqual(["Required"]);
+    expect(getError(next, ["tags", 1])).toEqual(Option.some(["Bad"]));
+    expect(getError(next, ["title"])).toEqual(Option.some(["Required"]));
   });
 
   it("preserves a whole-array message (the array path's own _errors)", () => {
     const errors = issuesToErrors([{ path: ["tags"], message: "At least one tag" }]);
     const next = remapIndices(errors, ["tags"], removeAt(0));
-    expect(getError(next, ["tags"])).toEqual(["At least one tag"]);
+    expect(getError(next, ["tags"])).toEqual(Option.some(["At least one tag"]));
   });
 
   it("remaps nested paths beneath the shifted index", () => {
     const errors = issuesToErrors([{ path: ["authors", 1, "name"], message: "Required" }]);
     const next = remapIndices(errors, ["authors"], removeAt(0));
-    expect(getError(next, ["authors", 0, "name"])).toEqual(["Required"]);
+    expect(getError(next, ["authors", 0, "name"])).toEqual(Option.some(["Required"]));
   });
 });
 

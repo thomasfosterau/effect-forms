@@ -200,7 +200,7 @@ export const actions = {
     signInForm,
     (input, { locals }) =>
       locals.session.signIn({ email: input.email, password: input.password, rememberMe: true }),
-    (_, input) => safeRedirect(input.redirectTo, "/"),
+    (_, input) => safeRedirect(Option.fromUndefinedOr(input.redirectTo), "/"),
     { classify, redact: blankPassword, unrecognised: "throw" },
   ),
 };

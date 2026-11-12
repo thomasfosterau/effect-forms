@@ -21,6 +21,7 @@
  */
 
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import type { FormIssue, FormPath } from "./Issues.ts";
@@ -143,21 +144,21 @@ export function hasErrors(errors: FormErrors): boolean {
 
 /**
  * Read the messages attached directly to `path` (a leaf's list, or a branch's
- * own {@link ROOT_ERROR_KEY}). Returns `undefined` when the path has no direct
- * messages.
+ * own {@link ROOT_ERROR_KEY}). Returns `Option.none()` when the path has no
+ * direct messages.
  */
-export function getError(errors: FormErrors, path: FormPath): readonly string[] | undefined {
+export function getError(errors: FormErrors, path: FormPath): Option.Option<readonly string[]> {
   // Once the walk leaves the tree (an absent key, or a leaf with path left
-  // over) the accumulator is `undefined`, and stays so for every later segment.
-  const node = Arr.reduce<string | number, FormErrors | readonly string[] | undefined>(
-    path,
-    errors,
-    (current, segment) =>
-      current === undefined || isMessageList(current) ? undefined : current[String(segment)],
+  // over) the accumulator is `None`, and stays so for every later segment.
+  return Arr.reduce(path, Option.some<FormErrors | readonly string[]>(errors), (current, segment) =>
+    Option.flatMap(current, (node) =>
+      isMessageList(node) ? Option.none() : Option.fromUndefinedOr(node[String(segment)]),
+    ),
+  ).pipe(
+    Option.flatMap((node) =>
+      isMessageList(node) ? Option.some(node) : Option.fromUndefinedOr(node[ROOT_ERROR_KEY]),
+    ),
   );
-  if (node === undefined) return undefined;
-  if (isMessageList(node)) return node;
-  return node[ROOT_ERROR_KEY];
 }
 
 /** Return a new tree with `message` added at `path`. Pure. */
@@ -177,14 +178,18 @@ export function mergeErrors(a: FormErrors, b: FormErrors): FormErrors {
  * Remap the array-index segments of every message under `arrayPath` through
  * `map` (see {@link module:effect-forms/Path.IndexMap}), so an error recorded
  * against a row follows that row through a remove / insert / swap / move.
- * Messages whose index maps to `null` are dropped. Pure.
+ * Messages whose index maps to `Option.none()` are dropped. Pure.
  */
 export function remapIndices(errors: FormErrors, arrayPath: FormPath, map: IndexMap): FormErrors {
   return issuesToErrors(
-    Arr.flatMap(flattenErrors(errors), (issue) => {
-      const path = remapIndex(issue.path, arrayPath, map);
-      return path === null ? [] : [{ path, message: issue.message }];
-    }),
+    Arr.getSomes(
+      Arr.map(flattenErrors(errors), (issue) =>
+        Option.map(remapIndex(issue.path, arrayPath, map), (path): FormIssue => ({
+          path,
+          message: issue.message,
+        })),
+      ),
+    ),
   );
 }
 

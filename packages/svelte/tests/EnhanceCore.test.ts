@@ -1,3 +1,4 @@
+import * as Option from "effect/Option";
 import { FormData as FormBody, Result, State } from "@thomasfosterau/effect-forms";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
@@ -265,7 +266,7 @@ describe("computeDataApplication", () => {
       resetForm: false,
       autoSubmit: false,
     });
-    expect(applied).toEqual({ data: appliedData, rebaseTo: appliedData });
+    expect(applied).toEqual({ data: Option.some(appliedData), rebaseTo: Option.some(appliedData) });
   });
 
   it("on a failed submit, adopts the server data but does not rebase the baseline", () => {
@@ -278,7 +279,7 @@ describe("computeDataApplication", () => {
       resetForm: false,
       autoSubmit: false,
     });
-    expect(applied).toEqual({ data: appliedData, rebaseTo: undefined });
+    expect(applied).toEqual({ data: Option.some(appliedData), rebaseTo: Option.none() });
   });
 
   it("with resetForm, a successful submit reverts data and rebases the baseline to the original seed", () => {
@@ -290,7 +291,7 @@ describe("computeDataApplication", () => {
       resetForm: true,
       autoSubmit: false,
     });
-    expect(applied).toEqual({ data: initial, rebaseTo: initial });
+    expect(applied).toEqual({ data: Option.some(initial), rebaseTo: Option.some(initial) });
   });
 
   it("with resetForm, a failed submit adopts the server data (not the seed) and does not rebase", () => {
@@ -303,7 +304,7 @@ describe("computeDataApplication", () => {
       resetForm: true,
       autoSubmit: false,
     });
-    expect(applied).toEqual({ data: appliedData, rebaseTo: undefined });
+    expect(applied).toEqual({ data: Option.some(appliedData), rebaseTo: Option.none() });
   });
 
   it("auto-submit keeps local data as-is, but rebases the baseline to the submitted snapshot on success", () => {
@@ -315,7 +316,7 @@ describe("computeDataApplication", () => {
       resetForm: false,
       autoSubmit: true,
     });
-    expect(applied).toEqual({ data: undefined, rebaseTo: submittedData });
+    expect(applied).toEqual({ data: Option.none(), rebaseTo: Option.some(submittedData) });
   });
 
   it("auto-submit does not rebase on a failed submit", () => {
@@ -327,7 +328,7 @@ describe("computeDataApplication", () => {
       resetForm: false,
       autoSubmit: true,
     });
-    expect(applied).toEqual({ data: undefined, rebaseTo: undefined });
+    expect(applied).toEqual({ data: Option.none(), rebaseTo: Option.none() });
   });
 
   it("save-then-navigate: after a successful submit, the field is no longer tainted against the new baseline", () => {
@@ -346,8 +347,8 @@ describe("computeDataApplication", () => {
       resetForm: false,
       autoSubmit: false,
     });
-    const rebasedInitial = applied.rebaseTo;
-    assert.isDefined(rebasedInitial);
+    assert(Option.isSome(applied.rebaseTo));
+    const rebasedInitial = applied.rebaseTo.value;
 
     // The `beforeunload` guard's `isTainted` check now sees no changes.
     expect(isAnyTainted(computeTainted(rebasedInitial, edited))).toBe(false);
