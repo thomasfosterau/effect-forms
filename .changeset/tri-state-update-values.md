@@ -13,3 +13,5 @@ Partial-update fields are a tagged `TriState` instead of value / `null` / `undef
 - `Command.jsonRowsFromField` returns `TriState<ReadonlyArray<JsonRow>>`: `CarryForward` for a blank field, and otherwise `Assign` (`"[]"` assigns an empty list). It was `ReadonlyArray<JsonRow> | undefined`.
 - `Command.AdaptOverrides` functions return a `TriState<unknown>` (was `unknown`): `assign(value)`, `clear` or `carryForward`. In `effect-forms-svelte`, `defineEntityForm`'s `adaptOverrides` changes the same way.
 - `Command.createAdapter` / `updateAdapter` leave a carried-forward field out of the payload. Before, the key was present with the value `undefined`. The JSON is identical, but an in-process `toStrictEqual` or `"key" in payload` check sees the difference.
+
+Both packages now declare `engines.node` `>=22.18.0` (was `^20.19.0 || >=22.12.0`), matching the new required peer `@thomasfosterau/effect-ext`. Node 20 and Node 22 before 22.18 are no longer supported.
