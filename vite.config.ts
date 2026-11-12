@@ -113,6 +113,13 @@ export default defineConfig({
       // Every `vi.fn` here wraps a typed implementation; a type parameter
       // would only restate the implementation's own signature.
       "vitest/require-mock-type-parameters": "off",
+      // `@effect/vitest`'s `it.effect` / `it.live` (and the `it` a `layer`
+      // block hands its callback) register a test like `it` does, so an
+      // `expect` in their body is inside a test, not standalone (#161).
+      "vitest/no-standalone-expect": [
+        "error",
+        { additionalTestBlockFunctions: ["it.effect", "it.live"] },
+      ],
     },
     overrides: [
       // A `tryPromise` whose rejection is `unknown` by contract: a caller's

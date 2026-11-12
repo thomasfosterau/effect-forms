@@ -45,10 +45,15 @@
   "scripts": {
     "clean": "rm -rf dist"
   },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@thomasfosterau/effect-ext": "catalog:"
+  },
   "peerDependencies": {
+    "@thomasfosterau/effect-ext": "catalog:peers",
     "effect": "catalog:peers"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.18.0"
   }
 }

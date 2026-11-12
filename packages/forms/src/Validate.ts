@@ -22,7 +22,9 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import type * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import { type FormErrors, issuesToErrors } from "./Errors.ts";
 import {
@@ -34,16 +36,16 @@ import {
 
 /** The outcome of validating a value against a schema. */
 export type ValidationResult<A> =
-  | { readonly valid: true; readonly data: A }
+  | { readonly isValid: true; readonly data: A }
   | {
-      readonly valid: false;
+      readonly isValid: false;
       readonly errors: FormErrors;
       readonly issues: ReadonlyArray<FormIssue>;
     };
 
 /**
  * Decode `input` through `schema`, returning a {@link ValidationResult} on the
- * success channel (decode failures become `valid: false`, not an Effect
+ * success channel (decode failures become `isValid: false`, not an Effect
  * failure). Decoding-service requirements propagate on the `R` channel.
  */
 export function validateValue<S extends Schema.Top>(
@@ -52,35 +54,40 @@ export function validateValue<S extends Schema.Top>(
   format?: LeafFormatter,
 ): Effect.Effect<ValidationResult<S["Type"]>, never, S["DecodingServices"]> {
   return SchemaParser.decodeUnknownEffect(schema, { errors: "all" })(input).pipe(
-    Effect.matchEffect({
-      onSuccess: (data): Effect.Effect<ValidationResult<S["Type"]>> =>
-        Effect.succeed({ valid: true, data }),
-      onFailure: (issue): Effect.Effect<ValidationResult<S["Type"]>> => {
-        const issues = schemaIssuesToFormIssues(issue, format);
-        return Effect.succeed({ valid: false, errors: issuesToErrors(issues), issues });
-      },
+    Effect.match({
+      onSuccess: (data): ValidationResult<S["Type"]> => ({ isValid: true, data }),
+      onFailure: (issue) => invalid<S["Type"]>(issue, format),
     }),
   );
 }
 
+/** Fold a decode failure into the `isValid: false` {@link ValidationResult}. */
+const invalid = <A>(issue: SchemaIssue.Issue, format?: LeafFormatter): ValidationResult<A> => {
+  const issues = schemaIssuesToFormIssues(issue, format);
+  return { isValid: false, errors: issuesToErrors(issues), issues };
+};
+
 /**
  * Synchronous {@link validateValue} for schemas with no decoding-service
  * requirements (`R = never`) and no async decoding — the common case for plain
- * form schemas. {@link validateValue} never fails on the error channel, so
- * running it with {@link Effect.runSync} is total.
+ * form schemas. It decodes through `SchemaParser.decodeUnknownResult`,
+ * Schema's own synchronous adapter: a decode failure becomes `isValid: false`,
+ * and a defect or async decoding work throws.
  */
 export function validateValueSync<S extends Schema.Top>(
   schema: S,
   input: unknown,
   format?: LeafFormatter,
 ): ValidationResult<S["Type"]> {
-  // SAFETY: `validateValue` never fails on the error channel; the cast drops
-  // the decoding-service requirement, which this function's documented
-  // contract has the caller assert is `never` (the common case for plain form
-  // schemas — a service-requiring schema must use the async {@link validateValue}).
-  return Effect.runSync(
-    validateValue(schema, input, format) as Effect.Effect<ValidationResult<S["Type"]>>,
-  );
+  // SAFETY: the cast drops the decoding-service requirement, which this
+  // function's documented contract has the caller assert is `never` (the
+  // common case for plain form schemas — a service-requiring schema must use
+  // the async {@link validateValue}).
+  const decoder = schema as S & Schema.ConstraintDecoder<S["Type"]>;
+  return Result.match(SchemaParser.decodeUnknownResult(decoder, { errors: "all" })(input), {
+    onSuccess: (data): ValidationResult<S["Type"]> => ({ isValid: true, data }),
+    onFailure: (issue) => invalid<S["Type"]>(issue, format),
+  });
 }
 
 /**

@@ -252,7 +252,7 @@ export async function runFormAction<
   const program = Effect.flatMap(
     form.validate(request),
     (state): Effect.Effect<FormActionResult<S["Type"]>, E | CommandRejected> => {
-      if (!state.valid) return Effect.succeed(Result.failure(redact(state), 400));
+      if (!state.isValid) return Effect.succeed(Result.failure(redact(state), 400));
       const idempotent = options.idempotent;
       const command =
         idempotent?.clientId === true
