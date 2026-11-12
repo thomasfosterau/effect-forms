@@ -18,6 +18,11 @@ type AfterSubmit = (input: {
   readonly update: (options: { readonly reset: boolean }) => Promise<void> | void;
 }) => Promise<void>;
 
+/** The slice of SvelteKit's `page` state the default `update` writes: `page.form`. */
+interface PageForm {
+  form: unknown;
+}
+
 /** The submit callback `enhanceForm` hands the stubbed `enhance`. */
 type RecordedSubmit = (typeof enhanced)[number]["submit"];
 
@@ -73,8 +78,35 @@ describe("enhanceForm", () => {
     });
     expect(store.submitting).toBe(false);
     expect(store.setServerState).toHaveBeenCalledWith({ name: "" }, { name: ["Required"] });
-    expect(update).not.toHaveBeenCalled();
+    // `update` still runs, so SvelteKit replaces `page.form` with this result.
+    expect(update).toHaveBeenCalledWith({ reset: false });
     expect(applyAction).not.toHaveBeenCalled();
+  });
+
+  it("replaces a stale page.form message when a later submit fails validation (#146)", async () => {
+    const store = fakeStore();
+    const { submit } = attach(store);
+    // SvelteKit's default `update` applies the result: `page.form` becomes its `data`.
+    const page: PageForm = { form: undefined };
+    const updateFor = (result: { readonly data: unknown }) =>
+      vi.fn(async () => {
+        page.form = result.data;
+      });
+
+    const fault = { type: "failure", status: 500, data: { message: "boom" } };
+    await submitWith(submit)({ result: fault, update: updateFor(fault) });
+    expect(page.form).toEqual({ message: "boom" });
+    expect(store.setServerState).not.toHaveBeenCalled();
+
+    const invalid = {
+      type: "failure",
+      status: 400,
+      data: { form: { data: { name: "" }, errors: { name: ["Required"] } } },
+    };
+    await submitWith(submit)({ result: invalid, update: updateFor(invalid) });
+    expect(store.setServerState).toHaveBeenCalledWith({ name: "" }, { name: ["Required"] });
+    expect(page.form).toEqual(invalid.data);
+    expect(page.form).not.toHaveProperty("message");
   });
 
   it("defers to SvelteKit for anything else, without resetting the form", async () => {
