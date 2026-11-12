@@ -77,8 +77,10 @@ const blankPassword = (state: State.FormState<SignIn>): State.FormState<SignIn> 
 });
 
 /** A 401 → one generic whole-form message; everything else is unexpected. */
-const classify: CommandFailure.Classify = (cause) =>
-  cause instanceof SessionCallError && cause.status === 401
+const classify: CommandFailure.Classify = (error) =>
+  error instanceof CommandFailure.CommandRejected &&
+  error.cause instanceof SessionCallError &&
+  error.cause.status === 401
     ? Option.some(CommandFailure.message(401, "Invalid email or password"))
     : Option.none();
 
