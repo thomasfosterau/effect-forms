@@ -409,7 +409,7 @@ export type JsonRow = typeof JsonRow.Type;
  * field. A blank or absent field yields `undefined` (skip — leave the existing
  * list untouched); an empty JSON array (`"[]"`) clears the list. Rows keep
  * `id` / `creditedName` when present; `orderingPosition` falls back to the
- * row's array index. Throws a plain `Error` on a malformed payload — mapping
+ * row's array index. Throws an `InvalidJsonRowsError` on a malformed payload — mapping
  * that onto a framework response is the caller's concern.
  */
 export const jsonRowsFromField = (
@@ -504,9 +504,10 @@ const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): unknown => {
  * clearable path, clears (`null`); a present value is decoded as JSON and
  * passed through as-is — shape validation is the command's own decode's job,
  * exactly as {@link jsonRowsFromField} leaves row-shape validation to itself
- * rather than duplicating it here. Throws a plain `Error` on malformed JSON,
- * same as {@link jsonRowsFromField} does on a malformed row list — mapping
- * that onto a framework response is the caller's concern.
+ * rather than duplicating it here. Throws an `InvalidStructuredJsonError` on
+ * malformed JSON, as {@link jsonRowsFromField} throws an `InvalidJsonRowsError`
+ * on a malformed row list — mapping that onto a framework response is the
+ * caller's concern.
  */
 const structuredFromField = (raw: FormInputValue, clearable: boolean, label: string): unknown => {
   const trimmed = raw?.trim();
