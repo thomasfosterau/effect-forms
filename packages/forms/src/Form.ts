@@ -34,12 +34,17 @@ import { defaultEncodedValues } from "./Field.ts";
 import { issuesToErrors } from "./Errors.ts";
 import { buildSchema, type FormBuilder, runAsyncRefinements } from "./FormBuilder.ts";
 import type { DecodedFromFields, EncodedFromFields, FieldsRecord } from "./Field.ts";
-import { formDataToObject, requestToObject } from "./FormData.ts";
+import { type FormBodyRecord, formDataToObject, requestToObject } from "./FormData.ts";
 import { type LeafFormatter, schemaIssuesToFormIssues } from "./Issues.ts";
 import { type FormState, make as makeFormState, type MakeFormStateOptions } from "./State.ts";
 
-/** Everything {@link Form.validate} accepts. Omitting the input means "no submission". */
-export type FormInput = FormData | URLSearchParams | Request | Record<string, unknown>;
+/**
+ * Everything {@link Form.validate} accepts: a posted body (`FormData`,
+ * `URLSearchParams`, or a `Request` carrying one), or an already-structured
+ * object of the schema's `Encoded` type. Omitting the input means "no
+ * submission".
+ */
+export type FormInput<Encoded> = FormData | URLSearchParams | Request | Encoded;
 
 /** Options for {@link make}. */
 export interface MakeFormOptions<S extends Schema.Top> {
@@ -62,8 +67,11 @@ export interface Form<S extends Schema.Top, Message = unknown> {
   readonly constraints: InputConstraints;
   /** Seed a blank, unposted form from the defaults. */
   empty(overrides?: MakeFormStateOptions<Message>): FormState<S["Type"], Message>;
-  /** Parse a form body (no decode) into a structured object. */
-  parse(input: FormData | URLSearchParams | Record<string, unknown>): Record<string, unknown>;
+  /**
+   * Parse a form body (no decode) into a structured object; an
+   * already-structured object passes through.
+   */
+  parse(input: FormData | URLSearchParams | S["Encoded"]): FormBodyRecord | S["Encoded"];
   /**
    * Validate a submission into a {@link FormState}. Never fails on the error
    * channel — schema failures become `errors` on the returned (invalid) state.
@@ -72,7 +80,7 @@ export interface Form<S extends Schema.Top, Message = unknown> {
    * {@link UnreadableBody}.
    */
   validate(
-    input?: FormInput,
+    input?: FormInput<S["Encoded"]>,
   ): Effect.Effect<FormState<S["Type"], Message>, never, S["DecodingServices"]>;
 }
 
@@ -96,7 +104,9 @@ export class UnreadableBody extends Schema.TaggedError<
 }) {}
 
 /** The submission as a structured object, or `None` for no submission. */
-const toStructured = (input?: FormInput): Effect.Effect<Option.Option<Record<string, unknown>>> => {
+const toStructured = <Encoded>(
+  input?: FormInput<Encoded>,
+): Effect.Effect<Option.Option<FormBodyRecord | Encoded>> => {
   if (input === undefined) return Effect.succeedNone;
   if (input instanceof Request) {
     return Effect.tryPromise({
@@ -176,12 +186,16 @@ export function make<S extends Schema.Top, Message = unknown>(
                     }),
                   ),
                 onFailure: (issue) => {
+                  // Only an object submission has properties to merge.
+                  const postedFields = P.isObjectOrArray(object) ? object : {};
                   // SAFETY: `FormState.data` on a failed decode is, by its documented
                   // contract, the posted values merged over the defaults (so the form
                   // re-renders what the user typed), typed as `S["Type"]` though not
                   // decoded. Only object defaults have properties to merge.
                   const posted = (
-                    P.isObjectKeyword(defaults) ? { ...defaults, ...object } : { ...object }
+                    P.isObjectKeyword(defaults)
+                      ? { ...defaults, ...postedFields }
+                      : { ...postedFields }
                   ) as S["Type"];
                   return Effect.succeed(
                     makeFormState<S["Type"], Message>(posted, {

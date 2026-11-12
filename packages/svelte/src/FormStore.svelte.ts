@@ -70,7 +70,7 @@ import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
 import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
-import { createAttachmentKey } from "svelte/attachments";
+import { type Attachment, createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
 import {
   computeDataApplication,
@@ -371,6 +371,17 @@ const inRange = (index: number, length: number): boolean => index >= 0 && index 
 /** A field trigger a validator or the revalidate mode reacts to. */
 type FieldTrigger = "change" | "blur";
 
+/**
+ * The spreadable `<form>` attributes {@link FormStore.props} answers: the
+ * `post` method, the configured `action` (when one is set), and the
+ * progressive-enhancement submit handler under a Svelte attachment key.
+ */
+export interface FormProps {
+  readonly method: "post";
+  readonly action?: string;
+  readonly [attachmentKey: symbol]: Attachment<HTMLFormElement>;
+}
+
 /** A reactive form, returned by {@link createForm}. */
 export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R = never> {
   /** The reactive form data — bind inputs to its fields. */
@@ -538,7 +549,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * Sets `method="post"` (and `action`, if configured) and attaches the
    * progressive-enhancement submit handler via a Svelte attachment.
    */
-  get props(): Record<string | symbol, unknown> {
+  get props(): FormProps {
     const action = this.#options.action;
     return action === undefined
       ? { method: "post", [this.#attachmentKey]: this.#enhanceAttachment }
