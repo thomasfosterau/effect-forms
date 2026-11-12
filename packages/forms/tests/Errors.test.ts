@@ -7,6 +7,7 @@ import {
   getError,
   hasErrors,
   issuesToErrors,
+  issuesUnder,
   mergeErrors,
   mergeSourced,
   noErrors,
@@ -236,5 +237,27 @@ describe("SourcedErrors (setSourceAt / clearSourceAt / mergeSourced)", () => {
       name: ["Server says no"],
       email: ["Required"],
     });
+  });
+});
+
+describe("issuesUnder", () => {
+  const errors = issuesToErrors([
+    { path: [], message: "Form" },
+    { path: ["author"], message: "Author" },
+    { path: ["author", "name"], message: "Required" },
+    { path: ["tags", 0], message: "Too short" },
+  ]);
+
+  it("returns the messages at and beneath a path, relative to it", () => {
+    expect(issuesUnder(errors, ["author"])).toEqual([
+      { path: [], message: "Author" },
+      { path: ["name"], message: "Required" },
+    ]);
+    expect(issuesUnder(errors, ["tags"])).toEqual([{ path: [0], message: "Too short" }]);
+  });
+
+  it("returns everything at the empty path, and nothing under an absent one", () => {
+    expect(issuesUnder(errors, [])).toHaveLength(4);
+    expect(issuesUnder(errors, ["missing"])).toEqual([]);
   });
 });

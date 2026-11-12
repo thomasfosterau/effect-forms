@@ -160,6 +160,27 @@ describe("runFormAction", () => {
     expect(result.state.data).toEqual({ name: "Acme" });
   });
 
+  it("routes a nested attribute pointer to the nested field's path", async () => {
+    const result = await runFormAction(
+      form,
+      post({ name: "Acme" }),
+      async () => {
+        throw new JsonapiError({
+          status: 422,
+          errors: [
+            {
+              detail: "Street is required.",
+              source: { pointer: "/data/attributes/address/street" },
+            },
+          ],
+        });
+      },
+      (id: string) => `/${id}`,
+    );
+    assert(P.isTagged(result, "Failure"));
+    expect(result.state.errors).toEqual({ address: { street: ["Street is required."] } });
+  });
+
   it("routes a 409 JsonapiError with no source.pointer to the root message surface", async () => {
     const result = await runFormAction(
       form,

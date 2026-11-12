@@ -18,6 +18,7 @@ export * as Command from "./Command.ts";
 export * as Constraints from "./Constraints.ts";
 export * as Errors from "./Errors.ts";
 export * as Field from "./Field.ts";
+export * as Focus from "./Focus.ts";
 export * as Form from "./Form.ts";
 export * as FormBuilder from "./FormBuilder.ts";
 export * as FormData from "./FormData.ts";

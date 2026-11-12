@@ -5,8 +5,21 @@
  * create page, an unrelated shape on an `Error` action result, and only
  * sometimes the effect-forms state.
  */
+import { Focus } from "@thomasfosterau/effect-forms";
 import { describe, expect, it } from "vite-plus/test";
 import { formStateOf, issuesFor, rootIssuesOf, valueOf } from "../../src/kit/index.ts";
+
+/** The input the routes below post: a focus on each of its fields. */
+interface Garden {
+  readonly name: string;
+  readonly description: string;
+  readonly visibility: string;
+  readonly count: number;
+  readonly curator: string;
+  readonly address: { readonly street: string };
+  readonly tags: ReadonlyArray<string>;
+}
+const field = Focus.root<Garden>();
 
 const failedSubmission = {
   form: {
@@ -31,18 +44,18 @@ describe("formStateOf", () => {
   it("drops a malformed error tree rather than the whole state", () => {
     const state = formStateOf({ form: { data: { name: "Balcony" }, errors: { name: [3] } } });
     expect(state?.errors).toBeUndefined();
-    expect(valueOf(state, "name")).toBe("Balcony");
+    expect(valueOf(state, field.key("name"))).toBe("Balcony");
   });
 });
 
 describe("issuesFor", () => {
   it("returns a field's messages", () => {
-    expect(issuesFor(formStateOf(failedSubmission), "name")).toEqual(["Too short"]);
+    expect(issuesFor(formStateOf(failedSubmission), field.key("name"))).toEqual(["Too short"]);
   });
 
   it("returns none for a field with no messages, and for no state at all", () => {
-    expect(issuesFor(formStateOf(failedSubmission), "description")).toEqual([]);
-    expect(issuesFor(undefined, "name")).toEqual([]);
+    expect(issuesFor(formStateOf(failedSubmission), field.key("description"))).toEqual([]);
+    expect(issuesFor(undefined, field.key("name"))).toEqual([]);
   });
 });
 
@@ -60,31 +73,51 @@ describe("valueOf", () => {
   const state = formStateOf(failedSubmission);
 
   it("repopulates the posted value over the fallback", () => {
-    expect(valueOf(state, "name", "Stored name")).toBe("Balcony");
+    expect(valueOf(state, field.key("name"), "Stored name")).toBe("Balcony");
   });
 
   it("keeps a posted blank blank — the user cleared the box deliberately", () => {
     // The seeded fallback must NOT come back here: on an edit form a blank
     // optional field is the instruction to clear the column.
-    expect(valueOf(state, "description", "Stored description")).toBe("");
+    expect(valueOf(state, field.key("description"), "Stored description")).toBe("");
   });
 
   it("falls back when the field was never posted", () => {
-    expect(valueOf(state, "curator", "Stored curator")).toBe("Stored curator");
-    expect(valueOf(undefined, "name", "Stored name")).toBe("Stored name");
+    expect(valueOf(state, field.key("curator"), "Stored curator")).toBe("Stored curator");
+    expect(valueOf(undefined, field.key("name"), "Stored name")).toBe("Stored name");
   });
 
   it("falls back to the empty string when no fallback is given", () => {
-    expect(valueOf(undefined, "name")).toBe("");
+    expect(valueOf(undefined, field.key("name"))).toBe("");
   });
 
   it("renders a non-string posted value rather than dropping it", () => {
-    expect(valueOf(state, "count")).toBe("3");
+    expect(valueOf(state, field.key("count"))).toBe("3");
   });
 
   it("falls back for a posted null", () => {
-    expect(valueOf(formStateOf({ form: { data: { name: null } } }), "name", "Stored")).toBe(
-      "Stored",
-    );
+    expect(
+      valueOf(formStateOf({ form: { data: { name: null } } }), field.key("name"), "Stored"),
+    ).toBe("Stored");
+  });
+});
+
+describe("nested fields", () => {
+  const state = formStateOf({
+    form: {
+      data: { address: { street: "Elm" }, tags: ["a", true] },
+      errors: { address: { street: ["Required"] }, tags: { _errors: ["Too few"], "1": ["Bad"] } },
+    },
+  });
+
+  it("reads a nested field's posted value and messages through its focus", () => {
+    expect(valueOf(state, field.key("address").key("street"))).toBe("Elm");
+    expect(issuesFor(state, field.key("address").key("street"))).toEqual(["Required"]);
+  });
+
+  it("reads array items and an array's own messages", () => {
+    expect(valueOf(state, field.key("tags").at(1))).toBe("true");
+    expect(issuesFor(state, field.key("tags").at(1))).toEqual(["Bad"]);
+    expect(issuesFor(state, field.key("tags"))).toEqual(["Too few"]);
   });
 });

@@ -28,7 +28,7 @@ import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { type Form, Result, State, type Validate } from "@thomasfosterau/effect-forms";
+import { type Form, type Issues, Result, State, type Validate } from "@thomasfosterau/effect-forms";
 import {
   type Classify,
   type CommandFailure,
@@ -38,7 +38,7 @@ import {
   type ErrorObject,
   jsonapiFailure,
 } from "./CommandFailure.ts";
-import { fieldFromPointer } from "./Pointer.ts";
+import { pathFromPointer } from "./Pointer.ts";
 
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
@@ -194,18 +194,23 @@ export interface FormActionOptions<A, O, E = never, F = never> {
   readonly unrecognised?: "error" | "throw";
 }
 
-/** The field path an error object's pointer routes to, or `[]` (the root). */
-const fieldPath = (error: ErrorObject): ReadonlyArray<string> =>
-  Option.toArray(
-    fieldFromPointer(
+/**
+ * The field path an error object's pointer routes to — the whole attribute
+ * path, so a nested attribute's error lands on its own field — or `[]` (the
+ * root).
+ */
+const fieldPath = (error: ErrorObject): Issues.FormPath =>
+  Option.getOrElse(
+    pathFromPointer(
       error.source !== undefined && "pointer" in error.source ? error.source.pointer : undefined,
     ),
+    (): Issues.FormPath => [],
   );
 
 /**
  * Route a recognised command failure onto the form state. A root issue lands
  * at the empty path, which the nested error tree exposes as `_errors` — the
- * form-level message surface (`form.errors._errors`).
+ * form-level message surface (the store's `formErrors`).
  */
 const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormState<A> =>
   P.isTagged(failure, "Routed")

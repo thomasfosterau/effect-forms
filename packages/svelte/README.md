@@ -33,7 +33,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
 
 <form method="post" use:form.enhance>
   <input name="name" bind:value={form.data.name} />
-  {#each form.errorsAt(["name"]) as message}<small>{message}</small>{/each}
+  {#each form.errorsAt((o) => o.key("name")) as message}<small>{message}</small>{/each}
 
   <button disabled={form.submitting}>
     {form.delayed ? "Saving…" : "Save"}

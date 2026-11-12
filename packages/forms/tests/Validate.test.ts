@@ -6,8 +6,10 @@ import * as Schema from "effect/Schema";
 import { assert, describe, expect } from "vite-plus/test";
 import { TestClock } from "effect/testing";
 import { getError } from "../src/Errors.ts";
+import * as Focus from "../src/Focus.ts";
 import {
   type AsyncFieldValidator,
+  on,
   resolveFieldTrigger,
   runAsyncFieldValidator,
   runSyncFieldValidator,
@@ -254,5 +256,52 @@ describe("resolveFieldTrigger", () => {
       async: Option.none(),
       asyncDebounceMs: 0,
     });
+  });
+});
+
+describe("on", () => {
+  interface Signup {
+    readonly username: string;
+    readonly tags: ReadonlyArray<string>;
+  }
+  const root = Focus.root<Signup>();
+  const data: Signup = { username: "ab", tags: ["x"] };
+
+  it("records the focus's path", () => {
+    expect(on(root.key("username"), {}).path).toEqual(["username"]);
+  });
+
+  it("runs the trigger's sync validator against the focused value", () => {
+    const bound = on(root.key("username"), {
+      onChange: (value) => value.length >= 3 || "Too short",
+      onBlur: () => "Blurred",
+    });
+    expect(Option.getOrElse(bound.resolve("change", data).sync, () => [])).toEqual([
+      { path: [], message: "Too short" },
+    ]);
+    expect(Option.getOrElse(bound.resolve("blur", data).sync, () => [])).toEqual([
+      { path: [], message: "Blurred" },
+    ]);
+    expect(bound.resolve("change", data).async).toEqual(Option.none());
+  });
+
+  it.effect("builds the trigger's debounced async run", () =>
+    Effect.gen(function* () {
+      const bound = on(root.key("username"), {
+        onChangeAsync: (value) => Effect.succeed(value === "taken" ? "Taken" : undefined),
+        asyncDebounceMs: 10,
+      });
+      const run = bound.resolve("change", { ...data, username: "taken" });
+      assert.isTrue(Option.isSome(run.async));
+      if (Option.isNone(run.async)) return;
+      const fiber = yield* Effect.forkChild(run.async.value);
+      yield* TestClock.adjust("10 millis");
+      expect(yield* Fiber.join(fiber)).toEqual([{ path: [], message: "Taken" }]);
+    }),
+  );
+
+  it("runs nothing where the focus finds no value", () => {
+    const bound = on(root.key("tags").at(3), { onChange: () => "Never" });
+    expect(bound.resolve("change", data)).toEqual({ sync: Option.none(), async: Option.none() });
   });
 });
