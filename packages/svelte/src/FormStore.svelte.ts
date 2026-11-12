@@ -557,11 +557,8 @@ export class FormStore<
   #fibers: Record<string, Fiber.Fiber<unknown>> = {};
   /** The error paths the last `refineEffect` run set, so the next run can clear exactly those before merging fresh ones. */
   #lastRefinementPaths: FormPath[] = [];
-  /**
-   * The data snapshot the field-tracking watcher last diffed against. Only
-   * ever diffed (`computeTainted` takes `unknown`), so typed no tighter.
-   */
-  #previousData: unknown;
+  /** The data snapshot the field-tracking watcher last diffed against. */
+  #previousData: A;
 
   /** The runtime error tree behind {@link errors}: server errors merged with client errors. */
   readonly #mergedErrors: FormErrors = $derived(mergeSourced(this.#sourced));

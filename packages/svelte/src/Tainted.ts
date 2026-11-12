@@ -12,7 +12,7 @@
  * @module effect-forms-svelte/Tainted
  */
 
-import type { Issues } from "@thomasfosterau/effect-forms";
+import type { Issues, Path } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
@@ -25,17 +25,21 @@ export interface TaintedFields {
   readonly [key: string]: boolean | TaintedFields | undefined;
 }
 
-/** An object or array read through its string keys. */
-type Indexable = { readonly [key: string]: unknown };
+/**
+ * A form-data object or array read through its own string keys: each own
+ * enumerable key of a {@link Path.FormValue} container holds a `FormValue`.
+ */
+type Indexable = { readonly [key: string]: Path.FormValue };
 
 /** A non-null object or array, indexable by its own string keys. */
-const isObject = <V>(value: V): value is V & Indexable => P.isObjectOrArray(value);
+const isObject = <V extends Path.FormValue>(value: V): value is V & Indexable =>
+  P.isObjectOrArray(value);
 
 /** The union of both containers' own enumerable keys, `a`'s first. */
 const unionKeys = (a: Indexable, b: Indexable): Array<string> => Arr.union(R.keys(a), R.keys(b));
 
-/** Structural deep equality for plain JSON-ish values of the same type. */
-export function deepEqual<A>(a: A, b: A): boolean {
+/** Structural deep equality for form data trees of the same type. */
+export function deepEqual<A extends Path.FormValue>(a: A, b: A): boolean {
   if (a === b) return true;
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((item, i) => deepEqual(item, b[i]));
@@ -47,7 +51,8 @@ export function deepEqual<A>(a: A, b: A): boolean {
 }
 
 /** Whether two containers are the same kind (both arrays, or both plain objects). */
-const sameKind = <A>(a: A, b: A): boolean => Array.isArray(a) === Array.isArray(b);
+const sameKind = <A extends Path.FormValue>(a: A, b: A): boolean =>
+  Array.isArray(a) === Array.isArray(b);
 
 /**
  * Compare `current` against `original`, returning the nested tainted tree.
@@ -56,7 +61,7 @@ const sameKind = <A>(a: A, b: A): boolean => Array.isArray(a) === Array.isArray(
  * row taints only that index — `taintedAt(["items", 2, "name"])` stays precise.
  * Keys present in either side are considered.
  */
-export function computeTainted<A>(original: A, current: A): TaintedFields {
+export function computeTainted<A extends Path.FormValue>(original: A, current: A): TaintedFields {
   if (!isObject(original) || !isObject(current) || !sameKind(original, current)) return {};
 
   return R.fromEntries(
