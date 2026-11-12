@@ -75,6 +75,7 @@ import { validateData, validateField } from "./ClientValidate.ts";
 import {
   computeDataApplication,
   type FormUpdate,
+  isActionResponse,
   objectToFormData,
   parseActionResult,
   resultToUpdate,
@@ -352,7 +353,10 @@ const defaultSubmit = async <A, Message>(
   });
   const json: Promise<unknown> = response.json();
   return json.then(
-    (parsed) => parseActionResult<A, Message>(parsed, response.status),
+    (parsed): FormActionResult<A, Message> =>
+      isActionResponse<A, Message>(parsed)
+        ? parseActionResult(parsed, response.status)
+        : { _tag: "Error", status: response.status, message: "Unrecognised form response" },
     (): FormActionResult<A, Message> => ({
       _tag: "Error",
       status: response.status,
@@ -1005,10 +1009,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Run a field's registered sync validator and set its client messages. */
-  #applySyncFieldValidator(
+  #applySyncFieldValidator<V>(
     path: FormPath,
-    validator: Validate.SyncFieldValidator<unknown>,
-    value: unknown,
+    validator: Validate.SyncFieldValidator<V>,
+    value: V,
   ): void {
     this.#setClientMessagesAt(path, Validate.runSyncFieldValidator(validator, value));
     this.#hasValidated = true;
@@ -1041,11 +1045,11 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * the fiber is itself later interrupted) replaces the field's client
    * messages.
    */
-  #runAsyncFieldValidator(
+  #runAsyncFieldValidator<V>(
     path: FormPath,
     trigger: FieldTrigger,
-    validator: Validate.AsyncFieldValidator<unknown, R>,
-    value: unknown,
+    validator: Validate.AsyncFieldValidator<V, R>,
+    value: V,
     debounceMs: number,
   ): void {
     const fiberKey = `${Path.toString(path)}:${trigger}`;

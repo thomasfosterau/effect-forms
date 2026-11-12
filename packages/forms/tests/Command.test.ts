@@ -475,7 +475,7 @@ describe("Command.createAdapter / updateAdapter — boolean, enum, structured ki
     expect(update({ id: "u1", visibility: "unlisted" }).visibility).toBe("unlisted");
   });
 
-  it("structured: JSON.parses a present value; blank skips (create) or clears (update, clearable)", () => {
+  it("structured: decodes a present value; blank skips (create) or clears (update, clearable)", () => {
     expect(
       create({ title: "T", parentId: "p1", caption: '{"type":"doc","text":"hi"}' }).caption,
     ).toEqual({ type: "doc", text: "hi" });
@@ -487,8 +487,10 @@ describe("Command.createAdapter / updateAdapter — boolean, enum, structured ki
     });
   });
 
-  it("structured: throws on malformed JSON — same failure mode as jsonRowsFromField, left to the caller", () => {
-    expect(() => create({ title: "T", parentId: "p1", caption: "not json" })).toThrow(SyntaxError);
+  it("structured: throws a plain Error on malformed JSON — same failure mode as jsonRowsFromField, left to the caller", () => {
+    expect(() => create({ title: "T", parentId: "p1", caption: "not json" })).toThrow(
+      "expected JSON",
+    );
   });
 });
 
