@@ -25,7 +25,7 @@ import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import { type Form, Result, State } from "@thomasfosterau/effect-forms";
 import {
   type Classify,
@@ -72,10 +72,11 @@ const isConflict = (cause: unknown): boolean =>
   cause.status === 409 &&
   (P.isTagged(cause, "JsonapiError") || P.isTagged(cause, "ErrorResponse"));
 
-const submittedId = (input: unknown): Option.Option<string> =>
-  P.isObjectOrArray(input) && P.hasProperty(input, "id") && P.isString(input.id) && input.id !== ""
-    ? Option.some(input.id)
-    : Option.none();
+/** A command input carrying the caller's own non-empty client-generated `id`. */
+const SubmittedId = Schema.Struct({ id: Schema.NonEmptyString });
+
+/** Decode a command input's own `id`, `None` when it carries no non-empty string `id`. */
+const decodeSubmittedId = Schema.decodeUnknownOption(SubmittedId);
 
 const retryOwnConflict = <I, O>(
   create: Command<I, O>,
@@ -84,11 +85,14 @@ const retryOwnConflict = <I, O>(
 ): Effect.Effect<O, unknown> =>
   toEffect(() => create(input)).pipe(
     Effect.catch((cause) =>
-      Option.match(isConflict(cause) ? submittedId(input) : Option.none(), {
-        onNone: () => Effect.fail(cause),
-        // The re-fetch failing rethrows the ORIGINAL conflict, not its own error.
-        onSome: (id) => toEffect(() => fetchExisting(id)).pipe(Effect.mapError(() => cause)),
-      }),
+      Option.match(
+        isConflict(cause) ? Option.map(decodeSubmittedId(input), ({ id }) => id) : Option.none(),
+        {
+          onNone: () => Effect.fail(cause),
+          // The re-fetch failing rethrows the ORIGINAL conflict, not its own error.
+          onSome: (id) => toEffect(() => fetchExisting(id)).pipe(Effect.mapError(() => cause)),
+        },
+      ),
     ),
   );
 

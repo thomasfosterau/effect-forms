@@ -9,6 +9,6 @@ Absent values are `Option`s instead of `null` / `undefined` in the store's callb
 - `FormUpdate`'s members are `readonly x?: T` with no explicit `| undefined`; `resultToUpdate` omits `message` when the state carries none.
 - `/kit`: `CommandFailure.detailOf(error, fallback?)` takes a defined `ErrorObject` (was `ErrorObject | undefined`).
 - `/kit`: `FormActionOptions`' members are `readonly x?: T` with no explicit `| undefined`; `fieldFromPointer(pointer?)` takes an optional argument.
-- `dispatchChange(before, after, listeners?)` takes the listeners as an optional argument.
+- `dispatchChange<A>(before: A, after: A, listeners?)` takes the listeners as an optional argument (was a required `FormListeners | undefined`).
 
 `errorsAt`, `validateField` and the store follow the core's `Option`-returning `Errors.getError`, `Path.IndexMap` and `Mode.ParsedMode.debounce`; their own results are unchanged.

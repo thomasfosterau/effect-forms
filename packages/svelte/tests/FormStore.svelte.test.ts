@@ -211,29 +211,6 @@ describe("setValue on the deeply-proxied store data", () => {
   });
 });
 
-describe("move — carries per-index state with its row", () => {
-  const Tags = Schema.Struct({ tags: Schema.Array(Schema.String) });
-
-  it("moves the item and remaps its touched flag through the index map", () => {
-    const store = createForm({ schema: Tags, defaults: { tags: ["a", "b", "c"] } });
-    store.setTouched(["tags", 0], true);
-    store.move(["tags"], 0, 2);
-    expect(store.valueAt(["tags"])).toEqual(["b", "c", "a"]);
-    expect(store.isTouchedAt(["tags", 2])).toBe(true);
-    expect(store.isTouchedAt(["tags", 0])).toBe(false);
-    expect(store.isDirtyAt(["tags"])).toBe(true);
-  });
-
-  it("ignores an out-of-range or no-op move", () => {
-    const store = createForm({ schema: Tags, defaults: { tags: ["a", "b"] } });
-    store.move(["tags"], 0, 0);
-    store.move(["tags"], 0, 2);
-    store.move(["tags"], -1, 1);
-    store.move(["tags"], 0, -1);
-    expect(store.valueAt(["tags"])).toEqual(["a", "b"]);
-  });
-});
-
 describe("constraints — createForm overload symmetry (issue #1330)", () => {
   const Constrained = Schema.Struct({
     title: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(50)),
@@ -379,5 +356,33 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
     store.validate();
     await settled(store);
     expect(store.errorsAt(["age"])).not.toContain("must be the number 42");
+  });
+});
+
+describe("move — reorders an array field, carrying per-index state", () => {
+  const makeStore = () =>
+    createForm({
+      schema: Schema.Struct({ tags: Schema.Array(Schema.String) }),
+      defaults: { tags: ["a", "b", "c"] },
+    });
+
+  it("moves the item and its touched flag to the new index", () => {
+    const store = makeStore();
+    store.setTouched(["tags", 0]);
+    store.move(["tags"], 0, 2);
+    expect(store.valueAt(["tags"])).toEqual(["b", "c", "a"]);
+    expect(store.isTouchedAt(["tags", 2])).toBe(true);
+    expect(store.isTouchedAt(["tags", 0])).toBe(false);
+    expect(store.isDirtyAt(["tags"])).toBe(true);
+  });
+
+  it("ignores an out-of-range or no-op move", () => {
+    const store = makeStore();
+    store.move(["tags"], 0, 3);
+    store.move(["tags"], -1, 1);
+    store.move(["tags"], 1, 1);
+    store.move(["tags"], 0, -1);
+    expect(store.valueAt(["tags"])).toEqual(["a", "b", "c"]);
+    expect(store.isDirtyAt(["tags"])).toBe(false);
   });
 });

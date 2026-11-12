@@ -29,13 +29,13 @@ export interface TaintedFields {
 type Indexable = { readonly [key: string]: unknown };
 
 /** A non-null object or array, indexable by its own string keys. */
-const isObject = (value: unknown): value is Indexable => P.isObjectOrArray(value);
+const isObject = <V>(value: V): value is V & Indexable => P.isObjectOrArray(value);
 
 /** The union of both containers' own enumerable keys, `a`'s first. */
 const unionKeys = (a: Indexable, b: Indexable): Array<string> => Arr.union(R.keys(a), R.keys(b));
 
-/** Structural deep equality for plain JSON-ish values. */
-export function deepEqual(a: unknown, b: unknown): boolean {
+/** Structural deep equality for plain JSON-ish values of the same type. */
+export function deepEqual<A>(a: A, b: A): boolean {
   if (a === b) return true;
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((item, i) => deepEqual(item, b[i]));
@@ -47,7 +47,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 /** Whether two containers are the same kind (both arrays, or both plain objects). */
-const sameKind = (a: unknown, b: unknown): boolean => Array.isArray(a) === Array.isArray(b);
+const sameKind = <A>(a: A, b: A): boolean => Array.isArray(a) === Array.isArray(b);
 
 /**
  * Compare `current` against `original`, returning the nested tainted tree.
@@ -56,7 +56,7 @@ const sameKind = (a: unknown, b: unknown): boolean => Array.isArray(a) === Array
  * row taints only that index — `taintedAt(["items", 2, "name"])` stays precise.
  * Keys present in either side are considered.
  */
-export function computeTainted(original: unknown, current: unknown): TaintedFields {
+export function computeTainted<A>(original: A, current: A): TaintedFields {
   if (!isObject(original) || !isObject(current) || !sameKind(original, current)) return {};
 
   return R.fromEntries(
@@ -77,9 +77,8 @@ export function computeTainted(original: unknown, current: unknown): TaintedFiel
 
 /** Whether anything in the tree is tainted. */
 export function isAnyTainted(tainted: TaintedFields): boolean {
-  return Arr.some(
-    R.values(tainted),
-    (value) => value === true || (isObject(value) && isAnyTainted(value)),
+  return Arr.some(R.values(tainted), (value) =>
+    P.isUndefined(value) ? false : P.isBoolean(value) ? value : isAnyTainted(value),
   );
 }
 
@@ -115,9 +114,8 @@ export function taintedLeafPaths(tainted: TaintedFields): FormPath[] {
     Arr.flatMap(R.toEntries(node), ([key, value]): FormPath[] => {
       if (P.isUndefined(value)) return [];
       const segment: string | number = /^\d+$/.test(key) ? Number(key) : key;
-      if (value === true) return [[...path, segment]];
-      if (isObject(value)) return walk(value, [...path, segment]);
-      return [];
+      if (P.isBoolean(value)) return value ? [[...path, segment]] : [];
+      return walk(value, [...path, segment]);
     });
 
   return walk(tainted, []);

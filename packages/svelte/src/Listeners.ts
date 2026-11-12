@@ -69,7 +69,7 @@ export interface FormListeners {
  * elements are diffed by index, and a container-vs-scalar kind change taints
  * the whole field rather than recursing.
  */
-export function changeEvents(before: unknown, after: unknown): ListenerEvent[] {
+export function changeEvents<A>(before: A, after: A): ListenerEvent[] {
   return taintedLeafPaths(computeTainted(before, after)).map((path) => ({
     path,
     value: Path.getAt(after, path),
@@ -82,7 +82,7 @@ export function changeEvents(before: unknown, after: unknown): ListenerEvent[] {
  * leaf's field-level `onChange` if one is registered. Synchronous — debounce
  * is the caller's concern (see the module doc).
  */
-export function dispatchChange(before: unknown, after: unknown, listeners?: FormListeners): void {
+export function dispatchChange<A>(before: A, after: A, listeners?: FormListeners): void {
   if (!listeners) return;
   Arr.forEach(changeEvents(before, after), (event) => {
     listeners.onChange?.({ path: event.path, data: after });

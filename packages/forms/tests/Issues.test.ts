@@ -5,8 +5,8 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { schemaIssuesToFormIssues } from "../src/Issues.ts";
 
-const issueOf = (schema: Schema.Decoder<unknown>, input: unknown): SchemaIssue.Issue => {
-  const exit = Schema.decodeUnknownExit(schema)(input);
+const issueOf = (schema: Schema.Decoder<unknown>, input: Schema.Json): SchemaIssue.Issue => {
+  const exit = Schema.decodeExit(schema)(input);
   assert(Exit.isFailure(exit), "expected the decode to fail");
   const reason = exit.cause.reasons[0];
   assert(
