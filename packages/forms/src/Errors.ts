@@ -21,8 +21,8 @@
  */
 
 import * as Arr from "effect/Array";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import type { FormIssue, FormPath } from "./Issues.ts";
 import { type IndexMap, remapIndex } from "./Path.ts";
 
@@ -61,7 +61,7 @@ interface MutableNode {
 }
 
 const isMessageList = <T>(value: T): value is Extract<T, readonly string[]> =>
-  Arr.isArray(value) && Arr.every(value, Predicate.isString);
+  Arr.isArray(value) && Arr.every(value, P.isString);
 
 const ownErrors = (node: MutableNode): string[] => {
   const existing = node[ROOT_ERROR_KEY];
@@ -137,7 +137,7 @@ export function issuesToErrors(issues: ReadonlyArray<FormIssue>): FormErrors {
  */
 export function flattenErrors(errors: FormErrors): FormIssue[] {
   const walk = (node: FormErrors, path: Array<string | number>): Array<FormIssue> =>
-    Arr.flatMap(Rec.keys<string, FormErrors[string]>(node), (key): Array<FormIssue> => {
+    Arr.flatMap(R.keys<string, FormErrors[string]>(node), (key): Array<FormIssue> => {
       if (key === ROOT_ERROR_KEY) {
         return Arr.map(node[ROOT_ERROR_KEY] ?? [], (message) => ({ path, message }));
       }

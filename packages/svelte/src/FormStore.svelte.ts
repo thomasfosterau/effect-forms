@@ -65,7 +65,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
 import type * as SchemaIssue from "effect/SchemaIssue";
@@ -878,7 +878,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   #defaultItem(path: FormPath) {
     if (this.#options.schema) return Field.defaultItemAt(this.#options.schema, path);
     const fields = this.#options.fields;
-    if (fields && path.length === 1 && Predicate.isString(path[0])) {
+    if (fields && path.length === 1 && P.isString(path[0])) {
       const def = fields[path[0]];
       if (def && Field.isArrayFieldDef(def)) return Field.defaultValue(def.itemSchema);
     }
@@ -1213,7 +1213,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   #applyRedirect(location: string): void {
     this.#lastSubmitOutcome = "success";
     if (this.#options.onRedirect) this.#options.onRedirect({ location });
-    else if (!Predicate.isUndefined(globalThis.window)) window.location.assign(location);
+    else if (!P.isUndefined(globalThis.window)) window.location.assign(location);
   }
 
   #applyError(error: string): void {
@@ -1238,7 +1238,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     // form data (plain, structured-cloneable values) is a copy of the same shape.
     const submittedData = $state.snapshot(this.#lastSubmitted ?? this.data) as A;
     const applied = computeDataApplication({
-      isSuccess: Predicate.isTagged(result, "Success"),
+      isSuccess: P.isTagged(result, "Success"),
       appliedData: data,
       initial: this.#initial,
       // The snapshot actually sent (see `#runSubmit`), not the live `data` —
@@ -1294,8 +1294,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
     try {
       const submit = this.#options.submit ?? defaultSubmit;
-      const action =
-        node.action || (Predicate.isUndefined(globalThis.location) ? "" : location.href);
+      const action = node.action || (P.isUndefined(globalThis.location) ? "" : location.href);
       let result: FormActionResult<A, Message>;
       if (resolved !== undefined) {
         result = resolved;
@@ -1307,7 +1306,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       this.#options.onResult?.({ result });
       this.#applyUpdate(resultToUpdate(result), result);
     } catch (cause) {
-      const message = Predicate.isError(cause) ? cause.message : "Submission failed";
+      const message = P.isError(cause) ? cause.message : "Submission failed";
       this.#lastSubmitOutcome = "failure";
       this.#options.onError?.({ error: message });
     } finally {
@@ -1333,7 +1332,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     const beforeUnload = (event: BeforeUnloadEvent): void => {
       if (this.#options.taintedMessage && this.isTainted) event.preventDefault();
     };
-    if (this.#options.taintedMessage && !Predicate.isUndefined(globalThis.window)) {
+    if (this.#options.taintedMessage && !P.isUndefined(globalThis.window)) {
       window.addEventListener("beforeunload", beforeUnload);
     }
 
@@ -1389,7 +1388,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     return {
       destroy: () => {
         node.removeEventListener("submit", handleSubmit);
-        if (!Predicate.isUndefined(globalThis.window))
+        if (!P.isUndefined(globalThis.window))
           window.removeEventListener("beforeunload", beforeUnload);
         stopWatching?.();
         stopFieldWatching?.();

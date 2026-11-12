@@ -21,8 +21,8 @@
  */
 
 import * as Arr from "effect/Array";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import { parseFieldPath } from "./FormData.ts";
 import type { FormPath } from "./Issues.ts";
 
@@ -36,9 +36,7 @@ export function getAt(obj: unknown, path: FormPath): unknown {
   // A missing key reads as `undefined` either way, so guarding on `in` first
   // matches a plain property read on any object or array.
   return Arr.reduce(path, obj, (current, segment) =>
-    Predicate.isObjectOrArray(current) && Predicate.hasProperty(current, segment)
-      ? current[segment]
-      : undefined,
+    P.isObjectOrArray(current) && P.hasProperty(current, segment) ? current[segment] : undefined,
   );
 }
 
@@ -77,11 +75,7 @@ export function setAt<T>(obj: T, path: FormPath, value: unknown): T {
       clone[head] = Arr.match(rest, {
         onEmpty: () => value,
         onNonEmpty: (tail) =>
-          setAt(
-            Predicate.isObjectOrArray(child) ? child : Predicate.isNumber(tail[0]) ? [] : {},
-            tail,
-            value,
-          ),
+          setAt(P.isObjectOrArray(child) ? child : P.isNumber(tail[0]) ? [] : {}, tail, value),
       });
       // SAFETY: `clone` is a shallow copy of `obj` (an array when `obj` is
       // one, a plain object otherwise) differing only at `head`, where the
@@ -104,7 +98,7 @@ export function isUnder(path: FormPath, root: FormPath): boolean {
  */
 export function toString(path: FormPath): string {
   return Arr.reduce(path, "", (out, segment) =>
-    Predicate.isNumber(segment) ? `${out}[${segment}]` : out === "" ? segment : `${out}.${segment}`,
+    P.isNumber(segment) ? `${out}[${segment}]` : out === "" ? segment : `${out}.${segment}`,
   );
 }
 
@@ -242,7 +236,7 @@ export const clearAll: IndexMap = () => null;
 export function remapIndex(path: FormPath, arrayPath: FormPath, map: IndexMap): FormPath | null {
   if (!isUnder(path, arrayPath) || path.length === arrayPath.length) return path;
   const segment = path[arrayPath.length];
-  if (!Predicate.isNumber(segment)) return path;
+  if (!P.isNumber(segment)) return path;
   const mapped = map(segment);
   if (mapped === null) return null;
   if (mapped === segment) return path;
@@ -259,8 +253,8 @@ export function remapKeyedRecord<T>(
   arrayPath: FormPath,
   map: IndexMap,
 ): Record<string, T> {
-  return Rec.fromEntries(
-    Arr.flatMap(Rec.toEntries(record), ([key, value]) => {
+  return R.fromEntries(
+    Arr.flatMap(R.toEntries(record), ([key, value]) => {
       const remapped = remapIndex(fromString(key), arrayPath, map);
       return remapped === null ? [] : [[toString(remapped), value] as const];
     }),

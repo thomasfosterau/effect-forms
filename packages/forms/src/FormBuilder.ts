@@ -25,8 +25,8 @@
 
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import type {
   AnyFieldDef,
@@ -111,7 +111,7 @@ type AddFieldArgs = readonly [field: AnyFieldDef] | readonly [key: string, schem
 
 /** Whether `addField` was called with the `(key, schema)` overload — the only one whose first argument is a string. */
 const isKeyedArgs = (args: AddFieldArgs): args is readonly [key: string, schema: Schema.Top] =>
-  Predicate.isString(args[0]);
+  P.isString(args[0]);
 
 const proto = {
   [TypeId]: TypeId,
@@ -154,7 +154,7 @@ function build(
 
 /** Whether `u` is a {@link FormBuilder}. */
 export const isFormBuilder = (u: unknown): u is FormBuilder<FieldsRecord, unknown> =>
-  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, TypeId);
+  P.isObjectOrArray(u) && P.hasProperty(u, TypeId);
 
 /** The empty builder — the starting point for {@link FormBuilder.addField}. */
 // SAFETY: a builder with no fields and no refinements is exactly
@@ -173,8 +173,8 @@ export const empty = make;
 export function buildSchema<TFields extends FieldsRecord, R>(
   self: FormBuilder<TFields, R>,
 ): Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R> {
-  const structFields = Rec.fromEntries(
-    Arr.flatMap(Rec.toEntries(self.fields), ([key, def]): Array<readonly [string, Schema.Top]> => {
+  const structFields = R.fromEntries(
+    Arr.flatMap(R.toEntries(self.fields), ([key, def]): Array<readonly [string, Schema.Top]> => {
       if (Field.isArrayFieldDef(def)) return [[key, Schema.Array(def.itemSchema)]];
       if (Field.isFieldDef(def)) return [[key, def.schema]];
       return [];
@@ -183,9 +183,7 @@ export function buildSchema<TFields extends FieldsRecord, R>(
 
   const struct: Schema.Top = Schema.Struct(structFields);
   const schema = Arr.reduce(self.refinements, struct, (refined, refinement) =>
-    Predicate.isTagged(refinement, "sync")
-      ? refined.check(Schema.makeFilter(refinement.fn))
-      : refined,
+    P.isTagged(refinement, "sync") ? refined.check(Schema.makeFilter(refinement.fn)) : refined,
   );
 
   // SAFETY: the struct has exactly one property per entry of `self.fields` —
@@ -203,7 +201,7 @@ export function asyncRefinements<TFields extends FieldsRecord, R>(
   (values: DecodedFromFields<TFields>) => Effect.Effect<Schema.FilterOutput, never, R>
 > {
   return Arr.flatMap(self.refinements, (refinement) => {
-    if (!Predicate.isTagged(refinement, "async")) return [];
+    if (!P.isTagged(refinement, "async")) return [];
     // SAFETY: `refineEffect` stores a predicate typed against this builder's
     // decoded values, with its requirements folded into `R`; the builder keeps
     // it as `(values: unknown) => Effect<…, unknown>` only to share one

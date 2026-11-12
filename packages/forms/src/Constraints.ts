@@ -33,8 +33,8 @@
 
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as SchemaRepresentation from "effect/SchemaRepresentation";
@@ -91,7 +91,7 @@ function flattenChecks(
 ): Array<SchemaAST.Filter<never>> {
   if (checks === undefined) return [];
   return Arr.flatMap(checks, (check) =>
-    Predicate.isTagged(check, "FilterGroup") ? flattenChecks(check.checks) : [check],
+    P.isTagged(check, "FilterGroup") ? flattenChecks(check.checks) : [check],
   );
 }
 
@@ -142,7 +142,7 @@ const payloadPatches = {
 
 /** Whether `id` names a check {@link payloadPatches} has a patch for (an own key, never an inherited one). */
 const isPatchedCheckId = (id: string): id is keyof CheckPayloads =>
-  Rec.has<string, unknown>(payloadPatches, id);
+  R.has<string, unknown>(payloadPatches, id);
 
 /**
  * Look up and apply `payloadPatches[representation.id]`. The cast is sound:
@@ -239,7 +239,7 @@ function constraintsForType(type: SchemaAST.AST): InputConstraint | InputConstra
 
 /** Build the constraint tree for one object AST node. */
 function constraintsForObjects(ast: SchemaAST.Objects): InputConstraints {
-  return Rec.fromEntries(
+  return R.fromEntries(
     Arr.map(
       ast.propertySignatures,
       (ps) => [String(ps.name), constraintsForType(ps.type)] as const,
@@ -250,7 +250,7 @@ function constraintsForObjects(ast: SchemaAST.Objects): InputConstraints {
 /** Deep-merge constraint overrides over a derived tree. */
 function mergeConstraints(base: InputConstraints, overrides: InputConstraints): InputConstraints {
   const merged = Arr.flatMap(
-    Rec.keys<string, InputConstraints[string]>(overrides),
+    R.keys<string, InputConstraints[string]>(overrides),
     (key): Array<readonly [string, InputConstraint | InputConstraints]> => {
       const override = overrides[key];
       if (override === undefined) return [];
@@ -264,7 +264,7 @@ function mergeConstraints(base: InputConstraints, overrides: InputConstraints): 
       return [[key, override]];
     },
   );
-  return { ...base, ...Rec.fromEntries(merged) };
+  return { ...base, ...R.fromEntries(merged) };
 }
 
 /**
@@ -312,7 +312,7 @@ export function constraintAt(constraints: InputConstraints, path: FormPath): Inp
     path,
     constraints,
     (current, segment) => {
-      if (Predicate.isNumber(segment)) return current;
+      if (P.isNumber(segment)) return current;
       if (current === undefined || isLeafConstraint(current)) return undefined;
       return current[segment];
     },

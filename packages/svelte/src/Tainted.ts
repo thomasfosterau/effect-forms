@@ -14,8 +14,8 @@
 
 import type { Issues } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 
 type FormPath = Issues.FormPath;
 
@@ -28,11 +28,10 @@ export interface TaintedFields {
 type Indexable = { readonly [key: string]: unknown };
 
 /** A non-null object or array, indexable by its own string keys. */
-const isObject = (value: unknown): value is Indexable => Predicate.isObjectOrArray(value);
+const isObject = (value: unknown): value is Indexable => P.isObjectOrArray(value);
 
 /** The union of both containers' own enumerable keys, `a`'s first. */
-const unionKeys = (a: Indexable, b: Indexable): Array<string> =>
-  Arr.union(Record.keys(a), Record.keys(b));
+const unionKeys = (a: Indexable, b: Indexable): Array<string> => Arr.union(R.keys(a), R.keys(b));
 
 /** Structural deep equality for plain JSON-ish values. */
 export function deepEqual(a: unknown, b: unknown): boolean {
@@ -59,7 +58,7 @@ const sameKind = (a: unknown, b: unknown): boolean => Array.isArray(a) === Array
 export function computeTainted(original: unknown, current: unknown): TaintedFields {
   if (!isObject(original) || !isObject(current) || !sameKind(original, current)) return {};
 
-  return Record.fromEntries(
+  return R.fromEntries(
     Arr.flatMap(
       unionKeys(original, current),
       (key): Array<readonly [string, boolean | TaintedFields]> => {
@@ -67,7 +66,7 @@ export function computeTainted(original: unknown, current: unknown): TaintedFiel
         const after = current[key];
         if (isObject(before) && isObject(after) && sameKind(before, after)) {
           const nested = computeTainted(before, after);
-          return Record.isEmptyReadonlyRecord(nested) ? [] : [[key, nested]];
+          return R.isEmptyReadonlyRecord(nested) ? [] : [[key, nested]];
         }
         return deepEqual(before, after) ? [] : [[key, true]];
       },
@@ -78,7 +77,7 @@ export function computeTainted(original: unknown, current: unknown): TaintedFiel
 /** Whether anything in the tree is tainted. */
 export function isAnyTainted(tainted: TaintedFields): boolean {
   return Arr.some(
-    Record.values(tainted),
+    R.values(tainted),
     (value) => value === true || (isObject(value) && isAnyTainted(value)),
   );
 }
@@ -87,10 +86,9 @@ export function isAnyTainted(tainted: TaintedFields): boolean {
 export function isTaintedAt(tainted: TaintedFields, path: FormPath): boolean {
   const go = (node: boolean | TaintedFields | undefined, rest: FormPath): boolean =>
     Arr.match(rest, {
-      onEmpty: () =>
-        Predicate.isUndefined(node) ? false : Predicate.isBoolean(node) ? node : isAnyTainted(node),
+      onEmpty: () => (P.isUndefined(node) ? false : P.isBoolean(node) ? node : isAnyTainted(node)),
       onNonEmpty: (segments) =>
-        Predicate.isUndefined(node) || Predicate.isBoolean(node)
+        P.isUndefined(node) || P.isBoolean(node)
           ? node === true
           : go(node[String(Arr.headNonEmpty(segments))], Arr.tailNonEmpty(segments)),
     });
@@ -106,8 +104,8 @@ export function isTaintedAt(tainted: TaintedFields, path: FormPath): boolean {
  */
 export function taintedLeafPaths(tainted: TaintedFields): FormPath[] {
   const walk = (node: TaintedFields, path: Array<string | number>): FormPath[] =>
-    Arr.flatMap(Record.toEntries(node), ([key, value]): FormPath[] => {
-      if (Predicate.isUndefined(value)) return [];
+    Arr.flatMap(R.toEntries(node), ([key, value]): FormPath[] => {
+      if (P.isUndefined(value)) return [];
       const segment: string | number = /^\d+$/.test(key) ? Number(key) : key;
       if (value === true) return [[...path, segment]];
       if (isObject(value)) return walk(value, [...path, segment]);

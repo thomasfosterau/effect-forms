@@ -28,8 +28,8 @@ import * as Arr from "effect/Array";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 
 /** A render-time message thunk — pass the message function itself, uncalled. */
@@ -284,7 +284,7 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
   const withoutOmitted = (struct: CommandStructLike): CommandStructLike =>
     HashSet.size(omitted) === 0
       ? struct
-      : { fields: Record.filter(struct.fields, (_, key) => !HashSet.has(omitted, key)) };
+      : { fields: R.filter(struct.fields, (_, key) => !HashSet.has(omitted, key)) };
   const plan = Command.plan(withoutOmitted(options.create), withoutOmitted(options.update));
   const entries = build(builders);
 
@@ -301,7 +301,7 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
         message: `defineEntityForm: entry "${entry.key}" is declared twice`,
       });
     }
-    if (Predicate.isTagged(entry, "select")) validateSelectEntry(entry, field.value);
+    if (P.isTagged(entry, "select")) validateSelectEntry(entry, field.value);
     return HashSet.add(seen, entry.key);
   });
   const missing = Arr.map(

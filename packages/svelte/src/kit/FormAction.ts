@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import type * as Schema from "effect/Schema";
 import { type Form, Result, State } from "@thomasfosterau/effect-forms";
 import {
@@ -60,16 +60,13 @@ const toEffect = <O>(
 // ── Idempotent client-id create retry ──────────────────────────────────
 
 const isConflict = (cause: unknown): boolean =>
-  Predicate.isObjectOrArray(cause) &&
-  Predicate.hasProperty(cause, "status") &&
+  P.isObjectOrArray(cause) &&
+  P.hasProperty(cause, "status") &&
   cause.status === 409 &&
-  (Predicate.isTagged(cause, "JsonapiError") || Predicate.isTagged(cause, "ErrorResponse"));
+  (P.isTagged(cause, "JsonapiError") || P.isTagged(cause, "ErrorResponse"));
 
 const submittedId = (input: unknown): Option.Option<string> =>
-  Predicate.isObjectOrArray(input) &&
-  Predicate.hasProperty(input, "id") &&
-  Predicate.isString(input.id) &&
-  input.id !== ""
+  P.isObjectOrArray(input) && P.hasProperty(input, "id") && P.isString(input.id) && input.id !== ""
     ? Option.some(input.id)
     : Option.none();
 
@@ -166,7 +163,7 @@ const fieldPath = (error: ErrorObject): ReadonlyArray<string> =>
  * form-level message surface (`form.errors._errors`).
  */
 const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormState<A> =>
-  Predicate.isTagged(failure, "Routed")
+  P.isTagged(failure, "Routed")
     ? failure.errors.reduce(
         (acc, error) => State.withError(acc, fieldPath(error), detailOf(error)),
         state,
@@ -229,10 +226,7 @@ export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
                 options.unrecognised === "throw"
                   ? Effect.fail(cause)
                   : Effect.succeed(
-                      Result.errorResult(
-                        Predicate.isError(cause) ? cause.message : DEFAULT_MESSAGE,
-                        500,
-                      ),
+                      Result.errorResult(P.isError(cause) ? cause.message : DEFAULT_MESSAGE, 500),
                     ),
             });
           }),

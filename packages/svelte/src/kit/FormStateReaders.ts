@@ -21,7 +21,7 @@
  * @module effect-forms-svelte/kit/FormStateReaders
  */
 
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 
 /**
  * The subset of `State.FormState` the readers touch: the posted values and
@@ -39,9 +39,9 @@ export interface ActionFormState {
  * that carried a bare message instead.
  */
 export const formStateOf = (form: unknown): ActionFormState | undefined => {
-  if (!Predicate.isObjectOrArray(form) || !Predicate.hasProperty(form, "form")) return undefined;
+  if (!P.isObjectOrArray(form) || !P.hasProperty(form, "form")) return undefined;
   const state = form.form;
-  if (!Predicate.isObjectOrArray(state)) return undefined;
+  if (!P.isObjectOrArray(state)) return undefined;
   // SAFETY: `ActionFormState` is all-optional and every reader below reaches
   // `data` / `errors` only through optional chaining and re-checks the value it
   // finds (`Array.isArray`, `isString`), so any object answers totally.
@@ -84,5 +84,5 @@ export const valueOf = (
   const value = state?.data?.[field];
   if (value === undefined || value === null) return fallback;
   // oxlint-disable-next-line typescript/no-base-to-string -- posted values are form scalars (a checkbox's boolean, a number); rendering them is the point
-  return Predicate.isString(value) ? value : String(value);
+  return P.isString(value) ? value : String(value);
 };

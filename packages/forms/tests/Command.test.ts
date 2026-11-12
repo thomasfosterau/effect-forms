@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import {
   blankDefaults,
@@ -65,7 +65,7 @@ const UpdateThing = Schema.Struct({
 });
 
 const thing = plan(CreateThing, UpdateThing);
-const byKey = Record.fromEntries(Arr.map(thing.fields, (field) => [field.key, field] as const));
+const byKey = R.fromEntries(Arr.map(thing.fields, (field) => [field.key, field] as const));
 
 describe("Command.plan", () => {
   it("detects the client-generated create id", () => {
@@ -119,7 +119,7 @@ describe("Command.plan", () => {
 
   it("still throws at plan time on a Schema.declare'd field (uploads, images)", () => {
     const Upload = Schema.declare(
-      (u): u is { readonly bytes: Uint8Array } => Predicate.isObjectOrArray(u) && "bytes" in u,
+      (u): u is { readonly bytes: Uint8Array } => P.isObjectOrArray(u) && "bytes" in u,
     );
     expect(() =>
       plan(
@@ -218,7 +218,7 @@ describe("Command.plan — OptionFrom* fields", () => {
 
   it("still throws on an Option of a Schema.declare'd type", () => {
     const Upload = Schema.declare(
-      (u): u is { readonly bytes: Uint8Array } => Predicate.isObjectOrArray(u) && "bytes" in u,
+      (u): u is { readonly bytes: Uint8Array } => P.isObjectOrArray(u) && "bytes" in u,
     );
     expect(() =>
       plan(

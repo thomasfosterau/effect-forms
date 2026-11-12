@@ -7,7 +7,7 @@ import { Form, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { assert, describe, expect, it, vi } from "vite-plus/test";
 import { CommandFailure, runFormAction } from "../../src/kit/index.ts";
@@ -84,7 +84,7 @@ describe("runFormAction", () => {
     );
     expect(ran.called).toBe(false); // the command never runs on invalid input
     expect(result._tag).toBe("Failure");
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(400);
     expect(result.state.errors.name).toBeDefined();
   });
@@ -153,7 +153,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(result._tag).toBe("Failure");
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(422);
     expect(result.state.errors.name).toEqual(["Name is already taken by another organisation."]);
     // The posted value survives the failure so the form re-renders what was typed.
@@ -180,7 +180,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(result._tag).toBe("Failure");
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
     expect(result.state.errors._errors).toEqual(["That value is already in use."]);
     expect(result.state.errors.name).toBeUndefined();
@@ -196,7 +196,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(result._tag).toBe("Failure");
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(413);
     expect(result.state.errors._errors).toEqual(["The uploaded file exceeds the 10 MiB limit."]);
   });
@@ -217,7 +217,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(withDocument).toMatchObject({ _tag: "Failure", status: 422 });
-    assert(Predicate.isTagged(withDocument, "Failure"));
+    assert(P.isTagged(withDocument, "Failure"));
     expect(withDocument.state.errors.name).toEqual(["Name taken"]);
 
     const bare = await runFormAction(
@@ -233,7 +233,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(bare).toMatchObject({ _tag: "Failure", status: 502 });
-    assert(Predicate.isTagged(bare, "Failure"));
+    assert(P.isTagged(bare, "Failure"));
     expect(bare.state.errors._errors).toEqual(["Request failed (502)"]);
   });
 
@@ -261,7 +261,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(failed).toMatchObject({ _tag: "Failure", status: 422 });
-    assert(Predicate.isTagged(failed, "Failure"));
+    assert(P.isTagged(failed, "Failure"));
     expect(failed.state.errors.name).toEqual(["Taken"]);
   });
 
@@ -297,7 +297,7 @@ describe("runFormAction", () => {
       { classify },
     );
     expect(result).toMatchObject({ _tag: "Failure", status: 401 });
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.state.errors._errors).toEqual(["Invalid email or password"]);
   });
 
@@ -321,7 +321,7 @@ describe("runFormAction", () => {
     expect(redact).toHaveBeenCalledTimes(2);
     Arr.forEach([invalid, routed], (result) => {
       expect(result._tag).toBe("Failure");
-      assert(Predicate.isTagged(result, "Failure"));
+      assert(P.isTagged(result, "Failure"));
       expect(result.state.data).toEqual({ name: "" });
     });
   });
@@ -357,7 +357,7 @@ describe("runFormAction", () => {
       { idempotent: { clientId: true, fetchExisting } },
     );
     expect(result._tag).toBe("Failure");
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
     expect(result.state.errors._errors).toEqual(["Position collision."]);
   });
@@ -375,7 +375,7 @@ describe("runFormAction", () => {
     );
     expect(fetchExisting).not.toHaveBeenCalled();
     expect(result._tag).toBe("Failure");
-    assert(Predicate.isTagged(result, "Failure"));
+    assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
   });
 

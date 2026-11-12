@@ -9,7 +9,7 @@
  */
 
 import type { Result, State } from "@thomasfosterau/effect-forms";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import type { FormStore } from "./FormStore.svelte.ts";
 
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
@@ -25,7 +25,7 @@ export interface ServerActionResult {
 }
 
 const isFormActionData = (data: unknown): data is FormActionData & { form: FormState<unknown> } =>
-  Predicate.isObjectOrArray(data) && Predicate.hasProperty(data, "form") && Boolean(data.form);
+  P.isObjectOrArray(data) && P.hasProperty(data, "form") && Boolean(data.form);
 
 /**
  * Apply a derived form action's result to `form`. On a validation `failure`

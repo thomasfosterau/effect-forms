@@ -1,6 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import { assert, describe, expect, it } from "vite-plus/test";
@@ -95,7 +95,7 @@ describe("schemaIssuesToFormIssues shapes", () => {
     schemaIssuesToFormIssues(issueOf(schema, "x"), (issue) => {
       seen.push({
         tag: issue._tag,
-        inner: Predicate.isTagged(issue, "Filter") ? issue.issue._tag : undefined,
+        inner: P.isTagged(issue, "Filter") ? issue.issue._tag : undefined,
       });
       return "custom";
     });
