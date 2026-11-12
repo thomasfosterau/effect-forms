@@ -14,6 +14,7 @@
 
 import type { Issues } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 
@@ -84,15 +85,22 @@ export function isAnyTainted(tainted: TaintedFields): boolean {
 
 /** Whether the field at `path` (or anything beneath it) is tainted. */
 export function isTaintedAt(tainted: TaintedFields, path: FormPath): boolean {
-  const go = (node: boolean | TaintedFields | undefined, rest: FormPath): boolean =>
-    Arr.match(rest, {
-      onEmpty: () => (P.isUndefined(node) ? false : P.isBoolean(node) ? node : isAnyTainted(node)),
-      onNonEmpty: (segments) =>
-        P.isUndefined(node) || P.isBoolean(node)
-          ? node === true
-          : go(node[String(Arr.headNonEmpty(segments))], Arr.tailNonEmpty(segments)),
+  const go = (node: Option.Option<boolean | TaintedFields>, rest: FormPath): boolean =>
+    Option.match(node, {
+      onNone: () => false,
+      onSome: (present) =>
+        Arr.match(rest, {
+          onEmpty: () => (P.isBoolean(present) ? present : isAnyTainted(present)),
+          onNonEmpty: (segments) =>
+            P.isBoolean(present)
+              ? present
+              : go(
+                  Option.fromUndefinedOr(present[String(Arr.headNonEmpty(segments))]),
+                  Arr.tailNonEmpty(segments),
+                ),
+        }),
     });
-  return go(tainted, path);
+  return go(Option.some(tainted), path);
 }
 
 /**

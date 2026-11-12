@@ -236,10 +236,10 @@ export interface Submission<A, Message> {
   /**
    * The submit button that triggered this submission (its `name`/`value` is
    * already folded into {@link Submission.formData}, matching native
-   * `new FormData(form, submitter)` semantics), or `null` for an auto-submit
-   * (no button was clicked).
+   * `new FormData(form, submitter)` semantics), or `Option.none()` for an
+   * auto-submit (no button was clicked).
    */
-  readonly submitter: HTMLElement | null;
+  readonly submitter: Option.Option<HTMLElement>;
   /** Abort the submission entirely (no network request, no result applied). */
   readonly cancel: () => void;
   /**
@@ -391,7 +391,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * Raw (never proxied): it is only ever replaced wholesale by a detached
    * copy, so reading it yields that plain value.
    */
-  #lastSubmitted: A | undefined = $state.raw();
+  #lastSubmitted: Option.Option<A> = $state.raw(Option.none());
   /**
    * Per-field blurred flags, keyed by {@link Path.toString}. Drives `onBlur`
    * display (via {@link shouldShowError}) and {@link FieldMeta.isBlurred}.
@@ -417,7 +417,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Per-key run counter guarding `#validating` writes — see {@link FormStore.#runValidatorFiber}. */
   #validatingGeneration: Record<string, number> = {};
   /** The outcome of the last completed submission, for {@link isSubmitSuccessful}. */
-  #lastSubmitOutcome: "success" | "failure" | undefined = $state(undefined);
+  #lastSubmitOutcome: Option.Option<"success" | "failure"> = $state.raw(Option.none());
 
   readonly id: string;
   /** The tainted baseline `tainted`/`isTainted` compare against — rebased on every successful submit. */
@@ -426,8 +426,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly #mode: Mode.ParsedMode;
   readonly #attachmentKey = createAttachmentKey();
   readonly #runtime: ManagedRuntime.ManagedRuntime<R, never>;
-  #autoSubmitNode: HTMLFormElement | undefined;
-  #validateTimer: ReturnType<typeof setTimeout> | undefined;
+  #autoSubmitNode: Option.Option<HTMLFormElement> = Option.none();
+  #validateTimer: Option.Option<ReturnType<typeof setTimeout>> = Option.none();
   /** Per-field-listener debounce timers, keyed by `"change:<path>"` / `"blur:<path>"`. */
   #listenerTimers: Record<string, ReturnType<typeof setTimeout>> = {};
   /** Per-field validators, keyed by {@link Path.toString}; seeded from `options.validators`. */
@@ -467,7 +467,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Whether the form has ever been submitted (attempted). */
   readonly isSubmitted: boolean = $derived(this.submissionAttempts > 0);
   /** Whether the most recently *completed* submission succeeded. `false` before any submit completes. */
-  readonly isSubmitSuccessful: boolean = $derived(this.#lastSubmitOutcome === "success");
+  readonly isSubmitSuccessful: boolean = $derived(
+    Option.contains(this.#lastSubmitOutcome, "success"),
+  );
   /**
    * Whether the submit button should be enabled: not mid-submit, not
    * mid-validation, and either nothing has been validated yet (a pristine
@@ -484,7 +486,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly isTainted: boolean = $derived(isAnyTainted(this.tainted));
   /** The tree of fields changed since the last submission (empty before any submit). */
   readonly changedSinceSubmit: TaintedFields = $derived.by(() =>
-    this.#lastSubmitted === undefined ? {} : computeTainted(this.#lastSubmitted, this.data),
+    Option.match(this.#lastSubmitted, {
+      onNone: () => ({}),
+      onSome: (lastSubmitted) => computeTainted(lastSubmitted, this.data),
+    }),
   );
   /** Whether anything has changed since the last submission. */
   readonly hasChangedSinceSubmit: boolean = $derived(isAnyTainted(this.changedSinceSubmit));
@@ -543,7 +548,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /** The messages currently attached to `path` (for dynamic / nested paths). */
   errorsAt(path: FormPath): readonly string[] {
-    return Errors.getError(this.#mergedErrors, path) ?? [];
+    return Option.getOrElse(Errors.getError(this.#mergedErrors, path), () => []);
   }
 
   /** Whether the async validator(s) at `path` are currently running. */
@@ -663,7 +668,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       // debounced listener would report whatever the field holds *now*, not
       // what it held when it was blurred.
       const value = this.valueAt(path);
-      this.#scheduleListener(`blur:${key}`, field.debounce, () => field.onBlur?.({ path, value }));
+      this.#scheduleListener(`blur:${key}`, () => field.onBlur?.({ path, value }), field.debounce);
     }
     if (this.#mode.validation === "onBlur") {
       this.validate();
@@ -672,7 +677,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Run `run` now, or after `debounce` (per-key timer, replacing any pending run for that key). */
-  #scheduleListener(key: string, debounce: Duration.Input | undefined, run: () => void): void {
+  #scheduleListener(key: string, run: () => void, debounce?: Duration.Input): void {
     if (debounce === undefined) {
       run();
       return;
@@ -686,16 +691,18 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /**
    * The listeners table to dispatch change events against, with each field's
-   * `onChange` wrapped in this store's own debounce timer — or `undefined` if
+   * `onChange` wrapped in this store's own debounce timer — or `None` if
    * nothing is configured to consume a change (an `onMount`-only config, say),
    * so the deep watcher can skip diffing the data tree entirely. Built once
    * per {@link enhance} call rather than per change, since the listener table
    * itself doesn't change across the mount's lifetime.
    */
-  #buildDispatchListeners(): FormListeners | undefined {
+  #buildDispatchListeners(): Option.Option<FormListeners> {
     const listeners = this.#options.listeners;
-    if (!listeners || (listeners.onChange === undefined && !listeners.fields)) return undefined;
-    if (!listeners.fields) return listeners;
+    if (!listeners || (listeners.onChange === undefined && !listeners.fields)) {
+      return Option.none();
+    }
+    if (!listeners.fields) return Option.some(listeners);
     const fields = R.fromEntries(
       Arr.map(R.toEntries(listeners.fields), ([key, field]): [string, FieldListener] => [
         key,
@@ -703,14 +710,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
           ? {
               ...field,
               onChange: (input) =>
-                this.#scheduleListener(`change:${key}`, field.debounce, () =>
-                  field.onChange?.(input),
+                this.#scheduleListener(
+                  `change:${key}`,
+                  () => field.onChange?.(input),
+                  field.debounce,
                 ),
             }
           : field,
       ]),
     );
-    return { ...listeners, fields };
+    return Option.some({ ...listeners, fields });
   }
 
   /**
@@ -719,7 +728,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * submission. Stops `autoSubmit` from re-posting server-echoed data in a loop.
    */
   #hasUnsubmittedChanges(): boolean {
-    return this.#lastSubmitted === undefined ? this.isTainted : this.hasChangedSinceSubmit;
+    return Option.isNone(this.#lastSubmitted) ? this.isTainted : this.hasChangedSinceSubmit;
   }
 
   /**
@@ -859,10 +868,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /** Revert `data` to the values sent by the last submission (no-op before any submit). */
   revertToLastSubmit(): void {
-    if (this.#lastSubmitted === undefined) return;
+    if (Option.isNone(this.#lastSubmitted)) return;
     // `#lastSubmitted` is `$state.raw`, so this is the plain value, which
     // `structuredClone` accepts (a deep-`$state` proxy it would reject).
-    this.data = structuredClone(this.#lastSubmitted);
+    this.data = structuredClone(this.#lastSubmitted.value);
     this.#previousData = this.#detachedData();
     this.#sourced = emptySourced;
   }
@@ -885,8 +894,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /** Submit via the enhanced node, if one is mounted and not already in flight. */
   #autoSubmit(): void {
-    if (this.submitting || this.#autoSubmitNode === undefined) return;
-    void this.#runSubmit(this.#autoSubmitNode);
+    if (this.submitting || Option.isNone(this.#autoSubmitNode)) return;
+    void this.#runSubmit(this.#autoSubmitNode.value);
   }
 
   /** Debounced (in `onChange`) whole-form validation, auto-submitting when valid. */
@@ -895,13 +904,19 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       this.validate();
       if (this.#mode.autoSubmit && this.valid && this.#hasUnsubmittedChanges()) this.#autoSubmit();
     };
-    const ms = this.#mode.debounce;
-    if (ms !== null && ms > 0) {
-      clearTimeout(this.#validateTimer);
-      this.#validateTimer = setTimeout(run, ms);
+    const ms = Option.getOrElse(this.#mode.debounce, () => 0);
+    if (ms > 0) {
+      this.#clearValidateTimer();
+      this.#validateTimer = Option.some(setTimeout(run, ms));
     } else {
       run();
     }
+  }
+
+  /** Cancel the pending debounced whole-form validation, if any. */
+  #clearValidateTimer(): void {
+    if (Option.isSome(this.#validateTimer)) clearTimeout(this.#validateTimer.value);
+    this.#validateTimer = Option.none();
   }
 
   #recomputeValid(): void {
@@ -990,17 +1005,23 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   #runFieldTrigger(path: FormPath, trigger: FieldTrigger): void {
     const validators = this.#fieldValidators[Path.toString(path)];
     const value = getAt(this.data, path);
-    const resolved = Validate.resolveFieldTrigger(validators, trigger);
+    const resolved = Validate.resolveFieldTrigger(trigger, validators);
 
-    if (resolved.sync) {
-      this.#applySyncFieldValidator(path, resolved.sync, value);
+    if (Option.isSome(resolved.sync)) {
+      this.#applySyncFieldValidator(path, resolved.sync.value, value);
     } else if (this.#shouldFallBackToRevalidate(trigger)) {
       this.#applyRevalidateFallback(path);
     }
 
-    if (resolved.async) {
+    if (Option.isSome(resolved.async)) {
       this.#hasValidated = true;
-      this.#runAsyncFieldValidator(path, trigger, resolved.async, value, resolved.asyncDebounceMs);
+      this.#runAsyncFieldValidator(
+        path,
+        trigger,
+        resolved.async.value,
+        value,
+        resolved.asyncDebounceMs,
+      );
     }
   }
 
@@ -1124,25 +1145,24 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.posted = false;
     this.#touched = {};
     this.#dirtied = {};
-    this.#lastSubmitted = undefined;
+    this.#lastSubmitted = Option.none();
     this.#hasValidated = false;
     this.#validating = {};
     this.#lastRefinementPaths = [];
     this.submissionAttempts = 0;
-    this.#lastSubmitOutcome = undefined;
+    this.#lastSubmitOutcome = Option.none();
   }
 
   /** A serialisable snapshot for SvelteKit's `snapshot` capture/restore. */
   capture(): FormState<A, Message> {
-    return {
+    const state = State.make<A, Message>(this.#detachedData(), {
       id: this.id,
       valid: this.valid,
       posted: this.posted,
-      data: this.#detachedData(),
       errors: this.#mergedErrors,
-      message: this.message,
       constraints: this.constraints,
-    };
+    });
+    return this.message === undefined ? state : State.withMessage(state, this.message);
   }
 
   /**
@@ -1201,7 +1221,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#hasValidated = true;
     this.message = update.message;
     if (update.valid !== undefined) this.valid = update.valid;
-    this.#lastSubmitOutcome = this.valid ? "success" : "failure";
+    this.#lastSubmitOutcome = Option.some(this.valid ? "success" : "failure");
     this.posted = true;
     this.#options.onUpdated?.({
       form: { data: this.data, errors: this.#mergedErrors, valid: this.valid },
@@ -1209,13 +1229,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   #applyRedirect(location: string): void {
-    this.#lastSubmitOutcome = "success";
+    this.#lastSubmitOutcome = Option.some("success");
     if (this.#options.onRedirect) this.#options.onRedirect({ location });
     else if (!P.isUndefined(globalThis.window)) window.location.assign(location);
   }
 
   #applyError(error: string): void {
-    this.#lastSubmitOutcome = "failure";
+    this.#lastSubmitOutcome = Option.some("failure");
     this.#options.onError?.({ error });
   }
 
@@ -1233,7 +1253,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    */
   #applySubmittedData(data: A, result: FormActionResult<A, Message>): void {
     // Both are detached from `data`'s proxy: `#lastSubmitted` is `$state.raw`.
-    const submittedData = this.#lastSubmitted ?? this.#detachedData();
+    const submittedData = Option.getOrElse(this.#lastSubmitted, () => this.#detachedData());
     const applied = computeDataApplication({
       isSuccess: P.isTagged(result, "Success"),
       appliedData: data,
@@ -1246,9 +1266,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       resetForm: this.#options.resetForm ?? false,
       autoSubmit: this.#mode.autoSubmit,
     });
-    if (applied.data !== undefined) this.data = structuredClone(applied.data);
-    if (applied.rebaseTo !== undefined) {
-      this.#initial = structuredClone(applied.rebaseTo);
+    if (Option.isSome(applied.data)) this.data = structuredClone(applied.data.value);
+    if (Option.isSome(applied.rebaseTo)) {
+      this.#initial = structuredClone(applied.rebaseTo.value);
       this.#touched = {};
     }
     // Resync the field-tracking watcher's baseline to whatever `data` ends up
@@ -1257,13 +1277,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#previousData = this.#detachedData();
   }
 
-  async #runSubmit(node: HTMLFormElement, submitter: HTMLElement | null = null): Promise<void> {
+  async #runSubmit(
+    node: HTMLFormElement,
+    submitter: Option.Option<HTMLElement> = Option.none(),
+  ): Promise<void> {
     // `new FormData(node, submitter)` folds the clicked button's name/value in,
     // matching the native no-JS POST; the auto-submit path calls this with no
     // submitter by definition, so it keeps its current (button-less) body.
-    const formData = new FormData(node, submitter);
+    const formData = new FormData(node, Option.getOrNull(submitter));
     let cancelled = false;
-    let resolved: FormActionResult<A, Message> | undefined;
+    let resolved: Option.Option<FormActionResult<A, Message>> = Option.none();
     await this.#options.onSubmit?.({
       data: this.data,
       formData,
@@ -1273,14 +1296,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
         cancelled = true;
       },
       resolve: (result) => {
-        resolved = result;
+        resolved = Option.some(result);
       },
     });
     if (cancelled) return;
 
     // Snapshot what we're sending so `revertToLastSubmit` / `changedSinceSubmit`
     // measure against the submitted values.
-    this.#lastSubmitted = this.#detachedData();
+    this.#lastSubmitted = Option.some(this.#detachedData());
     this.submissionAttempts++;
 
     this.submitting = true;
@@ -1293,8 +1316,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       const submit = this.#options.submit ?? defaultSubmit;
       const action = node.action || (P.isUndefined(globalThis.location) ? "" : location.href);
       let result: FormActionResult<A, Message>;
-      if (resolved !== undefined) {
-        result = resolved;
+      if (Option.isSome(resolved)) {
+        result = resolved.value;
       } else if (this.#options.handler) {
         result = await this.#options.handler(this.data);
       } else {
@@ -1304,7 +1327,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       this.#applyUpdate(resultToUpdate(result), result);
     } catch (cause) {
       const message = P.isError(cause) ? cause.message : "Submission failed";
-      this.#lastSubmitOutcome = "failure";
+      this.#lastSubmitOutcome = Option.some("failure");
       this.#options.onError?.({ error: message });
     } finally {
       clearTimeout(delayTimer);
@@ -1322,7 +1345,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   enhance = (node: HTMLFormElement) => {
     const handleSubmit = (event: SubmitEvent): void => {
       event.preventDefault();
-      void this.#runSubmit(node, event.submitter);
+      void this.#runSubmit(node, Option.fromNullishOr(event.submitter));
     };
     node.addEventListener("submit", handleSubmit);
 
@@ -1334,7 +1357,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     }
 
     // Remember the mounted node so `onChange` / `onBlur` auto-submit can post.
-    this.#autoSubmitNode = node;
+    this.#autoSubmitNode = Option.some(node);
 
     this.#options.listeners?.onMount?.({ data: $state.snapshot(this.data) });
 
@@ -1354,21 +1377,24 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     //    doesn't exist until an array item is appended), and a gate evaluated
     //    only at mount time would silently never watch for it.
     const dispatchListeners = this.#buildDispatchListeners();
-    let stopWatching: (() => void) | undefined;
-    if (this.#mode.validation === "onChange" || dispatchListeners !== undefined) {
+    let stopWatching: Option.Option<() => void> = Option.none();
+    if (this.#mode.validation === "onChange" || Option.isSome(dispatchListeners)) {
       let previous = $state.snapshot(this.data);
-      stopWatching = $effect.root(() => {
-        $effect(() => {
-          // Establish a deep dependency on the data tree.
-          const snapshot = $state.snapshot(this.data);
-          if (this.#mode.validation === "onChange" && (this.isTainted || this.posted)) {
-            this.#scheduleValidation();
-          }
-          if (dispatchListeners !== undefined)
-            dispatchChange(previous, snapshot, dispatchListeners);
-          previous = snapshot;
-        });
-      });
+      stopWatching = Option.some(
+        $effect.root(() => {
+          $effect(() => {
+            // Establish a deep dependency on the data tree.
+            const snapshot = $state.snapshot(this.data);
+            if (this.#mode.validation === "onChange" && (this.isTainted || this.posted)) {
+              this.#scheduleValidation();
+            }
+            if (Option.isSome(dispatchListeners)) {
+              dispatchChange(previous, snapshot, dispatchListeners.value);
+            }
+            previous = snapshot;
+          });
+        }),
+      );
     }
 
     const stopFieldWatching = $effect.root(() => {
@@ -1385,13 +1411,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
         node.removeEventListener("submit", handleSubmit);
         if (!P.isUndefined(globalThis.window))
           window.removeEventListener("beforeunload", beforeUnload);
-        stopWatching?.();
+        if (Option.isSome(stopWatching)) stopWatching.value();
         stopFieldWatching?.();
-        clearTimeout(this.#validateTimer);
+        this.#clearValidateTimer();
         Arr.forEach(R.values(this.#listenerTimers), (timer) => clearTimeout(timer));
         this.#listenerTimers = {};
         Arr.forEach(R.keys(this.#fibers), (key) => this.#interruptFiber(key));
-        if (this.#autoSubmitNode === node) this.#autoSubmitNode = undefined;
+        if (Option.contains(this.#autoSubmitNode, node)) this.#autoSubmitNode = Option.none();
       },
     };
   };

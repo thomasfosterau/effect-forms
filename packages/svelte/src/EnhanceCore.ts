@@ -12,8 +12,10 @@
 import { Errors, Result, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
+import type * as Types from "effect/Types";
 
 // Terse local aliases onto the namespaced core exports.
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
@@ -32,16 +34,16 @@ const isBlob = (value: unknown): value is Blob =>
   !P.isUndefined(globalThis.Blob) && value instanceof Blob;
 
 /**
- * Encode a `Date` as the `YYYY-MM-DD` of its UTC calendar day, or `undefined`
- * for an invalid `Date`. The UTC day round-trips: a `YYYY-MM-DD` string
+ * Encode a `Date` as the `YYYY-MM-DD` of its UTC calendar day, or `None` for
+ * an invalid `Date`. The UTC day round-trips: a `YYYY-MM-DD` string
  * decodes to UTC midnight. Taking everything before the `T` keeps
  * `toISOString`'s expanded form for a year outside 0000–9999
  * (`+010000-01-01`), where a fixed 10-character slice would cut it off.
  */
-const encodeDate = (value: Date): string | undefined => {
-  if (Number.isNaN(value.getTime())) return undefined;
+const encodeDate = (value: Date): Option.Option<string> => {
+  if (Number.isNaN(value.getTime())) return Option.none();
   const iso = value.toISOString();
-  return iso.slice(0, iso.indexOf("T"));
+  return Option.some(iso.slice(0, iso.indexOf("T")));
 };
 
 /** Append the entries for one named value to `out`, recursing into containers. */
@@ -52,7 +54,7 @@ function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void
     out.push([key, value]);
   } else if (value instanceof Date) {
     const encoded = encodeDate(value);
-    if (encoded !== undefined) out.push([key, encoded]);
+    if (Option.isSome(encoded)) out.push([key, encoded.value]);
   } else if (Array.isArray(value)) {
     value.forEach((item, i) => appendEntries(out, `${key}[${i}]`, item));
   } else if (P.isObject(value)) {
@@ -168,13 +170,27 @@ export function parseActionResult<A, Message>(
 
 /** The mutation a {@link FormActionResult} implies for the store. */
 export interface FormUpdate<A, Message> {
-  readonly data?: A | undefined;
-  readonly errors?: FormErrors | undefined;
-  readonly message?: Message | undefined;
-  readonly redirect?: string | undefined;
-  readonly error?: string | undefined;
-  readonly valid?: boolean | undefined;
+  readonly data?: A;
+  readonly errors?: FormErrors;
+  readonly message?: Message;
+  readonly redirect?: string;
+  readonly error?: string;
+  readonly valid?: boolean;
 }
+
+/** The update a submitted {@link FormState} implies: its data, errors and (when set) message. */
+const stateUpdate = <A, Message>(
+  state: FormState<A, Message>,
+  valid: boolean,
+): FormUpdate<A, Message> => {
+  const update: Types.Mutable<FormUpdate<A, Message>> = {
+    data: state.data,
+    errors: state.errors,
+    valid,
+  };
+  if (state.message !== undefined) update.message = state.message;
+  return update;
+};
 
 /**
  * Compute the store update implied by a {@link FormActionResult}. Pure: the
@@ -185,18 +201,8 @@ export function resultToUpdate<A, Message>(
   result: FormActionResult<A, Message>,
 ): FormUpdate<A, Message> {
   return Match.valueTags(result, {
-    Success: ({ state }): FormUpdate<A, Message> => ({
-      data: state.data,
-      errors: state.errors,
-      message: state.message,
-      valid: true,
-    }),
-    Failure: ({ state }): FormUpdate<A, Message> => ({
-      data: state.data,
-      errors: state.errors,
-      message: state.message,
-      valid: false,
-    }),
+    Success: ({ state }) => stateUpdate(state, true),
+    Failure: ({ state }) => stateUpdate(state, false),
     Redirect: ({ location }): FormUpdate<A, Message> => ({ redirect: location }),
     Error: ({ message }): FormUpdate<A, Message> => ({ error: message, valid: false }),
   });
@@ -204,10 +210,10 @@ export function resultToUpdate<A, Message>(
 
 /** How a successful/failed submit's data should land on `data` and the tainted baseline. */
 export interface DataApplication<A> {
-  /** The next value for `data`, or `undefined` to leave it untouched (an auto-submit keeps local edits). */
-  readonly data: A | undefined;
-  /** The next tainted baseline (`#initial`), or `undefined` when this isn't a successful submit. */
-  readonly rebaseTo: A | undefined;
+  /** The next value for `data`, or `None` to leave it untouched (an auto-submit keeps local edits). */
+  readonly data: Option.Option<A>;
+  /** The next tainted baseline (`#initial`), or `None` when this isn't a successful submit. */
+  readonly rebaseTo: Option.Option<A>;
 }
 
 /**
@@ -232,7 +238,15 @@ export function computeDataApplication<A>(params: {
   readonly autoSubmit: boolean;
 }): DataApplication<A> {
   const { isSuccess, appliedData, initial, submittedData, resetForm, autoSubmit } = params;
-  if (resetForm && isSuccess) return { data: initial, rebaseTo: initial };
-  if (autoSubmit) return { data: undefined, rebaseTo: isSuccess ? submittedData : undefined };
-  return { data: appliedData, rebaseTo: isSuccess ? appliedData : undefined };
+  if (resetForm && isSuccess) return { data: Option.some(initial), rebaseTo: Option.some(initial) };
+  if (autoSubmit) {
+    return {
+      data: Option.none(),
+      rebaseTo: isSuccess ? Option.some(submittedData) : Option.none(),
+    };
+  }
+  return {
+    data: Option.some(appliedData),
+    rebaseTo: isSuccess ? Option.some(appliedData) : Option.none(),
+  };
 }

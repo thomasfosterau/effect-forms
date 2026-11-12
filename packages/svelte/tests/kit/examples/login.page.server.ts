@@ -52,8 +52,11 @@ declare global {
 }
 
 /** A same-origin redirect target, or `fallback`. */
-const safeRedirect = (target: string | undefined, fallback: string): string =>
-  target !== undefined && target.startsWith("/") && !target.startsWith("//") ? target : fallback;
+const safeRedirect = (target: Option.Option<string>, fallback: string): string =>
+  target.pipe(
+    Option.filter((path) => path.startsWith("/") && !path.startsWith("//")),
+    Option.getOrElse(() => fallback),
+  );
 
 // ── The page ───────────────────────────────────────────────────────────
 
@@ -94,7 +97,7 @@ export const actions = {
         rememberMe: true,
       });
     },
-    (_, input) => safeRedirect(input.redirectTo, "/"),
+    (_, input) => safeRedirect(Option.fromUndefinedOr(input.redirectTo), "/"),
     { classify, redact: blankPassword, unrecognised: "throw" },
   ),
 };

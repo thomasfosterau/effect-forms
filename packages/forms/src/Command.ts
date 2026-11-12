@@ -33,6 +33,7 @@
 import * as Arr from "effect/Array";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
@@ -87,7 +88,7 @@ export interface CommandPlan {
 }
 
 /** Per-field adapter overrides — the escape hatch for genuinely irregular coercion. */
-export type AdaptOverrides = Readonly<Record<string, (raw: string | undefined) => unknown>>;
+export type AdaptOverrides = Readonly<Record<string, (raw: FormInputValue) => unknown>>;
 
 /**
  * A Form-Input schema field: any schema with no decoding or encoding service
@@ -98,8 +99,21 @@ export type AdaptOverrides = Readonly<Record<string, (raw: string | undefined) =
  */
 export type FormInputField = Schema.Codec<unknown, unknown>;
 
+/**
+ * The wire shape of one validated multipart field: a string, or `undefined`
+ * for a field the submission left out (every derived field but a required
+ * create field is `Schema.optional(Schema.String)`).
+ */
+const FormInputValue = Schema.UndefinedOr(Schema.String);
+
+/** One validated multipart field's value: a string, or `undefined` when the field was absent. */
+export type FormInputValue = typeof FormInputValue.Type;
+
+/** The wire shape of a validated all-string multipart input. */
+const FormInputRecord = Schema.Record(Schema.String, FormInputValue);
+
 /** A validated all-string multipart input, as the Form-Input schemas produce it. */
-export type FormInputRecord = Readonly<Record<string, string | undefined>>;
+export type FormInputRecord = typeof FormInputRecord.Type;
 
 // ── errors ────────────────────────────────────────────────────────────
 
@@ -159,20 +173,20 @@ function unwrapWrapperUnion(ast: SchemaAST.AST): SchemaAST.AST {
 /**
  * The literal option values of a field shaped like `Schema.Literal(...)` or
  * `Schema.Literals([...])` (optionally `optional` / `NullOr`-wrapped) —
- * `undefined` when the field isn't literal-shaped. Stringified: a `<select>`'s
+ * `None` when the field isn't literal-shaped. Stringified: a `<select>`'s
  * option values are strings at the form boundary regardless of the literal's
  * own type.
  */
-function enumOptions(ast: SchemaAST.AST): readonly string[] | undefined {
+function enumOptions(ast: SchemaAST.AST): Option.Option<readonly string[]> {
   const inner = unwrapWrapperUnion(ast);
-  if (SchemaAST.isLiteral(inner)) return [String(inner.literal)];
+  if (SchemaAST.isLiteral(inner)) return Option.some([String(inner.literal)]);
   if (SchemaAST.isUnion(inner)) {
     const literals = Arr.filter(inner.types, SchemaAST.isLiteral);
     if (Arr.isReadonlyArrayNonEmpty(literals) && literals.length === inner.types.length) {
-      return Arr.map(literals, (literal) => String(literal.literal));
+      return Option.some(Arr.map(literals, (literal) => String(literal.literal)));
     }
   }
-  return undefined;
+  return Option.none();
 }
 
 /**
@@ -195,21 +209,21 @@ const OPTION_REPRESENTATION_ID = "effect/schema/Option";
  * The encoded side of an `Option`-decoding field — `Schema.OptionFromNullOr(X)`,
  * `OptionFromUndefinedOr(X)`, `OptionFromNullishOr(X)` and the rest of the
  * `OptionFrom*` family (optionally `optional` / `NullOr`-wrapped) — or
- * `undefined` when the field doesn't decode to an `Option`. Such a field's
+ * `None` when the field doesn't decode to an `Option`. Such a field's
  * type-side AST is the `Option` declaration, which hides the inner `X` from
  * the AST checks (`enum`, `structured`) and wraps the decoded value the
  * `date` probe inspects; its last encoding link leads to the wire shape
  * (`NullOr(X)`, …), which classifies exactly as the plain nullable spelling
  * does.
  */
-function optionEncodedSide(ast: SchemaAST.AST): SchemaAST.AST | undefined {
+function optionEncodedSide(ast: SchemaAST.AST): Option.Option<SchemaAST.AST> {
   const inner = unwrapWrapperUnion(ast);
-  if (!SchemaAST.isDeclaration(inner) || inner.encoding === undefined) return undefined;
+  if (!SchemaAST.isDeclaration(inner) || inner.encoding === undefined) return Option.none();
   const representation = inner.annotations?.representation;
   if (!P.hasProperty(representation, "id") || representation.id !== OPTION_REPRESENTATION_ID) {
-    return undefined;
+    return Option.none();
   }
-  return Arr.lastNonEmpty(inner.encoding).to;
+  return Option.some(Arr.lastNonEmpty(inner.encoding).to);
 }
 
 /** One field's classification: its {@link FieldKind}, plus `options` for `"enum"`. */
@@ -220,19 +234,19 @@ interface Classification {
 
 /**
  * The scalar kinds classified purely by what a schema decodes, with no AST
- * inspection: array → boolean → number → date → id → text. `undefined` when
+ * inspection: array → boolean → number → date → id → text. `None` when
  * the schema accepts none of them, so {@link classify} can fall through to
  * its AST-based checks (`enum`, `structured`).
  */
-const probeKind = (schema: Schema.Top): FieldKind | undefined => {
-  if (decodes(schema, [])) return "jsonArray";
-  if (decodes(schema, true)) return "boolean";
-  if (decodes(schema, 42)) return "number";
+const probeKind = (schema: Schema.Top): Option.Option<FieldKind> => {
+  if (decodes(schema, [])) return Option.some("jsonArray");
+  if (decodes(schema, true)) return Option.some("boolean");
+  if (decodes(schema, 42)) return Option.some("number");
   const date = probe(schema, "2024-01-02T03:04:05.000Z");
-  if (Exit.isSuccess(date) && date.value instanceof Date) return "date";
-  if (decodes(schema, PROBE_UUID) && !decodes(schema, "not-a-uuid")) return "id";
-  if (decodes(schema, "plain text")) return "text";
-  return undefined;
+  if (Exit.isSuccess(date) && date.value instanceof Date) return Option.some("date");
+  if (decodes(schema, PROBE_UUID) && !decodes(schema, "not-a-uuid")) return Option.some("id");
+  if (decodes(schema, "plain text")) return Option.some("text");
+  return Option.none();
 };
 
 /**
@@ -254,11 +268,13 @@ const probeKind = (schema: Schema.Top): FieldKind | undefined => {
  */
 const classify = (key: string, schema: Schema.Top): Classification => {
   const encodedSide = optionEncodedSide(schema.ast);
-  if (encodedSide !== undefined) return classify(key, Schema.make<Schema.Top>(encodedSide));
+  if (Option.isSome(encodedSide)) {
+    return classify(key, Schema.make<Schema.Top>(encodedSide.value));
+  }
   const options = enumOptions(schema.ast);
-  if (options !== undefined) return { kind: "enum", options };
+  if (Option.isSome(options)) return { kind: "enum", options: options.value };
   const probed = probeKind(schema);
-  if (probed !== undefined) return { kind: probed };
+  if (Option.isSome(probed)) return { kind: probed.value };
   if (isStructured(schema.ast)) return { kind: "structured" };
   throw new UnclassifiableFieldError({
     message: `Command.plan: field "${key}" matches no known kind (text/id/number/date/jsonArray/boolean/enum/structured) — a Schema.declare'd type needs an explicit form-level treatment before it can derive`,
@@ -362,6 +378,20 @@ export const blankDefaults = (
 // ── adapters ──────────────────────────────────────────────────────────
 
 /**
+ * The wire shape of one row {@link jsonRowsFromField} parses: `id` /
+ * `creditedName` are `undefined` unless the posted row carried a string.
+ */
+const JsonRow = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  agentId: Schema.String,
+  creditedName: Schema.optional(Schema.String),
+  orderingPosition: Schema.Finite,
+});
+
+/** One row of a JSON-encoded row list, as {@link jsonRowsFromField} returns it. */
+export type JsonRow = typeof JsonRow.Type;
+
+/**
  * Parse a JSON-encoded row list (a contributor list) from a multipart form
  * field. A blank or absent field yields `undefined` (skip — leave the existing
  * list untouched); an empty JSON array (`"[]"`) clears the list. Rows keep
@@ -370,16 +400,9 @@ export const blankDefaults = (
  * that onto a framework response is the caller's concern.
  */
 export const jsonRowsFromField = (
-  raw: string | undefined,
+  raw: FormInputValue,
   label: string,
-):
-  | {
-      id?: string | undefined;
-      agentId: string;
-      creditedName?: string | undefined;
-      orderingPosition: number;
-    }[]
-  | undefined => {
+): ReadonlyArray<JsonRow> | undefined => {
   if (raw === undefined || raw.trim() === "") return undefined;
   const decoded = decodeJson(raw);
   if (Exit.isFailure(decoded)) {
@@ -427,21 +450,21 @@ interface CoerceContext {
 }
 
 /** Text fields: trim always; required create fields never skip. */
-const coerceText = (ctx: CoerceContext, raw: string | undefined): unknown =>
+const coerceText = (ctx: CoerceContext, raw: FormInputValue): unknown =>
   ctx.required ? (raw ?? "").trim() : ctx.clearable ? trimToNull(raw) : trimToUndefined(raw);
 
 /** Id fields: no trimming (pickers emit `""` or a UUID); required create FKs pass through raw. */
-const coerceId = (ctx: CoerceContext, raw: string | undefined): unknown =>
+const coerceId = (ctx: CoerceContext, raw: FormInputValue): unknown =>
   ctx.required ? raw : ctx.clearable ? emptyToNull(raw) : emptyToUndefined(raw);
 
 /** Numeric text fields: blank clears on the clearable path, skips otherwise. */
-const coerceNumber = (ctx: CoerceContext, raw: string | undefined): unknown =>
+const coerceNumber = (ctx: CoerceContext, raw: FormInputValue): unknown =>
   ctx.clearable
     ? numberFromField(raw, { nullable: true })
     : numberFromField(raw, { nullable: false });
 
 /** Date fields stay encoded (`YYYY-MM-DD` strings); create trims, update passes through. */
-const coerceDate = (ctx: CoerceContext, raw: string | undefined): unknown => {
+const coerceDate = (ctx: CoerceContext, raw: FormInputValue): unknown => {
   const value = ctx.trimCreate ? raw?.trim() : raw;
   return ctx.clearable ? emptyToNull(value) : emptyToUndefined(value);
 };
@@ -454,7 +477,7 @@ const coerceDate = (ctx: CoerceContext, raw: string | undefined): unknown => {
  * case it clears (`null`) instead — the create-defaults / update-skips
  * asymmetry the Content family already hand-writes.
  */
-const coerceBoolean = (ctx: CoerceContext, raw: string | undefined): unknown => {
+const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): unknown => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") {
     return ctx.required ? false : ctx.clearable ? null : undefined;
@@ -472,7 +495,7 @@ const coerceBoolean = (ctx: CoerceContext, raw: string | undefined): unknown => 
  * malformed JSON, same as {@link jsonRowsFromField} does on a malformed row
  * list — mapping that onto a framework response is the caller's concern.
  */
-const structuredFromField = (raw: string | undefined, clearable: boolean): unknown => {
+const structuredFromField = (raw: FormInputValue, clearable: boolean): unknown => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") return clearable ? null : undefined;
   return JSON.parse(trimmed);
@@ -486,7 +509,7 @@ const coerceContextFor = (field: FieldPlan, mode: "create" | "update"): CoerceCo
 });
 
 /** The default coercion for one field in one mode. */
-const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undefined): unknown => {
+const coerce = (field: FieldPlan, mode: "create" | "update", raw: FormInputValue): unknown => {
   const ctx = coerceContextFor(field, mode);
   return Match.value(field.kind).pipe(
     Match.when(Match.is("text", "enum"), () => coerceText(ctx, raw)),

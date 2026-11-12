@@ -21,6 +21,7 @@
  */
 
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import { parseFieldPath } from "./FormData.ts";
@@ -198,68 +199,74 @@ export type PathValue<T, P extends string> = P extends `${infer Head}.${infer Re
   : ResolveSegment<T, P>;
 
 /**
- * Maps an array index that existed before an index-shifting mutation to where
- * it lives afterwards, or to `null` when the item at that index no longer
- * exists (its per-index state should be dropped). Built by {@link removeAt} /
+ * Maps an array index that existed before an index-shifting mutation to
+ * `Option.some` of where it lives afterwards, or to `Option.none()` when the
+ * item at that index no longer exists (its per-index state should be dropped). Built by {@link removeAt} /
  * {@link insertAt} / {@link swapAt} / {@link moveAt} / {@link replaceAt}, and
  * consumed by {@link remapIndex} / {@link remapKeyedRecord} and
  * `Errors.remapIndices` to keep per-index state (touched flags, error trees)
  * in sync with the row it was recorded against.
  */
-export type IndexMap = (index: number) => number | null;
+export type IndexMap = (index: number) => Option.Option<number>;
 
 /** The {@link IndexMap} for removing the item at `index`: shifts later indices down by one. */
 export function removeAt(index: number): IndexMap {
-  return (i) => (i === index ? null : i > index ? i - 1 : i);
+  return (i) => (i === index ? Option.none() : Option.some(i > index ? i - 1 : i));
 }
 
 /** The {@link IndexMap} for inserting an item at `index`: shifts `index` and later up by one. */
 export function insertAt(index: number): IndexMap {
-  return (i) => (i >= index ? i + 1 : i);
+  return (i) => Option.some(i >= index ? i + 1 : i);
 }
 
 /** The {@link IndexMap} for swapping the items at `a` and `b`. */
 export function swapAt(a: number, b: number): IndexMap {
-  return (i) => (i === a ? b : i === b ? a : i);
+  return (i) => Option.some(i === a ? b : i === b ? a : i);
 }
 
 /** The {@link IndexMap} for moving the item at `from` to `to`, shifting the items between. */
 export function moveAt(from: number, to: number): IndexMap {
   return (i) => {
-    if (i === from) return to;
-    if (from < to) return i > from && i <= to ? i - 1 : i;
-    return i >= to && i < from ? i + 1 : i;
+    if (i === from) return Option.some(to);
+    if (from < to) return Option.some(i > from && i <= to ? i - 1 : i);
+    return Option.some(i >= to && i < from ? i + 1 : i);
   };
 }
 
 /** The {@link IndexMap} for replacing the item at `index` in place: drops only that index's state. */
 export function replaceAt(index: number): IndexMap {
-  return (i) => (i === index ? null : i);
+  return (i) => (i === index ? Option.none() : Option.some(i));
 }
 
 /** The {@link IndexMap} for clearing every item in the array: drops all per-index state. */
-export const clearAll: IndexMap = () => null;
+export const clearAll: IndexMap = () => Option.none();
 
 /**
  * Remap `path`'s index segment immediately under `arrayPath` through `map`.
  * Paths outside `arrayPath`, and `arrayPath` itself (a whole-array message),
- * pass through unchanged; a path whose index segment maps to `null` is
- * dropped (returns `null`) — its item no longer exists. Pure.
+ * pass through unchanged (as `Option.some`); a path whose index segment maps
+ * to `Option.none()` is dropped (returns `Option.none()`) — its item no longer
+ * exists. Pure.
  */
-export function remapIndex(path: FormPath, arrayPath: FormPath, map: IndexMap): FormPath | null {
-  if (!isUnder(path, arrayPath) || path.length === arrayPath.length) return path;
+export function remapIndex(
+  path: FormPath,
+  arrayPath: FormPath,
+  map: IndexMap,
+): Option.Option<FormPath> {
+  if (!isUnder(path, arrayPath) || path.length === arrayPath.length) return Option.some(path);
   const segment = path[arrayPath.length];
-  if (!P.isNumber(segment)) return path;
-  const mapped = map(segment);
-  if (mapped === null) return null;
-  if (mapped === segment) return path;
-  return [...path.slice(0, arrayPath.length), mapped, ...path.slice(arrayPath.length + 1)];
+  if (!P.isNumber(segment)) return Option.some(path);
+  return Option.map(map(segment), (mapped): FormPath =>
+    mapped === segment
+      ? path
+      : [...path.slice(0, arrayPath.length), mapped, ...path.slice(arrayPath.length + 1)],
+  );
 }
 
 /**
  * Remap every entry of a flat, path-keyed record (a {@link toString} key per
  * entry — e.g. touched flags) through {@link remapIndex}. Entries whose path
- * maps to `null` are dropped. Pure.
+ * maps to `Option.none()` are dropped. Pure.
  */
 export function remapKeyedRecord<T>(
   record: Record<string, T>,
@@ -267,9 +274,13 @@ export function remapKeyedRecord<T>(
   map: IndexMap,
 ): Record<string, T> {
   return R.fromEntries(
-    Arr.flatMap(R.toEntries(record), ([key, value]) => {
-      const remapped = remapIndex(fromString(key), arrayPath, map);
-      return remapped === null ? [] : [[toString(remapped), value] as const];
-    }),
+    Arr.getSomes(
+      Arr.map(R.toEntries(record), ([key, value]) =>
+        Option.map(
+          remapIndex(fromString(key), arrayPath, map),
+          (remapped) => [toString(remapped), value] as const,
+        ),
+      ),
+    ),
   );
 }

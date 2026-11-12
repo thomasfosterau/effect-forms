@@ -17,7 +17,7 @@
  */
 
 /** Empty string / `undefined` → `undefined`; otherwise the value (skip semantics). */
-export function emptyToUndefined<T>(value: T | "" | undefined): T | undefined {
+export function emptyToUndefined<T>(value?: T | ""): T | undefined {
   return value === "" || value === undefined ? undefined : value;
 }
 
@@ -33,12 +33,12 @@ export function emptyToNull<T>(value: T | "" | null | undefined): T | null | und
 }
 
 /** Trim, then {@link emptyToUndefined}: whitespace-only collapses to `undefined` (skip). */
-export function trimToUndefined(value: string | undefined): string | undefined {
+export function trimToUndefined(value?: string): string | undefined {
   return emptyToUndefined(value?.trim());
 }
 
 /** Trim, then {@link emptyToNull}: whitespace-only / blank clears (`null`). */
-export function trimToNull(value: string | undefined): string | null | undefined {
+export function trimToNull(value?: string): string | null | undefined {
   return emptyToNull(value?.trim());
 }
 
@@ -70,7 +70,7 @@ export function numberFromField(
  * `"on"` / `"true"` / `"1"` / `"yes"` all read as `true`; an explicit
  * `"false"` / `"0"` / `"off"` / `"no"` reads as `false`.
  */
-export function booleanFromCheckbox(raw: string | undefined): boolean {
+export function booleanFromCheckbox(raw?: string): boolean {
   if (raw === undefined) return false;
   const normalised = raw.trim().toLowerCase();
   return !(

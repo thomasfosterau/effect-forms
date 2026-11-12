@@ -182,7 +182,9 @@ describe("runFormAction", () => {
     expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
-    expect(Errors.getError(result.state.errors, [])).toEqual(["That value is already in use."]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(
+      Option.some(["That value is already in use."]),
+    );
     expect(result.state.errors.name).toBeUndefined();
   });
 
@@ -198,9 +200,9 @@ describe("runFormAction", () => {
     expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(413);
-    expect(Errors.getError(result.state.errors, [])).toEqual([
-      "The uploaded file exceeds the 10 MiB limit.",
-    ]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(
+      Option.some(["The uploaded file exceeds the 10 MiB limit."]),
+    );
   });
 
   it("routes an ErrorResponse's document errors, and its message when it has none", async () => {
@@ -236,7 +238,7 @@ describe("runFormAction", () => {
     );
     expect(bare).toMatchObject({ _tag: "Failure", status: 502 });
     assert(P.isTagged(bare, "Failure"));
-    expect(Errors.getError(bare.state.errors, [])).toEqual(["Request failed (502)"]);
+    expect(Errors.getError(bare.state.errors, [])).toEqual(Option.some(["Request failed (502)"]));
   });
 
   // ── Effect commands ────────────────────────────────────────────────────
@@ -300,7 +302,9 @@ describe("runFormAction", () => {
     );
     expect(result).toMatchObject({ _tag: "Failure", status: 401 });
     assert(P.isTagged(result, "Failure"));
-    expect(Errors.getError(result.state.errors, [])).toEqual(["Invalid email or password"]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(
+      Option.some(["Invalid email or password"]),
+    );
   });
 
   it("redacts every echoed state: an invalid submission and a routed failure", async () => {
@@ -361,7 +365,7 @@ describe("runFormAction", () => {
     expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
-    expect(Errors.getError(result.state.errors, [])).toEqual(["Position collision."]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(Option.some(["Position collision."]));
   });
 
   it("does not wrap the command when clientId is false, even with fetchExisting supplied", async () => {
