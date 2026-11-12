@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
-import { describe, expect, it } from "vite-plus/test";
+import { it } from "@effect/vitest";
+import { describe, expect } from "vite-plus/test";
 import { getError } from "../src/Errors.ts";
 import { errorResult, failure, type FormActionResult, redirect, success } from "../src/Result.ts";
 import { FormStateSchema, isValid, make, withError, withMessage } from "../src/State.ts";
@@ -46,13 +47,15 @@ describe("withMessage / withError", () => {
 });
 
 describe("FormStateSchema", () => {
-  it("round-trips a state across encode/decode", () => {
-    const schema = FormStateSchema(Schema.Struct({ name: Schema.String }));
-    const state = make({ name: "Ada" }, { errors: { name: ["x"] } });
-    const decoded = Effect.runSync(SchemaParser.decodeEffect(schema)(state));
-    expect(decoded.data).toEqual({ name: "Ada" });
-    expect(decoded.isValid).toBe(false);
-  });
+  it.effect("round-trips a state across encode/decode", () =>
+    Effect.gen(function* () {
+      const schema = FormStateSchema(Schema.Struct({ name: Schema.String }));
+      const state = make({ name: "Ada" }, { errors: { name: ["x"] } });
+      const decoded = yield* SchemaParser.decodeEffect(schema)(state);
+      expect(decoded.data).toEqual({ name: "Ada" });
+      expect(decoded.isValid).toBe(false);
+    }),
+  );
 });
 
 describe("FormActionResult", () => {

@@ -39,6 +39,14 @@ catalog:
   # node_modules/@effect/tsgo/dist/effect-tsgo.cjs before bumping any of the
   # three.
   "@effect/tsgo": 0.63.0
+  # `it.effect` / `it.layer` / `layer` for the Effect-running tests (owner
+  # decision, #161): each test runs on @effect/vitest's harness, with the
+  # TestClock and friends provided, instead of `Effect.run*` in a test body.
+  # Releases track `effect` one-for-one and peer on `effect: ^<same>`, so it
+  # moves with the `effect` pin below (Dependabot's `effect` group). It peers
+  # on `vitest >=5 <6` and imports `vitest`, which the `vitest@*` override
+  # resolves to the copy `vite-plus/test` re-exports: one runner instance.
+  "@effect/vitest": 4.1.3
   # The Effect rule set for Oxlint (the successor of
   # `@mpsuesser/oxlint-plugin-effect`, same `effect/` rule namespace), wired in
   # the root vite.config.ts as `effect.configs.recommended`. It loads into the
@@ -67,7 +75,7 @@ catalog:
   "@typescript/native": "npm:typescript@7.0.2"
   # The development copy only: the suite runs against this pin and nothing
   # else. The published peer range lives under `catalogs.peers` below, and the
-  # suite does not test that floor.
+  # suite does not test that floor. `@effect/vitest` above moves with it.
   effect: 4.1.3
   # The dead-code / boundary / complexity audit (`.fallowrc.json`) behind the
   # agent PreToolUse gate; `fallow audit` reads the `test:coverage` map.

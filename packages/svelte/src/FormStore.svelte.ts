@@ -62,12 +62,15 @@ import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import { type Attachment, createAttachmentKey } from "svelte/attachments";
@@ -342,28 +345,62 @@ export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
   readonly listeners?: FormListeners;
 }
 
-const defaultSubmit = async <A, Message>(
+/**
+ * A submission that produced no result: the `handler` / `submit` threw or
+ * rejected, applying the result threw, or the default POST never got a
+ * response. `message` is what `onError` reports.
+ */
+class SubmissionFailed extends Schema.TaggedError<
+  SubmissionFailed,
+  { readonly brand: unique symbol }
+>()("SubmissionFailed", { message: Schema.String }) {}
+
+/** Wrap whatever a submission step threw: an `Error` keeps its message. */
+const submissionFailed = (cause: unknown): SubmissionFailed =>
+  new SubmissionFailed({ message: P.isError(cause) ? cause.message : "Submission failed" });
+
+/**
+ * The default submission: POST `body` to `action` with `Accept:
+ * application/json` through Effect's `HttpClient` on the platform `fetch`,
+ * and read the response as a {@link FormActionResult}. A body that isn't a
+ * recognised action response becomes an `Error` result carrying the status;
+ * only a transport failure fails the Effect, with the rejection `fetch`
+ * itself raised (its `TypeError`, say) rather than the client's wrapper.
+ */
+const defaultSubmit = <A, Message>(
   body: FormData,
   action: string,
-): Promise<FormActionResult<A, Message>> => {
-  const response = await fetch(action, {
-    method: "POST",
-    body,
-    headers: { accept: "application/json" },
-  });
-  const json: Promise<unknown> = response.json();
-  return json.then(
-    (parsed): FormActionResult<A, Message> =>
-      isActionResponse<A, Message>(parsed)
-        ? parseActionResult(parsed, response.status)
-        : { _tag: "Error", status: response.status, message: "Unrecognised form response" },
-    (): FormActionResult<A, Message> => ({
-      _tag: "Error",
-      status: response.status,
-      message: response.statusText || "Request failed",
-    }),
+): Effect.Effect<FormActionResult<A, Message>, SubmissionFailed, HttpClient.HttpClient> =>
+  HttpClient.execute(
+    HttpClientRequest.post(action).pipe(
+      HttpClientRequest.acceptJson,
+      HttpClientRequest.bodyFormData(body),
+    ),
+  ).pipe(
+    Effect.flatMap((response) =>
+      Effect.match(response.json, {
+        onSuccess: (parsed): FormActionResult<A, Message> =>
+          isActionResponse<A, Message>(parsed)
+            ? parseActionResult(parsed, response.status)
+            : { _tag: "Error", status: response.status, message: "Unrecognised form response" },
+        onFailure: (): FormActionResult<A, Message> => ({
+          _tag: "Error",
+          status: response.status,
+          message: "Request failed",
+        }),
+      }),
+    ),
+    Effect.mapError((error) =>
+      submissionFailed(
+        P.isTagged(error.reason, "TransportError") ? (error.reason.cause ?? error) : error,
+      ),
+    ),
+    // The `fetch` in place at submit time, as a direct call would use (the
+    // layer's default captures the first one it sees), and no `b3` /
+    // `traceparent` headers: they would make a cross-origin action preflight.
+    Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
   );
-};
 
 /** Whether `index` is a valid position in an array of `length`. */
 const inRange = (index: number, length: number): boolean => index >= 0 && index < length;
@@ -441,6 +478,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly #mode: Mode.ParsedMode;
   readonly #attachmentKey = createAttachmentKey();
   readonly #runtime: ManagedRuntime.ManagedRuntime<R, never>;
+  /**
+   * The submission boundary: `HttpClient` on the platform `fetch`, kept apart
+   * from {@link FormStore.#runtime} so an `HttpClient` the caller's `layer`
+   * gives its validators never redirects the default POST. Built on the first
+   * submit.
+   */
+  readonly #submitRuntime = ManagedRuntime.make(FetchHttpClient.layer);
   #autoSubmitNode: Option.Option<HTMLFormElement> = Option.none();
   #validateTimer: Option.Option<ReturnType<typeof setTimeout>> = Option.none();
   /** Per-field-listener debounce timers, keyed by `"change:<path>"` / `"blur:<path>"`. */
@@ -961,7 +1005,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Interrupt (fire-and-forget) any fiber running under `key`, if one is in flight. */
   #interruptFiber(key: string): void {
     const previous = this.#fibers[key];
-    if (previous) Effect.runFork(Fiber.interrupt(previous));
+    if (previous) this.#runtime.runFork(Fiber.interrupt(previous));
     delete this.#fibers[key];
   }
 
@@ -971,7 +1015,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * `key` is interrupted first (this — not a timer — is what gives "latest
    * wins"; see {@link Validate.runAsyncFieldValidator}). The old and new
    * fiber's `#validating` writes are guarded by a per-key generation counter
-   * — `Effect.runFork(Fiber.interrupt(previous))` is fire-and-forget, so the
+   * — the interrupt {@link FormStore.#interruptFiber} forks is fire-and-forget, so the
    * *old* fiber's `Effect.ensuring` finalizer can run after the *new* one has
    * already flipped `#validating[key]` back to `true`; without the guard that
    * finalizer would clear it while the new run is still genuinely in flight.
@@ -1329,28 +1373,60 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       this.delayed = true;
     }, delayMs);
 
-    try {
-      const submit = this.#options.submit ?? defaultSubmit;
-      const action = node.action || (P.isUndefined(globalThis.location) ? "" : location.href);
-      let result: FormActionResult<A, Message>;
-      if (Option.isSome(resolved)) {
-        result = resolved.value;
-      } else if (this.#options.handler) {
-        result = await this.#options.handler(this.data);
-      } else {
-        result = await submit(formData, action, node);
-      }
-      this.#options.onResult?.({ result });
-      this.#applyUpdate(resultToUpdate(result), result);
-    } catch (cause) {
-      const message = P.isError(cause) ? cause.message : "Submission failed";
-      this.#lastSubmitOutcome = Option.some("failure");
-      this.#options.onError?.({ error: message });
-    } finally {
-      clearTimeout(delayTimer);
-      this.submitting = false;
-      this.delayed = false;
+    const send = Option.match(resolved, {
+      onNone: () => this.#send(formData, node),
+      onSome: (result) => Effect.succeed(result),
+    });
+    await this.#submitRuntime.runPromise(
+      send.pipe(
+        Effect.flatMap((result) =>
+          Effect.try({
+            try: () => {
+              this.#options.onResult?.({ result });
+              this.#applyUpdate(resultToUpdate(result), result);
+            },
+            catch: submissionFailed,
+          }),
+        ),
+        Effect.catchTag("SubmissionFailed", ({ message }) =>
+          Effect.sync(() => {
+            this.#lastSubmitOutcome = Option.some("failure");
+            this.#options.onError?.({ error: message });
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            clearTimeout(delayTimer);
+            this.submitting = false;
+            this.delayed = false;
+          }),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * The submission's result, from the first of these the options supply:
+   * `handler` (the data, in JS), `submit` (the body, to the action), or the
+   * default `HttpClient` POST. A throw or rejection fails the Effect with a
+   * {@link SubmissionFailed}.
+   */
+  #send(
+    formData: FormData,
+    node: HTMLFormElement,
+  ): Effect.Effect<FormActionResult<A, Message>, SubmissionFailed, HttpClient.HttpClient> {
+    const { handler, submit } = this.#options;
+    if (handler) {
+      return Effect.tryPromise({ try: async () => handler(this.data), catch: submissionFailed });
     }
+    const action = node.action || (P.isUndefined(globalThis.location) ? "" : location.href);
+    if (submit) {
+      return Effect.tryPromise({
+        try: async () => submit(formData, action, node),
+        catch: submissionFailed,
+      });
+    }
+    return defaultSubmit(formData, action);
   }
 
   /**

@@ -13,7 +13,7 @@ Svelte 5 runes bindings for the core. Read the root [AGENTS.md](../../AGENTS.md)
 - **`FormStore.svelte.ts` stays a `.svelte.ts` module.** `vp pack` runs `unbundle: true` so it keeps its `.svelte.js` extension in `dist/`, which the consumer's Svelte compiler needs to process its runes. Rune compile errors only surface in `tests/FormStore.svelte.test.ts` (through the `svelte()` Vite plugin), not in `tsc` or svelte-check.
 - **Client and server errors are separate sources** (`Errors.SourcedErrors`): a client revalidation never clears a server error on another field; a field's own change does.
 - **Index-shifting array mutations remap per-index state** (touched flags, errors) so it keeps following its row.
-- **Public Promise / action boundaries** (`idempotentCreate`, `runFormAction`, `formAction`, the store's default `fetch` submit) are where Effects run; everything inside them stays an `Effect`.
+- **Public Promise / action boundaries** (`idempotentCreate`, `runFormAction`, `formAction`, the store's submit, run on its own `ManagedRuntime` over `FetchHttpClient.layer`, and its validator fibers, run on the runtime built from `options.layer`) are where Effects run; everything inside them stays an `Effect`.
 
 ## Coverage
 
