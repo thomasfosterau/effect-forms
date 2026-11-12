@@ -7,12 +7,12 @@ The root entry depends only on `svelte` and the framework-neutral core, not Svel
 ## Install
 
 ```sh
-pnpm add @thomasfosterau/effect-forms-svelte @thomasfosterau/effect-forms effect svelte
+pnpm add @thomasfosterau/effect-forms-svelte @thomasfosterau/effect-forms @thomasfosterau/effect-ext effect svelte
 # for the /kit entry
 pnpm add @sveltejs/kit
 ```
 
-`effect` and `svelte` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`; `@thomasfosterau/effect-jsonapi` is an optional, type-only peer of `/kit`.
+`effect`, `svelte` and `@thomasfosterau/effect-ext` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`; `@thomasfosterau/effect-jsonapi` is an optional, type-only peer of `/kit`.
 
 ## Usage
 
@@ -138,6 +138,7 @@ The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to
 
 ### Peers
 
+- `@thomasfosterau/effect-ext` (`^0.1.0 || ^0.2.0`) is a **required** peer: `defineEntityForm`'s `adaptOverrides` return its `TriState` (`Command.AdaptOverrides`). Import it from `@thomasfosterau/effect-ext/TriState`.
 - `@sveltejs/kit` (`^3.0.0`) is an **optional** peer of the package and **required** by `/kit`. SvelteKit 2 is not supported. The repository's tests run against the SvelteKit version pinned in its `pnpm-workspace.yaml`.
 - `$app/forms` is a SvelteKit virtual module, not a dependency. It resolves because SvelteKit compiles this package (its `exports` carry the `svelte` condition), so `/kit` only works inside a SvelteKit build.
 - `@thomasfosterau/effect-jsonapi` (`>=0.18.0`) is an **optional** peer used **for its types only**. `CommandFailure.ErrorObject` is `Document.ErrorObject`. At runtime a failure is recognised by its `_tag`, so an application's own `JsonapiError` with the same shape is recognised too.

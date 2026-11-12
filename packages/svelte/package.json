@@ -57,10 +57,12 @@
   },
   "devDependencies": {
     "@sveltejs/kit": "catalog:",
+    "@thomasfosterau/effect-ext": "catalog:",
     "@thomasfosterau/effect-jsonapi": "catalog:"
   },
   "peerDependencies": {
     "@sveltejs/kit": "catalog:peers",
+    "@thomasfosterau/effect-ext": "catalog:peers",
     "@thomasfosterau/effect-jsonapi": "catalog:peers",
     "effect": "catalog:peers",
     "svelte": "catalog:peers"

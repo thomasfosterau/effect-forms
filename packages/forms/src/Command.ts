@@ -10,10 +10,11 @@
  * per-entity form artefacts that were previously hand-written per entity: the
  * all-string Form-Input schema fields, the blank defaults, and the tri-state
  * adapters that map a validated multipart input onto the encoded command
- * payload. Each field coerces to a {@link TriState.TriState} (`Assign` /
- * `Clear` / `CarryForward`); the adapter encodes it onto the wire as the
- * value, `null`, or an omitted key, so the posted JSON is what the command's
- * own decode expects.
+ * payload. Each field coerces to a `TriState` from
+ * `@thomasfosterau/effect-ext/TriState` (`Assign` / `Clear` /
+ * `CarryForward`); the adapter encodes it onto the wire as the value, `null`,
+ * or an omitted key, so the posted JSON is what the command's own decode
+ * expects.
  *
  * Classification leads with behavioural decode probes — date codecs are
  * transformations and branded ids erase to `String`, so "what does this
@@ -50,7 +51,7 @@ import {
   trimToCarryForward,
   trimToClear,
 } from "./Coerce.ts";
-import * as TriState from "./TriState.ts";
+import * as TriState from "@thomasfosterau/effect-ext/TriState";
 
 /** How a command field renders and coerces at the form boundary. */
 export type FieldKind =
@@ -95,7 +96,7 @@ export interface CommandPlan {
 /**
  * Per-field adapter overrides — the escape hatch for genuinely irregular
  * coercion. An override reads the raw multipart value and returns the field's
- * {@link TriState.TriState}, which the adapter encodes exactly as it encodes a
+ * `TriState`, which the adapter encodes exactly as it encodes a
  * default coercion (`Assign` → the value, `Clear` → `null`, `CarryForward` →
  * the key is omitted).
  */
@@ -561,7 +562,7 @@ const coerceContextFor = (field: FieldPlan, mode: "create" | "update"): CoerceCo
   trimCreate: mode === "create",
 });
 
-/** The default coercion for one field in one mode, as the field's {@link TriState.TriState}. */
+/** The default coercion for one field in one mode, as the field's `TriState`. */
 const coerce = (
   field: FieldPlan,
   mode: "create" | "update",
@@ -582,7 +583,7 @@ const coerce = (
 };
 
 /**
- * Encode one field's {@link TriState.TriState} onto the wire as payload
+ * Encode one field's `TriState` onto the wire as payload
  * entries: `Assign` → `[key, value]`, `Clear` → `[key, null]`, `CarryForward`
  * → no entry, so the key is absent.
  */

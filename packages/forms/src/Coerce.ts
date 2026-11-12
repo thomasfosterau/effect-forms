@@ -3,11 +3,11 @@
  *
  * An HTML form submits every value as a string, and an absent optional field
  * arrives as `undefined` (or an empty string). These map that onto the update
- * {@link TriState.TriState}: a value **assigns** (`Assign`), a blank **clears**
- * a nullable field (`Clear`) and an absent or skipped field **carries
- * forward** (`CarryForward`) — the same boundary discipline the host app
- * applies, lifted here so any consumer of the core gets it without a framework
- * dependency. The `Command` adapters map the result onto the wire (`null` /
+ * `TriState` from `@thomasfosterau/effect-ext/TriState`: a value **assigns**
+ * (`Assign`), a blank **clears** a nullable field (`Clear`) and an absent or
+ * skipped field **carries forward** (`CarryForward`) — the same boundary
+ * discipline the host app applies, lifted here so any consumer of the core
+ * gets it without a framework dependency. The `Command` adapters map the result onto the wire (`null` /
  * absent).
  *
  * These are plain, total functions: they never throw and never reach for a
@@ -19,7 +19,7 @@
  */
 
 import * as P from "effect/Predicate";
-import * as TriState from "./TriState.ts";
+import * as TriState from "@thomasfosterau/effect-ext/TriState";
 
 /**
  * Empty string / absent carries forward (skip); otherwise the value is
@@ -87,7 +87,7 @@ export function trimToClear(value?: string): TriState.TriState<string> {
 }
 
 /**
- * Map a numeric text field onto the update {@link TriState.TriState}. Blank
+ * Map a numeric text field onto the update `TriState`. Blank
  * clears on the `nullable` path and carries forward otherwise (the default);
  * a present value parses with `Number` (`NaN` for non-numeric input —
  * validate downstream).

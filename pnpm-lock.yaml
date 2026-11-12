@@ -27,6 +27,9 @@ catalogs:
     '@sveltejs/vite-plugin-svelte':
       specifier: ^7.3.1
       version: 7.3.1
+    '@thomasfosterau/effect-ext':
+      specifier: ^0.2.0
+      version: 0.2.0
     '@thomasfosterau/effect-jsonapi':
       specifier: ^0.20.0
       version: 0.20.0
@@ -143,6 +146,10 @@ importers:
       effect:
         specifier: 4.1.2
         version: 4.1.2
+    devDependencies:
+      '@thomasfosterau/effect-ext':
+        specifier: 'catalog:'
+        version: 0.2.0(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.20.0(effect@4.1.2))(effect@4.1.2)
 
   packages/svelte:
     dependencies:
@@ -159,6 +166,9 @@ importers:
       '@sveltejs/kit':
         specifier: 'catalog:'
         version: 3.1.1(@sveltejs/vite-plugin-svelte@7.3.1(@voidzero-dev/vite-plus-core@1.4.0(@types/node@26.6.6)(@typescript/typescript6@6.0.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))(svelte@5.57.1))(@typescript/typescript6@6.0.2)(@voidzero-dev/vite-plus-core@1.4.0(@types/node@26.6.6)(@typescript/typescript6@6.0.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))(svelte@5.57.1)
+      '@thomasfosterau/effect-ext':
+        specifier: 'catalog:'
+        version: 0.2.0(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.20.0(effect@4.1.2))(effect@4.1.2)
       '@thomasfosterau/effect-jsonapi':
         specifier: 'catalog:'
         version: 0.20.0(effect@4.1.2)
@@ -1000,6 +1010,26 @@ packages:
     engines: {node: '>=12', npm: '>=6'}
     peerDependencies:
       '@testing-library/dom': '>=7.21.4'
+
+  '@thomasfosterau/effect-ext@0.2.0':
+    resolution: {integrity: sha512-T1EukW6BJDub7EMdii65Qisy1uDMwAkbso6s2gQQD9MbUC8jGycJppsL4McRdnjgboEu5yVxirzr2pobkh9qFw==}
+    engines: {node: '>=22.18'}
+    hasBin: true
+    peerDependencies:
+      '@effect/platform-browser': ^4.0.0
+      '@effect/platform-node': ^4.0.0
+      '@thomasfosterau/effect-jsonapi': '>=0.16.1'
+      '@thomasfosterau/effect-parse': ^0.4.1 || ^0.5.0
+      effect: 4.1.2
+    peerDependenciesMeta:
+      '@effect/platform-browser':
+        optional: true
+      '@effect/platform-node':
+        optional: true
+      '@thomasfosterau/effect-jsonapi':
+        optional: true
+      '@thomasfosterau/effect-parse':
+        optional: true
 
   '@thomasfosterau/effect-jsonapi@0.20.0':
     resolution: {integrity: sha512-vn/MBiwWhqeEWS/RxhgjgREg7ErpmGCCP8u1/ESz+bKAWX0Yes9CvruULkq2d6buIihpVSDL+SDDSzVJOY/vIw==}
@@ -2988,6 +3018,13 @@ snapshots:
   '@testing-library/user-event@14.6.8(@testing-library/dom@10.4.2)':
     dependencies:
       '@testing-library/dom': 10.4.2
+
+  '@thomasfosterau/effect-ext@0.2.0(@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0))(@thomasfosterau/effect-jsonapi@0.20.0(effect@4.1.2))(effect@4.1.2)':
+    dependencies:
+      effect: 4.1.2
+    optionalDependencies:
+      '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0)
+      '@thomasfosterau/effect-jsonapi': 0.20.0(effect@4.1.2)
 
   '@thomasfosterau/effect-jsonapi@0.20.0(effect@4.1.2)':
     dependencies:

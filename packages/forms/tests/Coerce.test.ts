@@ -7,7 +7,7 @@ import {
   trimToCarryForward,
   trimToClear,
 } from "../src/Coerce.ts";
-import * as TriState from "../src/TriState.ts";
+import * as TriState from "@thomasfosterau/effect-ext/TriState";
 
 describe("emptyToCarryForward / emptyToClear", () => {
   it("emptyToCarryForward carries blanks forward", () => {

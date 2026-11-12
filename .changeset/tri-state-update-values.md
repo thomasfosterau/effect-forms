@@ -5,7 +5,7 @@
 
 Partial-update fields are a tagged `TriState` instead of value / `null` / `undefined` in the decoded API (#160). The wire is unchanged: the `Command` adapters still post the value, `null` or an absent key. Breaking:
 
-- New `TriState` module, mirroring `@thomasfosterau/effect-ext`'s `TriState` (same names and semantics, no new dependency): the models `CarryForward`, `Clear`, `Assign<A>` and `TriState<A>`; the constructors `carryForward`, `clear` and `assign`; the fold `match`; the field schemas `clearable` (`optionalKey(OptionFromNullOr(X))`) and `clearableNullOr` (`optional(NullOr(X))`); and the readers `read`, `readNullOr`, `suppliedValue` and `suppliedNullOr`.
+- New required peer `@thomasfosterau/effect-ext` (`^0.1.0 || ^0.2.0`) of both packages. `TriState` comes from it: import it as `import * as TriState from "@thomasfosterau/effect-ext/TriState"` (the models `CarryForward`, `Clear`, `Assign<A>` and `TriState<A>`, the constructors `carryForward`, `clear` and `assign`, the fold `match`, and the field schemas `clearable` / `clearableNullOr`). effect-forms does not re-export it.
 - `Coerce.emptyToUndefined` is renamed `Coerce.emptyToCarryForward` and returns `TriState<T>` (was `T | undefined`).
 - `Coerce.emptyToNull` is renamed `Coerce.emptyToClear` and returns `TriState<T>` (was `T | null | undefined`). It no longer accepts `null`, and both coercers now take `T extends string`.
 - `Coerce.trimToUndefined` is renamed `Coerce.trimToCarryForward`, and `Coerce.trimToNull` is renamed `Coerce.trimToClear`. Both return `TriState<string>`.

@@ -45,7 +45,11 @@
   "scripts": {
     "clean": "rm -rf dist"
   },
+  "devDependencies": {
+    "@thomasfosterau/effect-ext": "catalog:"
+  },
   "peerDependencies": {
+    "@thomasfosterau/effect-ext": "catalog:peers",
     "effect": "catalog:peers"
   },
   "engines": {

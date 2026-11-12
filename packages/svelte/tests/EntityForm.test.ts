@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { type Command, TriState } from "@thomasfosterau/effect-forms";
+import type { Command } from "@thomasfosterau/effect-forms";
+import * as TriState from "@thomasfosterau/effect-ext/TriState";
 import * as Schema from "effect/Schema";
 import type { Component } from "svelte";
 import { defineEntityForm, type EntityFormEntry } from "../src/EntityForm.ts";

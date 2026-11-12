@@ -4,7 +4,7 @@ Svelte 5 runes bindings for the core. Read the root [AGENTS.md](../../AGENTS.md)
 
 ## Boundary
 
-- **Root entry (`src/index.ts`)** imports `svelte` and `@thomasfosterau/effect-forms` only — never `@sveltejs/kit` or `$app/*`, so it works in any Svelte 5 app. fallow's `svelte` zone may import `forms`, never `kit`.
+- **Root entry (`src/index.ts`)** imports `svelte` and `@thomasfosterau/effect-forms` only (its published types also name `@thomasfosterau/effect-ext`'s `TriState` through `Command.AdaptOverrides`, hence the required peer) — never `@sveltejs/kit` or `$app/*`, so it works in any Svelte 5 app. fallow's `svelte` zone may import `forms`, never `kit`.
 - **`/kit` entry (`src/kit/index.ts`)** is the only place `@sveltejs/kit` and the `$app/forms` virtual appear (both optional peers; `@thomasfosterau/effect-jsonapi` is a type-only optional peer). `$app/*` is never bundled (`deps.neverBundle`) and resolves to `tests/kit/app-forms.stub.ts` in tests.
 - The core is consumed through its `exports` (`dist/`), as a consumer would; every task here has a `build` edge on it.
 

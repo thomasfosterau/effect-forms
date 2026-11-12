@@ -13,7 +13,7 @@ import {
   plan,
   updateAdapter,
 } from "../src/Command.ts";
-import * as TriState from "../src/TriState.ts";
+import * as TriState from "@thomasfosterau/effect-ext/TriState";
 
 // Synthetic command pair exercising every field kind and both tri-state
 // shapes — mirrors the host app's flat Create*/Update* structs (required
