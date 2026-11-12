@@ -14,6 +14,10 @@
  * Causes are recognised structurally by their `_tag`, so an application's
  * own `JsonapiError` with the same shape is recognised too.
  *
+ * A Promise command's rejection (or a synchronous throw) reaches the Effect
+ * error channel as a {@link CommandRejected} carrying the original value in
+ * `cause`; an `Effect` command's typed failure arrives as itself.
+ *
  * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/CommandFailure
  */
@@ -21,6 +25,7 @@
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import type { Document } from "@thomasfosterau/effect-jsonapi";
 
 /** One JSON:API error object: `@thomasfosterau/effect-jsonapi`'s `Document.ErrorObject`. */
@@ -61,8 +66,28 @@ export const message = (status: number, text: string): CommandFailure => ({
   message: text,
 });
 
-/** A classifier: `Some` for a failure the form can show, `None` for an unexpected one. */
-export type Classify = (cause: unknown) => Option.Option<CommandFailure>;
+/**
+ * A Promise command's rejection, or a command's synchronous throw, in the
+ * Effect error channel: `cause` is the original rejection reason, unchanged.
+ *
+ * The form actions' Promise boundaries (`idempotentCreate`, `runFormAction`
+ * under `unrecognised: "throw"`) rethrow `cause`, not this wrapper, so a
+ * caller awaiting them sees what the command rejected with.
+ */
+export class CommandRejected extends Schema.TaggedError<
+  CommandRejected,
+  { readonly brand: unique symbol }
+>()("CommandRejected", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
+ * A classifier: `Some` for a failure the form can show, `None` for an
+ * unexpected one. It is handed the command's typed error `E` — a Promise
+ * command's rejection as a {@link CommandRejected}, whose `cause` is the
+ * rejection reason.
+ */
+export type Classify<E = unknown> = (error: E) => Option.Option<CommandFailure>;
 
 /** The fallback message for an error object with neither `detail` nor `title`. */
 export const DEFAULT_MESSAGE = "Request could not be completed";
@@ -141,9 +166,11 @@ const fromErrorResponse = (cause: ErrorResponseLike): Option.Option<CommandFailu
  * - an `Error` carrying a numeric `status` (a transport's status error, e.g.
  *   a 413 oversize upload the transport did not map to a document) → its
  *   message, at its own status;
+ * - a {@link CommandRejected} → its `cause`, classified by the rules above;
  * - anything else → `None` (unexpected).
  */
-export const jsonapiFailure: Classify = (cause) => {
+export const jsonapiFailure: Classify = (error) => {
+  const cause = error instanceof CommandRejected ? error.cause : error;
   if (!P.isObjectOrArray(cause)) return Option.none();
   if (P.isTagged(cause, "JsonapiError")) return fromJsonapiError(cause);
   if (P.isTagged(cause, "ErrorResponse")) return fromErrorResponse(cause);

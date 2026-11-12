@@ -144,15 +144,16 @@ The reactive store (`FormStore.svelte.ts`, rune-compiled) delegates its logic to
 
 ### Commands and failures
 
-A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command must have no requirements left. Provide them first, e.g. with the application's `ManagedRuntime`. `locationFor(output, input)` builds the redirect, and must return a same-origin path such as `/organisations/${id}`. SvelteKit 3's `redirect` rejects an external location unless it is given `{ external }`, which `formAction` never passes, so an absolute URL on another origin (or a protocol-relative `//host/...`) makes the action throw an `Error` after the command has run. To send the user off-site, redirect to a same-origin route that performs the external redirect itself. `runFormAction` returns the location unchecked.
+A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command must have no requirements left, and its typed failure `E` reaches the classifier as itself. A Promise's rejection (or a synchronous throw) reaches it as a `CommandFailure.CommandRejected` whose `cause` is the original value; `unrecognised: "throw"` and `idempotentCreate` rethrow that original value, not the wrapper. Provide them first, e.g. with the application's `ManagedRuntime`. `locationFor(output, input)` builds the redirect, and must return a same-origin path such as `/organisations/${id}`. SvelteKit 3's `redirect` rejects an external location unless it is given `{ external }`, which `formAction` never passes, so an absolute URL on another origin (or a protocol-relative `//host/...`) makes the action throw an `Error` after the command has run. To send the user off-site, redirect to a same-origin route that performs the external redirect itself. `runFormAction` returns the location unchecked.
 
 `jsonapiFailure`, the default classifier, recognises:
 
 - `{ _tag: "JsonapiError", status, errors }`: effect-jsonapi's `ServerErrors.JsonapiError`, or any error of the same shape. Each error object goes to the field its `source.pointer` names, or to the root (`form.errors._errors`), at the cause's own status.
 - `{ _tag: "ErrorResponse", status, message, document }`: effect-jsonapi's client-side decoded error. The document's error objects are routed as above. With no document, the message goes to the root.
 - An `Error` with a numeric `status`, such as a transport's 413: its message goes to the root.
+- A `CommandRejected`: its `cause`, by the rules above.
 
-Anything else is unexpected. By default it becomes `fail(500, { message })`. Pass `unrecognised: "throw"` to hand it to `handleError` instead. `classify` replaces the classifier; compose with `CommandFailure.jsonapiFailure` to extend it. `redact` runs on every state echoed back to the browser. `idempotent: { clientId, fetchExisting }` turns on the client-id retry.
+Anything else, and any defect in an Effect command, is unexpected. By default it becomes `fail(500, { message })`. Pass `unrecognised: "throw"` to hand it to `handleError` instead. `classify` replaces the classifier; compose with `CommandFailure.jsonapiFailure` to extend it. `redact` runs on every state echoed back to the browser. `idempotent: { clientId, fetchExisting }` turns on the client-id retry.
 
 ### Worked example: a login action
 
@@ -187,8 +188,10 @@ const blankPassword = (state: State.FormState<SignIn>): State.FormState<SignIn> 
 });
 
 /** A 401 → one generic whole-form message (never reveal whether the email exists). */
-const classify: CommandFailure.Classify = (cause) =>
-  cause instanceof SessionCallError && cause.status === 401
+const classify: CommandFailure.Classify = (error) =>
+  error instanceof CommandFailure.CommandRejected &&
+  error.cause instanceof SessionCallError &&
+  error.cause.status === 401
     ? Option.some(CommandFailure.message(401, "Invalid email or password"))
     : Option.none();
 
