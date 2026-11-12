@@ -358,15 +358,15 @@ describe("builder refineEffect — runs on decoded values (issue #72)", () => {
   });
 });
 
-describe("move — reorders an array field, carrying per-index state", () => {
-  const makeStore = () =>
-    createForm({
-      schema: Schema.Struct({ tags: Schema.Array(Schema.String) }),
-      defaults: { tags: ["a", "b", "c"] },
-    });
+const makeTagsStore = () =>
+  createForm({
+    schema: Schema.Struct({ tags: Schema.Array(Schema.String) }),
+    defaults: { tags: ["a", "b", "c"] },
+  });
 
+describe("move — reorders an array field, carrying per-index state", () => {
   it("moves the item and its touched flag to the new index", () => {
-    const store = makeStore();
+    const store = makeTagsStore();
     store.setTouched(["tags", 0]);
     store.move(["tags"], 0, 2);
     expect(store.valueAt(["tags"])).toEqual(["b", "c", "a"]);
@@ -376,7 +376,7 @@ describe("move — reorders an array field, carrying per-index state", () => {
   });
 
   it("ignores an out-of-range or no-op move", () => {
-    const store = makeStore();
+    const store = makeTagsStore();
     store.move(["tags"], 0, 3);
     store.move(["tags"], -1, 1);
     store.move(["tags"], 1, 1);
