@@ -65,6 +65,17 @@ describe("FormBuilder sync refine (cross-field)", () => {
   });
 });
 
+describe("FormBuilder refine annotations", () => {
+  it("carries the caller's annotations onto the schema check", () => {
+    const schema = buildSchema(
+      empty
+        .addField("a", Schema.String)
+        .refine(() => undefined, { title: "Always valid", description: "A test check" }),
+    );
+    expect(schema.ast.checks?.[0]?.annotations?.title).toBe("Always valid");
+  });
+});
+
 describe("Form.fromBuilder", () => {
   const builder = empty
     .addField("name", Schema.String.check(Schema.isMinLength(2)))
