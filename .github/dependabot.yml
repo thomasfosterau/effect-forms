@@ -1,6 +1,6 @@
 # Dependabot version updates for the pnpm workspace (the `npm` ecosystem at
 # `/` reads pnpm-workspace.yaml's catalogs and the lockfile) and the GitHub
-# Actions, including the local composite setup action's SHA pins.
+# Actions the workflows use.
 #
 # Groups exist only for dependencies that MUST move together, so they arrive
 # in ONE PR; everything else gets a PR of its own. Dependabot puts a
@@ -88,10 +88,7 @@ updates:
     assignees:
       - thomasfosterau
   - package-ecosystem: "github-actions"
-    # The composite setup action pins actions too; list it explicitly.
-    directories:
-      - "/"
-      - "/.github/actions/setup"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
