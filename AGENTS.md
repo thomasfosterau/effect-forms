@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`CLAUDE.md` is a symlink to this file. Project conventions live here; personal style preferences live in user memory.
+Project conventions for every coding agent and contributor live here. Claude Code reads them through `.claude/CLAUDE.md`, which adds only Claude-specific guidance (hooks, settings, worktrees); each `packages/<name>/CLAUDE.md` is a one-line `@AGENTS.md` import.
 
 This repository publishes two npm libraries for Effect-native forms, consumed by the owner's applications (website, gardeneria, preferenceflow). Both were extracted from `thomasfosterau/website` with `git subtree split`, so `git log` / `git blame` reach back through their pre-extraction history.
 
@@ -9,7 +9,7 @@ This repository publishes two npm libraries for Effect-native forms, consumed by
 | `@thomasfosterau/effect-forms`        | `packages/forms`  | `.`          | Framework-neutral core. Imports `effect` only, never a framework.                                               |
 | `@thomasfosterau/effect-forms-svelte` | `packages/svelte` | `.`, `./kit` | Svelte 5 runes bindings. `.` imports `svelte` + the core; `./kit` alone imports `@sveltejs/kit` / `$app/forms`. |
 
-Package-local invariants and terms live in each package's `CLAUDE.md` (`packages/<name>/CLAUDE.md`); read it before changing that package. A new package adds a row here and in the root `README.md`, its own `CLAUDE.md`, a `.fallowrc.json` entry and zone, and its `#check` / `#build` edges in the root `vite.config.ts` (`check`, `test:coverage`, and `docgen` where it has one).
+Package-local invariants and terms live in each package's `AGENTS.md` (`packages/<name>/AGENTS.md`); read it before changing that package. A new package adds a row here and in the root `README.md`, its own `AGENTS.md` (plus a one-line `CLAUDE.md` holding `@AGENTS.md`), a `.fallowrc.json` entry and zone, and its `#check` / `#build` edges in the root `vite.config.ts` (`check`, `test:coverage`, and `docgen` where it has one).
 
 ## Common pitfalls
 
@@ -78,15 +78,9 @@ These packages target **Effect v4**: a single `effect` package. Development and 
 - `@effect/platform` does not exist in v4 — HTTP modules live under `effect/http/*` (there are no `effect/unstable/*` paths in 4.0.0), and `FileSystem` / `Path` under `effect/*`.
 - `@effect/schema` does not exist in v4 — `Schema`, `SchemaAST`, `SchemaIssue`, `SchemaParser` and `SchemaRepresentation` are all top-level `effect/*` modules.
 
-## Agent sessions
-
-- The SessionStart hook (`.claude/hooks/session-start.sh`) installs the global Vite+ CLI at the catalog's `vite-plus` pin with the official installer (npm-provenance and SHA-512 checked; it needs `vite.plus` and `viteplus.dev` on the environment's allowlist), links `vp` and `vpx` into `~/.local/bin` (the CLI lives under `$VP_HOME` when set, as in the Vite+ container image, else `~/.local/share/vite-plus`) for non-interactive shells, runs `vp install --frozen-lockfile`, repairs a broken bare `node`, and builds the packages on a clean checkout. The global `vp` delegates to each checkout's own `vite-plus`, worktrees included. Everything else goes through Vite+: `vp exec fallow …`, `vp exec changeset …`, `vpx <file>.ts` for scripts (`tsx` is installed only because docgen spawns it); nothing else is put on PATH. If the installer can't run, `vp` falls back to this checkout's `node_modules` copy. It hydrates no secrets; none are needed, and nothing here can publish.
-- A PreToolUse hook (`.claude/hooks/fallow-gate.sh`) blocks `git commit` / `git push` when `fallow audit --base origin/trunk` (run through `vp exec fallow`) fails, in this checkout and its `.claude/worktrees/*` only: for a commit in any other tree it runs none of that tree's tooling and skips the audit with a notice. It reads the coverage map on disk, so run `vp run test:coverage` first. A PostToolUse hook runs `vp fmt --write` on every `.ts` / `.js` / `.css` / `.json` / `.md` file an agent edits, so expect formatter rewrites rather than hand-formatting.
-- Every gate in [Verification](#verification) runs in an agent session; `pnpm audit` needs the network. Only publishing (the release workflow's OIDC) can't.
-
 ## Documentation surfaces
 
-The root `README.md` is the landing page; each package `README.md` is the npm API reference (the `/kit` guide is the `## /kit` section of `packages/svelte/README.md`); each package `CLAUDE.md` carries its boundary and invariants (not published); `CONTRIBUTING.md` carries human setup, hooks and single-check commands; `PUBLISHING.md` the release pipeline and its one-time owner setup; `SECURITY.md` the reporting channel and supply-chain posture; `.changeset/*.md` are the release notes. No `docs/` tree is committed (`packages/forms/docs/` is docgen output); decisions and findings go in issue comments.
+The root `README.md` is the landing page; each package `README.md` is the npm API reference (the `/kit` guide is the `## /kit` section of `packages/svelte/README.md`); each package `AGENTS.md` carries its boundary and invariants (not published); `.claude/CLAUDE.md` carries the Claude Code session specifics; `CONTRIBUTING.md` carries human setup, hooks and single-check commands; `PUBLISHING.md` the release pipeline and its one-time owner setup; `SECURITY.md` the reporting channel and supply-chain posture; `.changeset/*.md` are the release notes. No `docs/` tree is committed (`packages/forms/docs/` is docgen output); decisions and findings go in issue comments.
 
 ---
 
