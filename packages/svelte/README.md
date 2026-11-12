@@ -41,17 +41,18 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
 </form>
 ```
 
-## Guides
+## Entries
 
-| Guide                                                                                                   | What it covers                                                              |
-| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [The store](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/store.md)             | `createForm`, reactive state, methods, field arrays, lifecycle options.     |
-| [Field handles](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/field-handles.md) | `form.field(path)`: a typed, reactive handle bundling one input's wiring.   |
-| [Validation](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/validation.md)       | Validation modes, per-field validators, client / server error sources.      |
-| [Modules](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/modules.md)             | The modules behind the store (`EntityForm`, `Tainted`, `EnhanceCore`, ...). |
-| [/kit](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/kit.md)                    | The SvelteKit entry: `formAction`, failure routing, `enhanceForm`, readers. |
+| Entry                                     | Purpose                                                                                                  | Guides                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@thomasfosterau/effect-forms-svelte`     | Svelte 5 runes bindings: `createForm`, field handles, tainted tracking, client validation, `EntityForm`. | [Store](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/store.md), [Field handles](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/field-handles.md), [Validation](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/validation.md), [Modules](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/modules.md) |
+| `@thomasfosterau/effect-forms-svelte/kit` | SvelteKit only: `formAction`, JSON:API failure routing, `enhanceForm`, page-state readers.               | [/kit](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/svelte/kit.md)                                                                                                                                                                                                                                                                                                             |
 
-The per-export API reference is the doc comment on each export.
+## Links
+
+- [Documentation index](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/README.md)
+- [Changelog](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/CHANGELOG.md)
+- The per-export API reference is the doc comment on each export.
 
 ## License
 

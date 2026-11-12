@@ -33,17 +33,17 @@ const state = await Effect.runPromise(signupForm.validate(request));
 // state: { id, valid, posted, data, errors, constraints, message? }
 ```
 
-## Guides
+## Entries
 
-| Guide                                                                                                      | What it covers                                                                       |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [Validation and state](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/validation.md) | `Form.make`, `validate` / `empty`, coercion and update semantics.                    |
-| [Building a form](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/builder.md)         | `FormBuilder`: compose a form field by field, with whole-form refinements.           |
-| [Errors](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/errors.md)                   | The nested error tree and per-source tracking.                                       |
-| [Constraints](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/constraints.md)         | Native input attributes derived from the schema.                                     |
-| [Modules](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/modules.md)                 | Every exported namespace (`Form`, `State`, `Errors`, `Coerce`, ...) and its purpose. |
+| Entry                          | Purpose                                                                                                                                                                        | Guides                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@thomasfosterau/effect-forms` | The only entry. Namespaces: `Form`, `FormBuilder`, `Field`, `State`, `Errors`, `Issues`, `FormData`, `Path`, `Coerce`, `Command`, `Constraints`, `Mode`, `Result`, `Validate`. | [Validation](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/validation.md), [Builder](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/builder.md), [Errors](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/errors.md), [Constraints](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/constraints.md), [Modules](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/modules.md) |
 
-The per-export API reference is the doc comment on each export.
+## Links
+
+- [Documentation index](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/README.md)
+- [Changelog](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/CHANGELOG.md)
+- The per-export API reference is the doc comment on each export.
 
 ## License
 
