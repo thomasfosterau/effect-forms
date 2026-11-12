@@ -1,6 +1,7 @@
 # Dependabot version updates for the pnpm workspace (the `npm` ecosystem at
 # `/` reads pnpm-workspace.yaml's catalogs and the lockfile) and the GitHub
-# Actions, including the local composite setup action's SHA pins.
+# Actions, including the local composite setup action's `uses:` tags (the exact
+# `@vX.Y.Z` tags are locked to commits in .github/workflows/actions.lock).
 #
 # Groups exist only for dependencies that MUST move together, so they arrive
 # in ONE PR; everything else gets a PR of its own. Dependabot puts a
