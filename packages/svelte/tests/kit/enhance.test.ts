@@ -26,6 +26,11 @@ type AfterSubmit = Exclude<Awaited<ReturnType<RecordedSubmit>>, void>;
 
 type ActionOutcome = Parameters<AfterSubmit>[0]["result"];
 
+/** The slice of SvelteKit's `page` state the default `update` writes: `page.form`. */
+interface PageForm {
+  form: unknown;
+}
+
 const attach = (store: ReturnType<typeof realStore>["store"]) => {
   const props = enhanceForm(store);
   const [key] = Object.getOwnPropertySymbols(props);
@@ -103,8 +108,40 @@ describe("enhanceForm", () => {
     );
     expect(store.submitting).toBe(false);
     expect(setServerState).toHaveBeenCalledWith({ name: "" }, { name: ["Required"] });
-    expect(update).not.toHaveBeenCalled();
+    // `update` still runs, so SvelteKit replaces `page.form` with this result.
+    expect(update).toHaveBeenCalledWith({ reset: false });
     expect(applyAction).not.toHaveBeenCalled();
+  });
+
+  it("replaces a stale page.form message when a later submit fails validation (#146)", async () => {
+    const { store, setServerState } = realStore();
+    const { submit, node } = attach(store);
+    // SvelteKit's default `update` applies the result: `page.form` becomes its `data`.
+    const page: PageForm = { form: undefined };
+    const updateFor = (result: ActionOutcome) => async () => {
+      page.form = "data" in result ? result.data : undefined;
+    };
+
+    const fault: ActionOutcome = {
+      type: "failure",
+      status: 500,
+      location: "/",
+      data: { message: "boom" },
+    };
+    await finish(await submitWith(submit, node), node, fault, updateFor(fault));
+    expect(page.form).toEqual({ message: "boom" });
+    expect(setServerState).not.toHaveBeenCalled();
+
+    const invalid: ActionOutcome = {
+      type: "failure",
+      status: 400,
+      location: "/",
+      data: { form: { data: { name: "" }, errors: { name: ["Required"] } } },
+    };
+    await finish(await submitWith(submit, node), node, invalid, updateFor(invalid));
+    expect(setServerState).toHaveBeenCalledWith({ name: "" }, { name: ["Required"] });
+    expect(page.form).toEqual(invalid.data);
+    expect(page.form).not.toHaveProperty("message");
   });
 
   it("defers to SvelteKit for anything else, without resetting the form", async () => {
