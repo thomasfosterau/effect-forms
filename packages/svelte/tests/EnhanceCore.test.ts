@@ -232,12 +232,12 @@ describe("isActionResponse", () => {
 describe("resultToUpdate", () => {
   it("Success → data + errors + valid", () => {
     const update = resultToUpdate(success(makeFormState({ a: 1 })));
-    expect(update).toMatchObject({ data: { a: 1 }, valid: true });
+    expect(update).toMatchObject({ data: { a: 1 }, isValid: true });
   });
 
   it("Failure → data + errors + invalid", () => {
     const update = resultToUpdate(failure(makeFormState({ a: 1 }, { errors: { a: ["x"] } })));
-    expect(update.valid).toBe(false);
+    expect(update.isValid).toBe(false);
     expect(update.errors).toEqual({ a: ["x"] });
   });
 
@@ -248,7 +248,7 @@ describe("resultToUpdate", () => {
 
   it("Error → error message", () => {
     const result: FormActionResult<unknown> = { _tag: "Error", status: 500, message: "boom" };
-    expect(resultToUpdate(result)).toEqual({ error: "boom", valid: false });
+    expect(resultToUpdate(result)).toEqual({ error: "boom", isValid: false });
   });
 });
 

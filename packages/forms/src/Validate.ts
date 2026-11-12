@@ -34,16 +34,16 @@ import {
 
 /** The outcome of validating a value against a schema. */
 export type ValidationResult<A> =
-  | { readonly valid: true; readonly data: A }
+  | { readonly isValid: true; readonly data: A }
   | {
-      readonly valid: false;
+      readonly isValid: false;
       readonly errors: FormErrors;
       readonly issues: ReadonlyArray<FormIssue>;
     };
 
 /**
  * Decode `input` through `schema`, returning a {@link ValidationResult} on the
- * success channel (decode failures become `valid: false`, not an Effect
+ * success channel (decode failures become `isValid: false`, not an Effect
  * failure). Decoding-service requirements propagate on the `R` channel.
  */
 export function validateValue<S extends Schema.Top>(
@@ -54,10 +54,10 @@ export function validateValue<S extends Schema.Top>(
   return SchemaParser.decodeUnknownEffect(schema, { errors: "all" })(input).pipe(
     Effect.matchEffect({
       onSuccess: (data): Effect.Effect<ValidationResult<S["Type"]>> =>
-        Effect.succeed({ valid: true, data }),
+        Effect.succeed({ isValid: true, data }),
       onFailure: (issue): Effect.Effect<ValidationResult<S["Type"]>> => {
         const issues = schemaIssuesToFormIssues(issue, format);
-        return Effect.succeed({ valid: false, errors: issuesToErrors(issues), issues });
+        return Effect.succeed({ isValid: false, errors: issuesToErrors(issues), issues });
       },
     }),
   );

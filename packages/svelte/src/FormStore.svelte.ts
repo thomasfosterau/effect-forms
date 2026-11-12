@@ -5,7 +5,7 @@
  * Give it either `{ schema, defaults }` (it wraps the core's `Form.make` to seed
  * an empty form) or a server-produced {@link FormState} to hydrate from. The
  * store exposes mutable `data` (bind inputs to it), typed `errors`
- * (`form.errors.name`), `submitting` / `delayed` / `message` / `valid`, tainted
+ * (`form.errors.name`), `submitting` / `delayed` / `message` / `isValid`, tainted
  * tracking, and a spreadable {@link FormStore.props} for `<form {...form.props}>`
  * that wires progressive-enhancement submission (a Svelte attachment).
  *
@@ -327,7 +327,7 @@ export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
   }) => void;
   /** Called after the update has been applied to the store. */
   readonly onUpdated?: (input: {
-    readonly form: { readonly data: A; readonly errors: FormErrors; readonly valid: boolean };
+    readonly form: { readonly data: A; readonly errors: FormErrors; readonly isValid: boolean };
   }) => void;
   /** Called on an unexpected (non-user-fixable) error. */
   readonly onError?: (input: { readonly error: string }) => void;
@@ -384,9 +384,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Whether the in-flight submission has passed `delayMs`. */
   delayed = $state(false);
   /** Whether the current state came from a submission. */
-  posted = $state(false);
+  isPosted = $state(false);
   /** Whether the last validation/submit was valid. */
-  valid = $state(false);
+  isValid = $state(false);
   /** How many times {@link FormStore.enhance}'s submit handler has actually attempted a submission. */
   submissionAttempts = $state(0);
 
@@ -481,7 +481,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * last validation run said valid.
    */
   readonly canSubmit: boolean = $derived(
-    !this.submitting && !this.isValidating && (!this.#hasValidated || this.valid),
+    !this.submitting && !this.isValidating && (!this.#hasValidated || this.isValid),
   );
 
   /** The tainted-field tree, re-derived as `data` changes. */
@@ -523,14 +523,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.constraints =
       initial.constraints ??
       (options.schema ? Constraints.constraintsFromSchema(options.schema) : {});
-    this.posted = initial.posted;
-    this.valid = initial.valid;
+    this.isPosted = initial.isPosted;
+    this.isValid = initial.isValid;
     // `canSubmit` treats "never validated" as presumptively valid (a pristine
-    // form isn't guilty until proven so); hydrating from a `posted` state
-    // means something already *has* judged it, so `valid` must be trusted
+    // form isn't guilty until proven so); hydrating from a `isPosted` state
+    // means something already *has* judged it, so `isValid` must be trusted
     // from the start — otherwise a server-rejected `FormState` briefly (or
     // permanently, if nothing re-triggers validation) reports `canSubmit: true`.
-    this.#hasValidated = initial.posted;
+    this.#hasValidated = initial.isPosted;
   }
 
   /**
@@ -583,7 +583,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       this.#recomputeValid();
     }
     this.#runRefineEffect();
-    return this.valid;
+    return this.isValid;
   }
 
   /** Validate a single field against the schema, returning that field's messages. */
@@ -676,7 +676,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     }
     if (this.#mode.validation === "onBlur") {
       this.validate();
-      if (this.#mode.autoSubmit && this.valid && this.#hasUnsubmittedChanges()) this.#autoSubmit();
+      if (this.#mode.autoSubmit && this.isValid && this.#hasUnsubmittedChanges())
+        this.#autoSubmit();
     }
   }
 
@@ -741,7 +742,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * once it is touched; never in `onSubmit` before posting.
    */
   shouldShowError(path: FormPath): boolean {
-    if (this.posted) return true;
+    if (this.isPosted) return true;
     if (this.#mode.validation === "onChange") return this.taintedAt(path);
     if (this.#mode.validation === "onBlur") return this.isTouchedAt(path);
     return false;
@@ -906,7 +907,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   #scheduleValidation(): void {
     const run = (): void => {
       this.validate();
-      if (this.#mode.autoSubmit && this.valid && this.#hasUnsubmittedChanges()) this.#autoSubmit();
+      if (this.#mode.autoSubmit && this.isValid && this.#hasUnsubmittedChanges())
+        this.#autoSubmit();
     };
     const ms = Option.getOrElse(this.#mode.debounce, () => 0);
     if (ms > 0) {
@@ -924,7 +926,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   #recomputeValid(): void {
-    this.valid = !hasErrors(mergeSourced(this.#sourced));
+    this.isValid = !hasErrors(mergeSourced(this.#sourced));
   }
 
   /**
@@ -1041,7 +1043,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /** Whether, absent a registered validator, a whole-schema fallback revalidation applies for `trigger`. */
   #shouldFallBackToRevalidate(trigger: FieldTrigger): boolean {
-    return this.posted && this.#revalidatesOn(trigger) && this.#options.schema !== undefined;
+    return this.isPosted && this.#revalidatesOn(trigger) && this.#options.schema !== undefined;
   }
 
   /** Re-run the whole-schema client validation and adopt just `path`'s messages. */
@@ -1145,8 +1147,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#previousData = this.#detachedData();
     this.#sourced = emptySourced;
     this.message = undefined;
-    this.valid = false;
-    this.posted = false;
+    this.isValid = false;
+    this.isPosted = false;
     this.#touched = {};
     this.#dirtied = {};
     this.#lastSubmitted = Option.none();
@@ -1161,8 +1163,8 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   capture(): FormState<A, Message> {
     const state = State.make<A, Message>(this.#detachedData(), {
       id: this.id,
-      valid: this.valid,
-      posted: this.posted,
+      isValid: this.isValid,
+      isPosted: this.isPosted,
       errors: this.#mergedErrors,
       constraints: this.constraints,
     });
@@ -1187,10 +1189,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#previousData = this.#detachedData();
     this.#sourced = { client: noErrors, server: snapshot.errors };
     this.message = snapshot.message;
-    this.valid = snapshot.valid;
-    this.posted = snapshot.posted;
+    this.isValid = snapshot.isValid;
+    this.isPosted = snapshot.isPosted;
     this.constraints = snapshot.constraints ?? {};
-    this.#hasValidated = snapshot.posted;
+    this.#hasValidated = snapshot.isPosted;
   }
 
   /**
@@ -1198,16 +1200,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * round-trip — for glue code that repopulates the store from a derived
    * result it received some other way (e.g.
    * {@link module:effect-forms-svelte/SvelteKit}'s `applyActionResult`, from
-   * a SvelteKit form action's failure). Sets `posted` so
-   * {@link shouldShowError} shows the new errors immediately; `valid` is
+   * a SvelteKit form action's failure). Sets `isPosted` so
+   * {@link shouldShowError} shows the new errors immediately; `isValid` is
    * always `false` (the caller only reaches for this on a failure result).
    */
   setServerState(data: A, errors: FormErrors): void {
     this.data = data;
     this.#previousData = structuredClone(data);
     this.#sourced = { client: noErrors, server: errors };
-    this.valid = false;
-    this.posted = true;
+    this.isValid = false;
+    this.isPosted = true;
     this.#hasValidated = true;
   }
 
@@ -1224,11 +1226,11 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#sourced = { client: noErrors, server: update.errors ?? noErrors };
     this.#hasValidated = true;
     this.message = update.message;
-    if (update.valid !== undefined) this.valid = update.valid;
-    this.#lastSubmitOutcome = Option.some(this.valid ? "success" : "failure");
-    this.posted = true;
+    if (update.isValid !== undefined) this.isValid = update.isValid;
+    this.#lastSubmitOutcome = Option.some(this.isValid ? "success" : "failure");
+    this.isPosted = true;
     this.#options.onUpdated?.({
-      form: { data: this.data, errors: this.#mergedErrors, valid: this.valid },
+      form: { data: this.data, errors: this.#mergedErrors, isValid: this.isValid },
     });
   }
 
@@ -1389,7 +1391,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
           $effect(() => {
             // Establish a deep dependency on the data tree.
             const snapshot = $state.snapshot(this.data);
-            if (this.#mode.validation === "onChange" && (this.isTainted || this.posted)) {
+            if (this.#mode.validation === "onChange" && (this.isTainted || this.isPosted)) {
               this.#scheduleValidation();
             }
             if (Option.isSome(dispatchListeners)) {

@@ -57,7 +57,7 @@ describe("formAction (derived SvelteKit page action)", () => {
     );
     const result = await action(event({ name: "  " }));
     expect(ran).toBe(false); // command never runs on invalid input
-    expect(result).toMatchObject({ status: 400, data: { form: { valid: false } } });
+    expect(result).toMatchObject({ status: 400, data: { form: { isValid: false } } });
     expect(result).toHaveProperty(["data", "form", "errors", "name"]);
   });
 

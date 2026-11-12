@@ -129,7 +129,7 @@ const toStructured = (input?: FormInput): Effect.Effect<Option.Option<Record<str
  * )
  *
  * const state = Effect.runSync(signup.validate(new URLSearchParams({ name: "A" })))
- * console.log(state.valid) // false
+ * console.log(state.isValid) // false
  * console.log(state.data) // { name: "A" } — the posted value, kept for re-render
  * ```
  */
@@ -150,8 +150,8 @@ export function make<S extends Schema.Top, Message = unknown>(
   const empty: Form<S, Message>["empty"] = (overrides = {}) =>
     makeFormState<S["Type"], Message>(defaults, {
       id,
-      valid: false,
-      posted: false,
+      isValid: false,
+      isPosted: false,
       constraints,
       ...overrides,
     });
@@ -170,8 +170,8 @@ export function make<S extends Schema.Top, Message = unknown>(
                   Effect.succeed(
                     makeFormState<S["Type"], Message>(data, {
                       id,
-                      valid: true,
-                      posted: true,
+                      isValid: true,
+                      isPosted: true,
                       constraints,
                     }),
                   ),
@@ -186,8 +186,8 @@ export function make<S extends Schema.Top, Message = unknown>(
                   return Effect.succeed(
                     makeFormState<S["Type"], Message>(posted, {
                       id,
-                      valid: false,
-                      posted: true,
+                      isValid: false,
+                      isPosted: true,
                       constraints,
                       errors: issuesToErrors(schemaIssuesToFormIssues(issue, leafFormatter)),
                     }),
@@ -258,15 +258,15 @@ export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
                         onEmpty: () =>
                           makeFormState<DecodedFromFields<TFields>, Message>(data, {
                             id: base.id,
-                            valid: true,
-                            posted: true,
+                            isValid: true,
+                            isPosted: true,
                             constraints: base.constraints,
                           }),
                         onNonEmpty: (failures) =>
                           makeFormState<DecodedFromFields<TFields>, Message>(posted, {
                             id: base.id,
-                            valid: false,
-                            posted: true,
+                            isValid: false,
+                            isPosted: true,
                             constraints: base.constraints,
                             errors: issuesToErrors(failures),
                           }),
@@ -277,8 +277,8 @@ export function fromBuilder<TFields extends FieldsRecord, R, Message = unknown>(
                   Effect.succeed(
                     makeFormState<DecodedFromFields<TFields>, Message>(posted, {
                       id: base.id,
-                      valid: false,
-                      posted: true,
+                      isValid: false,
+                      isPosted: true,
                       constraints: base.constraints,
                       errors: issuesToErrors(
                         schemaIssuesToFormIssues(issue, options.leafFormatter),
