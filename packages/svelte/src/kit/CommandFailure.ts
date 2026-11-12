@@ -29,7 +29,7 @@ import * as Schema from "effect/Schema";
 import type { Document } from "@thomasfosterau/effect-jsonapi";
 
 /** One JSON:API error object: `@thomasfosterau/effect-jsonapi`'s `Document.ErrorObject`. */
-export type ErrorObject = typeof Document.ErrorObject.Type;
+export type ErrorObject = Document.ErrorObject;
 
 /** A failure carrying JSON:API error objects, each routed to a field (or the root) by its pointer. */
 export interface RoutedFailure {
