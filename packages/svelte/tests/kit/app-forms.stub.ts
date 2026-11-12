@@ -10,9 +10,11 @@ type Submit = SubmitFunction;
 
 export const enhanced: Array<{ node: HTMLFormElement; submit: Submit }> = [];
 
-export const enhance = vi.fn((node: HTMLFormElement, submit: Submit) => {
-  enhanced.push({ node, submit });
-  return { destroy: vi.fn() };
-});
+export const enhance = vi.fn<(node: HTMLFormElement, submit: Submit) => { destroy: () => void }>(
+  (node, submit) => {
+    enhanced.push({ node, submit });
+    return { destroy: vi.fn<() => void>() };
+  },
+);
 
-export const applyAction = vi.fn(async (_result: ActionResult) => {});
+export const applyAction = vi.fn<(result: ActionResult) => Promise<void>>(async () => {});

@@ -7,14 +7,14 @@ type Input = { readonly id?: string; readonly name: string };
 
 describe("idempotentCreate", () => {
   it("passes a successful create straight through", async () => {
-    const fetchExisting = vi.fn(async (id: string) => id);
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async (id) => id);
     const create = idempotentCreate(async (input: Input) => `created-${input.name}`, fetchExisting);
     await expect(create({ id: "a", name: "x" })).resolves.toBe("created-x");
     expect(fetchExisting).not.toHaveBeenCalled();
   });
 
   it("re-fetches the submitted id on a 409 and returns it", async () => {
-    const fetchExisting = vi.fn(async (id: string) => `existing-${id}`);
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async (id) => `existing-${id}`);
     const create = idempotentCreate<Input, string>(async () => {
       throw conflict409();
     }, fetchExisting);
@@ -47,7 +47,7 @@ describe("idempotentCreate", () => {
 
   it("rethrows a 409 when the input carries no id", async () => {
     const conflict = conflict409();
-    const fetchExisting = vi.fn(async (id: string) => id);
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async (id) => id);
     const create = idempotentCreate<Input, string>(async () => {
       throw conflict;
     }, fetchExisting);
@@ -58,7 +58,7 @@ describe("idempotentCreate", () => {
 
   it("rethrows any non-409 failure unchanged", async () => {
     const unprocessable = new JsonapiError({ status: 422, errors: [] });
-    const fetchExisting = vi.fn(async (id: string) => id);
+    const fetchExisting = vi.fn<(id: string) => Promise<string>>(async (id) => id);
     const create = idempotentCreate<Input, string>(async () => {
       throw unprocessable;
     }, fetchExisting);
