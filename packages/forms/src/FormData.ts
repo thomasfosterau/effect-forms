@@ -19,8 +19,8 @@
  */
 
 import * as Arr from "effect/Array";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 
 /** Anything that can be parsed into a structured form object. */
 export type FormBodySource =
@@ -83,7 +83,7 @@ function assign(root: Container, tokens: Arr.NonEmptyReadonlyArray<string>, valu
   // container each one names; `tokens[i + 1]` is the token after `token`.
   const node = Arr.reduce(Arr.initNonEmpty(tokens), root, (parent, token, i): Container => {
     const child = token === "" ? undefined : getFromContainer(parent, token);
-    if (Predicate.isObjectOrArray(child)) return child;
+    if (P.isObjectOrArray(child)) return child;
     const created = makeContainer(tokens[i + 1]);
     setOnContainer(parent, token, created);
     return created;
@@ -127,7 +127,7 @@ function entriesOf(source: FormBodySource): Iterable<readonly [string, unknown]>
  * ```
  */
 export function formDataToObject(source: FormBodySource): Record<string, unknown> {
-  return Arr.reduce(entriesOf(source), Rec.empty<string, unknown>(), (root, [name, value]) => {
+  return Arr.reduce(entriesOf(source), R.empty<string, unknown>(), (root, [name, value]) => {
     const tokens = parseFieldPath(name);
     if (Arr.isReadonlyArrayNonEmpty(tokens)) assign(root, tokens, value);
     return root;

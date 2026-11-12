@@ -2,14 +2,12 @@
  * Runs the worked example in `examples/login.page.server.ts` (website's login
  * action) against the real `@sveltejs/kit` `redirect()` / `fail()`.
  */
-import type { RequestEvent } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { actions, SessionCallError, type SessionTransport } from "./examples/login.page.server.ts";
-import { post } from "./fixtures.ts";
+import { post, requestEvent } from "./fixtures.ts";
 
 const event = (body: Record<string, string>, session: SessionTransport) =>
-  // SAFETY: formAction reads only `request`; the example's command reads `locals.session`.
-  ({ request: post(body), locals: { session } }) as RequestEvent;
+  requestEvent(post(body), { session });
 
 const transport = (signIn: SessionTransport["signIn"]): SessionTransport => ({
   signIn: vi.fn(signIn),

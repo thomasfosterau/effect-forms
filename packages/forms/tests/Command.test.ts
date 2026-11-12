@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import {
   blankDefaults,
   createAdapter,
   formInputFields,
+  type FormInputField,
   jsonRowsFromField,
   plan,
   updateAdapter,
@@ -65,7 +66,7 @@ const UpdateThing = Schema.Struct({
 });
 
 const thing = plan(CreateThing, UpdateThing);
-const byKey = Record.fromEntries(Arr.map(thing.fields, (field) => [field.key, field] as const));
+const byKey = R.fromEntries(Arr.map(thing.fields, (field) => [field.key, field] as const));
 const isoString = (date: Date) => date.toISOString();
 
 describe("Command.plan", () => {
@@ -120,7 +121,7 @@ describe("Command.plan", () => {
 
   it("still throws at plan time on a Schema.declare'd field (uploads, images)", () => {
     const Upload = Schema.declare(
-      (u): u is { readonly bytes: Uint8Array } => Predicate.isObjectOrArray(u) && "bytes" in u,
+      (u): u is { readonly bytes: Uint8Array } => P.isObjectOrArray(u) && "bytes" in u,
     );
     expect(() =>
       plan(
@@ -219,7 +220,7 @@ describe("Command.plan — OptionFrom* fields", () => {
 
   it("still throws on an Option of a Schema.declare'd type", () => {
     const Upload = Schema.declare(
-      (u): u is { readonly bytes: Uint8Array } => Predicate.isObjectOrArray(u) && "bytes" in u,
+      (u): u is { readonly bytes: Uint8Array } => P.isObjectOrArray(u) && "bytes" in u,
     );
     expect(() =>
       plan(
@@ -294,14 +295,8 @@ describe("Command.plan — OptionFrom* fields", () => {
   });
 });
 
-type FormInputField = Schema.String | Schema.optional<Schema.String>;
-
-const decodeFormInput = (fields: { readonly [key: string]: Schema.Top }) => {
-  // SAFETY: formInputFields emits only `Schema.String` (possibly `.check`ed) or
-  // `Schema.optional(Schema.String)` per key, and the overrides passed below are too.
-  const stringFields = fields as { readonly [key: string]: FormInputField };
-  return Schema.decodeUnknownSync(Schema.Struct(stringFields));
-};
+const decodeFormInput = (fields: { readonly [key: string]: FormInputField }) =>
+  Schema.decodeUnknownSync(Schema.Struct(fields));
 
 describe("Command.formInputFields / blankDefaults", () => {
   it("derives the all-string create shape with min-length on required fields", () => {

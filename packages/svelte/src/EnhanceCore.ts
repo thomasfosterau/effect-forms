@@ -12,8 +12,8 @@
 import { Errors, Result, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Match from "effect/Match";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 
 // Terse local aliases onto the namespaced core exports.
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
@@ -29,7 +29,7 @@ type BodyEntry = [string, string | Blob];
  * so it holds in any runtime, including one without a global `Blob`.
  */
 const isBlob = (value: unknown): value is Blob =>
-  !Predicate.isUndefined(globalThis.Blob) && value instanceof Blob;
+  !P.isUndefined(globalThis.Blob) && value instanceof Blob;
 
 /**
  * Encode a `Date` as the `YYYY-MM-DD` of its UTC calendar day, or `undefined`
@@ -55,14 +55,9 @@ function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void
     if (encoded !== undefined) out.push([key, encoded]);
   } else if (Array.isArray(value)) {
     value.forEach((item, i) => appendEntries(out, `${key}[${i}]`, item));
-  } else if (Predicate.isObject(value)) {
+  } else if (P.isObject(value)) {
     appendFields(out, value, key);
-  } else if (
-    Predicate.isString(value) ||
-    Predicate.isNumber(value) ||
-    Predicate.isBoolean(value) ||
-    Predicate.isBigInt(value)
-  ) {
+  } else if (P.isString(value) || P.isNumber(value) || P.isBoolean(value) || P.isBigInt(value)) {
     out.push([key, String(value)]);
   }
   // `undefined`, `function` and `symbol` leaves are omitted.
@@ -71,10 +66,10 @@ function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void
 /** Append an object's own enumerable fields to `out`, as `prefix.key` names. */
 function appendFields<V>(
   out: Array<BodyEntry>,
-  data: Record.ReadonlyRecord<string, V>,
+  data: R.ReadonlyRecord<string, V>,
   prefix: string,
 ): void {
-  Arr.forEach(Record.toEntries(data), ([key, value]) =>
+  Arr.forEach(R.toEntries(data), ([key, value]) =>
     appendEntries(out, prefix ? `${prefix}.${key}` : key, value),
   );
 }
@@ -83,7 +78,7 @@ function appendFields<V>(
 function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
   const out: Array<BodyEntry> = [];
   if (prefix) appendEntries(out, prefix, data);
-  else if (Predicate.isObject(data)) {
+  else if (P.isObject(data)) {
     appendFields(out, data, "");
   }
   return out;
@@ -115,7 +110,7 @@ function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
  */
 export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
   return toBodyEntries(data, prefix).filter((entry): entry is [string, string] =>
-    Predicate.isString(entry[1]),
+    P.isString(entry[1]),
   );
 }
 
@@ -141,9 +136,9 @@ export function objectToFormData(data: unknown): FormData {
  */
 function isActionResult<A, Message>(value: unknown): value is FormActionResult<A, Message> {
   return (
-    Predicate.isObjectOrArray(value) &&
-    Predicate.hasProperty(value, "_tag") &&
-    Predicate.isString(value._tag) &&
+    P.isObjectOrArray(value) &&
+    P.hasProperty(value, "_tag") &&
+    P.isString(value._tag) &&
     ["Success", "Failure", "Redirect", "Error"].includes(value._tag)
   );
 }
@@ -153,9 +148,7 @@ function isActionResult<A, Message>(value: unknown): value is FormActionResult<A
  * checked: `A` / `Message` are the caller's declared expectation, not verified.
  */
 function isFormState<A, Message>(value: unknown): value is FormState<A, Message> {
-  return (
-    Predicate.isObjectOrArray(value) && "valid" in value && "data" in value && "errors" in value
-  );
+  return P.isObjectOrArray(value) && "valid" in value && "data" in value && "errors" in value;
 }
 
 /**

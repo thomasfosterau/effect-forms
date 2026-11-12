@@ -13,8 +13,8 @@
 import * as Arr from "effect/Array";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import { detailOf, jsonapiFailure } from "./CommandFailure.ts";
 
 /** The statuses whose failure the submitter can act on (the form layer's set). */
@@ -33,24 +33,20 @@ const USER_FIXABLE_STATUSES: HashSet.HashSet<number> = HashSet.make(400, 409, 42
  * blank `detail` redirects with an empty parameter rather than escalating.
  */
 export const userFixableMessage = (cause: unknown, fallback: string): Option.Option<string> => {
-  if (!Predicate.isObjectOrArray(cause)) return Option.none();
-  if (Predicate.isTagged(cause, "HttpError")) {
-    if (!Predicate.hasProperty(cause, "status") || cause.status !== 400) return Option.none();
+  if (!P.isObjectOrArray(cause)) return Option.none();
+  if (P.isTagged(cause, "HttpError")) {
+    if (!P.hasProperty(cause, "status") || cause.status !== 400) return Option.none();
     return Option.some(
-      Predicate.hasProperty(cause, "message") && Predicate.isString(cause.message)
-        ? cause.message
-        : fallback,
+      P.hasProperty(cause, "message") && P.isString(cause.message) ? cause.message : fallback,
     );
   }
-  if (!Predicate.isTagged(cause, "JsonapiError") && !Predicate.isTagged(cause, "ErrorResponse")) {
+  if (!P.isTagged(cause, "JsonapiError") && !P.isTagged(cause, "ErrorResponse")) {
     return Option.none();
   }
   return jsonapiFailure(cause).pipe(
     Option.filter((failure) => HashSet.has(USER_FIXABLE_STATUSES, failure.status)),
     Option.map((failure) =>
-      Predicate.isTagged(failure, "Routed")
-        ? detailOf(failure.errors[0], fallback)
-        : failure.message,
+      P.isTagged(failure, "Routed") ? detailOf(failure.errors[0], fallback) : failure.message,
     ),
   );
 };
@@ -64,6 +60,6 @@ export const withFailureParams = (
   params: Readonly<Record<string, string>>,
 ): string => {
   const url = new URL(target, "http://localhost");
-  Arr.forEach(Record.toEntries(params), ([key, value]) => url.searchParams.set(key, value));
+  Arr.forEach(R.toEntries(params), ([key, value]) => url.searchParams.set(key, value));
   return url.pathname + url.search;
 };
