@@ -115,6 +115,12 @@ class InvalidJsonRowsError extends Schema.TaggedError<
   { readonly brand: unique symbol }
 >()("InvalidJsonRowsError", { message: Schema.String }) {}
 
+/** A malformed `structured` field payload, as {@link plan}'s default coercion rejects it. */
+class InvalidStructuredJsonError extends Schema.TaggedError<
+  InvalidStructuredJsonError,
+  { readonly brand: unique symbol }
+>()("InvalidStructuredJsonError", { message: Schema.String }) {}
+
 // ── probes ────────────────────────────────────────────────────────────
 
 /**
@@ -465,17 +471,25 @@ const coerceBoolean = (ctx: CoerceContext, raw: string | undefined): unknown => 
 /**
  * Parse a JSON-encoded structured document (inline / block ProseKit JSON)
  * from a multipart field. Blank or absent skips (`undefined`) or, on the
- * clearable path, clears (`null`); a present value is `JSON.parse`d and
+ * clearable path, clears (`null`); a present value is decoded as JSON and
  * passed through as-is — shape validation is the command's own decode's job,
  * exactly as {@link jsonRowsFromField} leaves row-shape validation to itself
- * rather than duplicating it here. `JSON.parse` throws a `SyntaxError` on
- * malformed JSON, same as {@link jsonRowsFromField} does on a malformed row
- * list — mapping that onto a framework response is the caller's concern.
+ * rather than duplicating it here. Throws a plain `Error` on malformed JSON,
+ * same as {@link jsonRowsFromField} does on a malformed row list — mapping
+ * that onto a framework response is the caller's concern.
  */
-const structuredFromField = (raw: string | undefined, clearable: boolean): unknown => {
+const structuredFromField = (
+  raw: string | undefined,
+  clearable: boolean,
+  label: string,
+): unknown => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") return clearable ? null : undefined;
-  return JSON.parse(trimmed);
+  const decoded = decodeJson(trimmed);
+  if (Exit.isFailure(decoded)) {
+    throw new InvalidStructuredJsonError({ message: `Invalid ${label} payload — expected JSON` });
+  }
+  return decoded.value;
 };
 
 /** Build one field's {@link CoerceContext} for one mode. */
@@ -495,7 +509,7 @@ const coerce = (field: FieldPlan, mode: "create" | "update", raw: string | undef
     Match.when("date", () => coerceDate(ctx, raw)),
     Match.when("jsonArray", () => jsonRowsFromField(raw, field.key)),
     Match.when("boolean", () => coerceBoolean(ctx, raw)),
-    Match.when("structured", () => structuredFromField(raw, ctx.clearable)),
+    Match.when("structured", () => structuredFromField(raw, ctx.clearable, field.key)),
     Match.exhaustive,
   );
 };
