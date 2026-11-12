@@ -957,7 +957,11 @@ export class FormStore<
     return Option.getOrElse(focus.getOption(this.data), (): ReadonlyArray<E> => []);
   }
 
-  /** Append `value` to the array `at` names (see {@link blankItemAt} for a schema-derived blank). */
+  /**
+   * Append `value` to the array `at` names (see {@link blankItemAt} for a
+   * schema-derived blank). The field must be a `ReadonlyArray`, as every
+   * schema-derived array is; a mutable `T[]` field does not fit.
+   */
   append<E>(at: At<A, ReadonlyArray<E>>, value: NoInfer<E>): void {
     const focus = resolveAt(at, this.root);
     this.#writeArray(focus, (current) => [...current, value]);
