@@ -68,7 +68,6 @@ import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
-import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import { createAttachmentKey } from "svelte/attachments";
 import { validateData, validateField } from "./ClientValidate.ts";
@@ -112,6 +111,40 @@ const makeForm = Form.make;
 /** `T` with its `readonly` modifiers dropped, for building an options object field by field. */
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
+/**
+ * A builder's `refineEffect` refinements as a whole-form client-side
+ * validator: decode the live form data, run the refinements on the decoded
+ * values, and answer their issues (none while the data doesn't decode).
+ */
+export type FormRefinements<R> = (
+  data: Path.FormValue,
+) => Effect.Effect<ReadonlyArray<FormIssue>, never, R>;
+
+/**
+ * The {@link FormRefinements} of `builder`, or `None` when it has no
+ * `refineEffect` refinements. The refinements are typed against the builder's
+ * *decoded* values, and the server (`Form.fromBuilder`) runs them on decoded
+ * data, so the live (encoded) form data is decoded first; data that doesn't
+ * decode runs no refinements, exactly as on the server.
+ */
+export function refinementsOf<F extends FormFields, RefineR>(
+  builder: FormBuilder.FormBuilder<F, RefineR>,
+): Option.Option<FormRefinements<RefineR>> {
+  if (Arr.isReadonlyArrayEmpty(FormBuilder.asyncRefinements(builder))) return Option.none();
+  const decode = SchemaParser.decodeUnknownEffect(FormBuilder.buildSchema(builder), {
+    errors: "all",
+  });
+  return Option.some((data) =>
+    decode(data).pipe(
+      Effect.matchEffect({
+        onFailure: (): Effect.Effect<ReadonlyArray<FormIssue>, never, RefineR> =>
+          Effect.succeed([]),
+        onSuccess: (values) => FormBuilder.runAsyncRefinements(builder, values),
+      }),
+    ),
+  );
+}
+
 /** View a runtime {@link FormErrors} tree through the data-shaped {@link TypedFormErrors} lens. */
 const typedErrors = <A>(errors: FormErrors): TypedFormErrors<A> => {
   // SAFETY: `TypedFormErrors<A>` is a compile-time projection of `FormErrors`
@@ -142,7 +175,7 @@ export interface FieldMeta {
  * `FormStore` is one as it stands.
  */
 export type FieldHost = Pick<
-  FormStore<Schema.Top>,
+  FormStore<Validate.ServiceFreeSchema, Path.FormValue>,
   | "valueAt"
   | "setValue"
   | "errorsAt"
@@ -162,7 +195,7 @@ export type FieldHost = Pick<
  * an untyped {@link FormPath}. See {@link Path.FieldPath} for how the path is
  * type-checked.
  */
-export class FieldHandle<V> {
+export class FieldHandle<V extends Path.FormValue> {
   readonly #store: FieldHost;
   readonly #path: FormPath;
   /** The path in flat field-name notation — use as the input's `name` attribute. */
@@ -252,7 +285,7 @@ export interface Submission<A, Message> {
 }
 
 /** Options for {@link createForm}. */
-export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
+export interface FormOptions<S extends Validate.ServiceFreeSchema, A, Message, R = never> {
   /** The schema to validate against in the browser (defaults to the bound schema). */
   readonly schema?: S;
   /**
@@ -271,13 +304,14 @@ export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
    */
   readonly fields?: Field.FieldsRecord;
   /**
-   * The builder itself, set automatically when {@link createForm} is given a
-   * {@link FormBuilder}. Its `refineEffect` refinements run client-side as a
-   * whole-form async validator whenever {@link FormStore.validate} runs, on the
-   * form data decoded through the builder's schema (as on the server); while
-   * the data doesn't decode they don't run, and the field errors say why.
+   * A whole-form async validator, set automatically when {@link createForm} is
+   * given a {@link FormBuilder} with `refineEffect` refinements: it decodes the
+   * form data through the builder's schema (as on the server) and runs the
+   * refinements on the decoded values, whenever {@link FormStore.validate}
+   * runs. While the data doesn't decode it reports no issues, and the field
+   * errors say why. See {@link refinementsOf}.
    */
-  readonly builder?: FormBuilder.FormBuilder<Field.FieldsRecord, R>;
+  readonly refinements?: FormRefinements<R>;
   /** The action URL the form posts to (defaults to the current page's action). */
   readonly action?: string;
   /** Reset `data` back to the initial values after a successful submit. */
@@ -293,14 +327,17 @@ export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
   /**
    * Per-field sync/async validators, keyed by {@link Path.toString} (e.g.
    * `"author.name"`, `"tags[0]"`). See {@link FormStore.setFieldValidators} to
-   * register these dynamically instead (e.g. once an array item exists).
+   * register these dynamically instead (e.g. once an array item exists). A
+   * validator sees the field's current value as the {@link Path.FormValue} it
+   * is at runtime (a path keyed by string carries no static type), so it
+   * narrows the value itself.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly validators?: Record<string, FieldValidators<any, R>>;
+  readonly validators?: Readonly<Record<string, FieldValidators<Path.FormValue, R>>>;
   /**
    * Services an async field validator or a builder's `refineEffect`
    * refinement needs on its `R` channel. A `ManagedRuntime` is built from
-   * this once per store and reused for every client-side Effect run.
+   * this once per store and reused for every client-side Effect run. Required
+   * exactly when `R` is not `never` (see {@link createForm}'s overloads).
    */
   readonly layer?: Layer.Layer<R>;
   /**
@@ -342,6 +379,14 @@ export interface FormOptions<S extends Schema.Top, A, Message, R = never> {
   readonly listeners?: FormListeners;
 }
 
+/** The options a {@link FormStore} is constructed with: {@link FormOptions} with its `layer` supplied. */
+export type StoreOptions<S extends Validate.ServiceFreeSchema, A, Message, R = never> = FormOptions<
+  S,
+  A,
+  Message,
+  R
+> & { readonly layer: Layer.Layer<R> };
+
 const defaultSubmit = async <A, Message>(
   body: FormData,
   action: string,
@@ -368,11 +413,20 @@ const defaultSubmit = async <A, Message>(
 /** Whether `index` is a valid position in an array of `length`. */
 const inRange = (index: number, length: number): boolean => index >= 0 && index < length;
 
+/** Whether a form value is an array of values. */
+const isList = (value: Path.FormValue): value is ReadonlyArray<Path.FormValue> =>
+  Arr.isArray(value);
+
 /** A field trigger a validator or the revalidate mode reacts to. */
 type FieldTrigger = "change" | "blur";
 
 /** A reactive form, returned by {@link createForm}. */
-export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R = never> {
+export class FormStore<
+  S extends Validate.ServiceFreeSchema,
+  A extends Path.FormValue,
+  Message = unknown,
+  R = never,
+> {
   /** The reactive form data — bind inputs to its fields. */
   data: A;
   /** The current status message, if any. */
@@ -426,7 +480,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly id: string;
   /** The tainted baseline `tainted`/`isTainted` compare against — rebased on every successful submit. */
   #initial: A;
-  readonly #options: FormOptions<S, A, Message, R>;
+  readonly #options: StoreOptions<S, A, Message, R>;
   readonly #mode: Mode.ParsedMode;
   readonly #attachmentKey = createAttachmentKey();
   readonly #runtime: ManagedRuntime.ManagedRuntime<R, never>;
@@ -435,19 +489,11 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Per-field-listener debounce timers, keyed by `"change:<path>"` / `"blur:<path>"`. */
   #listenerTimers: Record<string, ReturnType<typeof setTimeout>> = {};
   /** Per-field validators, keyed by {@link Path.toString}; seeded from `options.validators`. */
-  #fieldValidators: Record<string, FieldValidators<unknown, R>>;
+  #fieldValidators: Record<string, FieldValidators<Path.FormValue, R>>;
   /** In-flight async-validator fibers, keyed by `"<path>:<trigger>"` (fields) or `""` (whole-form `refineEffect`). */
   #fibers: Record<string, Fiber.Fiber<unknown>> = {};
   /** The error paths the last `refineEffect` run set, so the next run can clear exactly those before merging fresh ones. */
   #lastRefinementPaths: FormPath[] = [];
-  /**
-   * The decoder that turns the form data into the builder's decoded values
-   * before its `refineEffect` refinements see them — `None` unless the store
-   * was seeded from a {@link FormBuilder}.
-   */
-  readonly #decodeForRefinements: Option.Option<
-    (input: A) => Effect.Effect<Field.DecodedFromFields<Field.FieldsRecord>, SchemaIssue.Issue, R>
-  >;
   /**
    * The data snapshot the field-tracking watcher last diffed against. Only
    * ever diffed (`computeTainted` takes `unknown`), so typed no tighter.
@@ -498,22 +544,20 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Whether anything has changed since the last submission. */
   readonly hasChangedSinceSubmit: boolean = $derived(isAnyTainted(this.changedSinceSubmit));
 
-  constructor(initial: FormState<A, Message>, options: FormOptions<S, A, Message, R> = {}) {
+  /**
+   * Hydrate a store from `initial`. `options.layer` provides the services
+   * `R` its validators and refinements need; {@link createForm} supplies
+   * `Layer.empty` when `R` is `never`.
+   */
+  constructor(initial: FormState<A, Message>, options: StoreOptions<S, A, Message, R>) {
     this.data = $state(structuredClone(initial.data));
     this.id = initial.id;
     this.#initial = structuredClone(initial.data);
     this.#previousData = structuredClone(initial.data);
     this.#options = options;
     this.#mode = Mode.parse(options.mode);
-    // SAFETY: `Layer.empty` is `Layer<never>`; when `options.layer` is omitted the
-    // caller is asserting `R` is `never` (no validator / refineEffect
-    // refinement on this store demands a service) — the same "caller
-    // asserts" contract `validateValueSync` documents for a sync-only schema.
-    this.#runtime = ManagedRuntime.make(options.layer ?? (Layer.empty as Layer.Layer<R>));
+    this.#runtime = ManagedRuntime.make(options.layer);
     this.#fieldValidators = { ...options.validators };
-    this.#decodeForRefinements = Option.map(Option.fromUndefinedOr(options.builder), (builder) =>
-      SchemaParser.decodeUnknownEffect(FormBuilder.buildSchema(builder), { errors: "all" }),
-    );
     this.#sourced = { client: noErrors, server: initial.errors ?? noErrors };
     this.message = initial.message;
     // The `{ schema, defaults }` overload always arrives with `constraints`
@@ -566,7 +610,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * of attaching `validators` at {@link createForm} time, for fields that
    * don't exist until later (e.g. an appended array item).
    */
-  setFieldValidators(path: FormPath, validators: FieldValidators<unknown, R>): void {
+  setFieldValidators(path: FormPath, validators: FieldValidators<Path.FormValue, R>): void {
     this.#fieldValidators = { ...this.#fieldValidators, [Path.toString(path)]: validators };
   }
 
@@ -593,7 +637,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Set the value at `path` (path-addressed, immutable). Bind directly to `data` otherwise. */
-  setValue(path: FormPath, value: unknown): void {
+  setValue(path: FormPath, value: Path.FormValue): void {
     this.data = setAt(this.data, path, value);
     this.#markDirty(path);
     this.#previousData = this.#detachedData();
@@ -601,7 +645,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Read the value at `path`. */
-  valueAt(path: FormPath): unknown {
+  valueAt(path: FormPath): Path.FormValue {
     return getAt(this.data, path);
   }
 
@@ -650,7 +694,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * `path` is type-checked against the form data's shape (see {@link
    * Path.FieldPath}); a typo'd segment or wrong-shaped path is a compile error.
    */
-  field<P extends Path.FieldPath<A>>(path: P): FieldHandle<Path.PathValue<A, P>> {
+  field<P extends Path.FieldPath<A>>(
+    path: P,
+  ): FieldHandle<Extract<Path.PathValue<A, P>, Path.FormValue>> {
     return new FieldHandle(this, Path.fromString(path));
   }
 
@@ -753,13 +799,13 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 
   /** Read the array at `path` (empty when absent, or when `path` holds no array). */
-  #arrayAt(path: FormPath): readonly unknown[] {
+  #arrayAt(path: FormPath): ReadonlyArray<Path.FormValue> {
     const value = getAt(this.data, path);
-    return Arr.isArray(value) ? value : [];
+    return isList(value) ? value : [];
   }
 
   /** Append an item to the array at `path` (a blank item is derived when omitted). */
-  append(path: FormPath, value?: unknown): void {
+  append(path: FormPath, value?: Path.FormValue): void {
     const current = this.#arrayAt(path);
     const item = value !== undefined ? value : this.#defaultItem(path);
     this.data = setAt(this.data, path, [...current, item]);
@@ -774,7 +820,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * items — and their per-index touched flags / errors — up by one. A blank
    * item is derived when `value` is omitted.
    */
-  insertItem(path: FormPath, index: number, value?: unknown): void {
+  insertItem(path: FormPath, index: number, value?: Path.FormValue): void {
     const current = this.#arrayAt(path);
     const at = Math.max(
       0,
@@ -791,7 +837,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * index's own touched flag / errors (they described the old value); other
    * indices are untouched.
    */
-  replaceItem(path: FormPath, index: number, value: unknown): void {
+  replaceItem(path: FormPath, index: number, value: Path.FormValue): void {
     const current = this.#arrayAt(path);
     if (!inRange(index, current.length)) return;
     const next = [...current];
@@ -1097,25 +1143,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * errors set by {@link validate} in between.
    */
   #runRefineEffect(): void {
-    const builder = this.#options.builder;
-    if (!builder || Arr.isReadonlyArrayEmpty(FormBuilder.asyncRefinements(builder))) return;
+    const refinements = this.#options.refinements;
+    if (refinements === undefined) return;
 
-    // The refinements are typed against the builder's *decoded* values, and
-    // the server (`Form.fromBuilder`) runs them on decoded data; the live form
-    // holds the *encoded* values, so decode first. Values that don't decode
-    // run no refinements — exactly as on the server — and the schema's own
-    // field errors (from `validate`) already report why; the run's empty
-    // result still clears the previous run's refinement errors.
-    if (Option.isNone(this.#decodeForRefinements)) return;
-    const decoded = this.#decodeForRefinements.value(this.#detachedData());
+    // Values that don't decode run no refinements — exactly as on the server
+    // — and the schema's own field errors (from `validate`) already report
+    // why; the run's empty result still clears the previous run's refinement
+    // errors.
     this.#runValidatorFiber(
       "",
-      decoded.pipe(
-        Effect.matchEffect({
-          onFailure: (): Effect.Effect<ReadonlyArray<Issues.FormIssue>, never, R> =>
-            Effect.succeed([]),
-          onSuccess: (values) => FormBuilder.runAsyncRefinements(builder, values),
-        }),
+      refinements(this.#detachedData()).pipe(
         Effect.tap((issues) =>
           Effect.sync(() => {
             const cleared = Arr.reduce(
@@ -1176,9 +1213,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * Svelte's own guidance for this exact case.
    */
   #detachedData(): A {
+    // Svelte's `Snapshot<A>` cannot be related back to a generic `A`, and
+    // computing it through the recursive `FormValue` constraint never
+    // terminates, so the snapshot is typed one level deep (a leaf, or an object).
+    const snapshot = $state.snapshot<Path.FormLeaf | object>(this.data);
     // SAFETY: `data` holds an `A`, and `$state.snapshot` of form data (plain,
-    // structured-cloneable values) is a deep copy of the same shape.
-    return structuredClone($state.snapshot(this.data)) as A;
+    // structured-cloneable values) is a deep copy of the same shape; this is
+    // the one point that claims `A` back.
+    return structuredClone(snapshot) as A;
   }
 
   /** Restore from a {@link capture} snapshot (its merged tree becomes the server tree; the client tree clears). */
@@ -1363,7 +1405,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     // Remember the mounted node so `onChange` / `onBlur` auto-submit can post.
     this.#autoSubmitNode = Option.some(node);
 
-    this.#options.listeners?.onMount?.({ data: $state.snapshot(this.data) });
+    this.#options.listeners?.onMount?.({ data: this.#detachedData() });
 
     // Two independent watchers over `data`, both rooted so they get explicit
     // teardown alongside the DOM listeners:
@@ -1383,12 +1425,12 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     const dispatchListeners = this.#buildDispatchListeners();
     let stopWatching: Option.Option<() => void> = Option.none();
     if (this.#mode.validation === "onChange" || Option.isSome(dispatchListeners)) {
-      let previous = $state.snapshot(this.data);
+      let previous = this.#detachedData();
       stopWatching = Option.some(
         $effect.root(() => {
           $effect(() => {
             // Establish a deep dependency on the data tree.
-            const snapshot = $state.snapshot(this.data);
+            const snapshot = this.#detachedData();
             if (this.#mode.validation === "onChange" && (this.isTainted || this.posted)) {
               this.#scheduleValidation();
             }
@@ -1403,7 +1445,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
     const stopFieldWatching = $effect.root(() => {
       $effect(() => {
-        const snapshot = $state.snapshot(this.data);
+        const snapshot = this.#detachedData();
         const changed = taintedLeafPaths(computeTainted(this.#previousData, snapshot));
         this.#previousData = snapshot;
         Arr.forEach(changed, (path) => this.#onFieldChanged(path));
@@ -1449,31 +1491,124 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   }
 }
 
+/**
+ * A schema a {@link FormStore} can bind: service-free (so the browser
+ * validates synchronously), with a decoded and an encoded side that are both
+ * {@link Path.FormValue} trees (so the store can hold, walk and post them).
+ */
+export type FormSchema = Validate.ServiceFreeSchema & {
+  readonly Type: Path.FormValue;
+  readonly Encoded: Path.FormValue;
+};
+
+/** `Schema.Struct` fields made of {@link FormSchema}s — what a store-bound {@link FormBuilder} accumulates. */
+export type FormFields = { readonly [key: string]: FormSchema };
+
 /** A schema plus its blank-form defaults — what {@link createForm} wraps `Form.make` over. */
-export interface FormSeed<S extends Schema.Top> {
+export interface FormSeed<S extends FormSchema> {
   readonly schema: S;
   readonly defaults: S["Type"];
   readonly id?: string;
 }
 
-/** The built-schema type a {@link FormBuilder} of `TFields` / `R` collapses to. */
-type BuiltSchema<TFields extends Field.FieldsRecord, R> = Schema.Codec<
-  Field.DecodedFromFields<TFields>,
-  Field.EncodedFromFields<TFields>,
-  R
->;
+/**
+ * The data of a builder store seeded without `defaults`: one
+ * {@link Path.FormValue} per field. Its blank is schema-derived (`""`, `[]`
+ * or a struct of blanks), which need not be a valid encoded value, so the
+ * data is typed no tighter than what a field can hold.
+ */
+export type DraftData<F extends FormFields> = Readonly<Record<keyof F & string, Path.FormValue>>;
 
-/** Options for the {@link createForm} {@link FormBuilder} overload. */
-export type FormBuilderOptions<TFields extends Field.FieldsRecord, R, Message> = FormOptions<
-  BuiltSchema<TFields, R>,
-  Field.EncodedFromFields<TFields>,
+/** Options for the {@link createForm} {@link FormBuilder} overloads. */
+export type FormBuilderOptions<F extends FormFields, A, Message, R = never> = FormOptions<
+  Schema.Struct<F>,
+  A,
   Message,
   R
 > & {
-  /** Blank-form values. Defaults to a schema-derived encoded blank per field. */
-  readonly defaults?: Field.EncodedFromFields<TFields>;
   /** Distinguishes multiple forms on a page. Defaults to `"default"`. */
   readonly id?: string;
+};
+
+/** The `layer` member of a {@link createForm} overload whose `R` is `never`: none. */
+export interface NoLayer {
+  readonly layer?: never;
+}
+
+/** The `layer` member of a {@link createForm} overload whose `R` needs services. */
+export interface WithLayer<R> {
+  readonly layer: Layer.Layer<R>;
+}
+
+/** A {@link createForm} builder overload's encoded `defaults`, which the blank form holds. */
+export interface WithDefaults<F extends FormFields> {
+  /** Blank-form values (encoded, as the form holds them). */
+  readonly defaults: FormBuilder.Encoded<F>;
+}
+
+/** A {@link createForm} builder overload without `defaults`: the blank form holds schema-derived blanks. */
+export interface WithoutDefaults {
+  readonly defaults?: never;
+}
+
+/** The argument lists {@link createForm}'s overloads accept, one tuple per overload. */
+type CreateFormArgs<
+  F extends FormFields,
+  S extends FormSchema,
+  A extends Path.FormValue,
+  R,
+  Message,
+> =
+  | readonly [
+      FormBuilder.FormBuilder<F>,
+      FormBuilderOptions<F, FormBuilder.Encoded<F>, Message> & WithDefaults<F> & NoLayer,
+    ]
+  | readonly [
+      FormBuilder.FormBuilder<F, R>,
+      FormBuilderOptions<F, FormBuilder.Encoded<F>, Message, R> & WithDefaults<F> & WithLayer<R>,
+    ]
+  | readonly [FormBuilder.FormBuilder<F>]
+  | readonly [
+      FormBuilder.FormBuilder<F>,
+      FormBuilderOptions<F, DraftData<F>, Message> & WithoutDefaults & NoLayer,
+    ]
+  | readonly [
+      FormBuilder.FormBuilder<F, R>,
+      FormBuilderOptions<F, DraftData<F>, Message, R> & WithoutDefaults & WithLayer<R>,
+    ]
+  | readonly [FormSeed<S>]
+  | readonly [FormSeed<S>, FormOptions<S, S["Type"], Message> & NoLayer]
+  | readonly [FormSeed<S>, FormOptions<S, S["Type"], Message, R> & WithLayer<R>]
+  | readonly [FormState<A, Message>]
+  | readonly [FormState<A, Message>, FormOptions<S, A, Message> & NoLayer]
+  | readonly [FormState<A, Message>, FormOptions<S, A, Message, R> & WithLayer<R>];
+
+/** The builder's schema, array-item fields and client-side refinements, as store options. */
+const builderStoreOptions = <F extends FormFields, RefineR>(
+  builder: FormBuilder.FormBuilder<F, RefineR>,
+): {
+  readonly schema: Schema.Struct<F>;
+  readonly fields: Field.FieldsRecord;
+  readonly refinements?: FormRefinements<RefineR>;
+} => {
+  const schema = FormBuilder.buildSchema(builder);
+  return Option.match(refinementsOf(builder), {
+    onNone: () => ({ schema, fields: builder.fields }),
+    onSome: (refinements) => ({ schema, fields: builder.fields, refinements }),
+  });
+};
+
+/** The `Form.fromBuilder` options (`id`) a builder overload's store options carry. */
+const fromBuilderOptions = (options: { readonly id?: string }): { readonly id?: string } =>
+  options.id === undefined ? {} : { id: options.id };
+
+/** The blank state a seed's `Form.make` produces. */
+const seedState = <S extends FormSchema, Message>(
+  seed: FormSeed<S>,
+): FormState<S["Type"], Message> => {
+  const makeOptions: Mutable<Form.MakeFormOptions<S>> = { defaults: seed.defaults };
+  if (seed.id !== undefined) makeOptions.id = seed.id;
+  return makeForm<S, Message>(seed.schema, makeOptions).empty();
 };
 
 /**
@@ -1481,54 +1616,146 @@ export type FormBuilderOptions<TFields extends Field.FieldsRecord, R, Message> =
  *
  * - a {@link FormBuilder} — the schema, blank defaults, and array-item defaults
  *   are all derived from the builder (client validation, including
- *   `refineEffect` refinements, is wired automatically);
+ *   `refineEffect` refinements, is wired automatically). With `defaults` the
+ *   data is the builder's encoded type; without, it is {@link DraftData};
  * - `{ schema, defaults }` — seed a blank form (wrapping the core's `Form.make`);
  * - a server-produced {@link FormState} — hydrate from it (schema in `options`).
+ *
+ * Pass `layer` exactly when a validator or a `refineEffect` refinement needs
+ * services; without it the store's `R` is `never`.
  */
-export function createForm<TFields extends Field.FieldsRecord, R, Message = unknown>(
-  builder: FormBuilder.FormBuilder<TFields, R>,
-  options?: FormBuilderOptions<TFields, R, Message>,
-): FormStore<BuiltSchema<TFields, R>, Field.EncodedFromFields<TFields>, Message, R>;
-export function createForm<S extends Schema.Top, Message = unknown, R = never>(
+export function createForm<F extends FormFields, Message = unknown>(
+  builder: FormBuilder.FormBuilder<F>,
+  options: FormBuilderOptions<F, FormBuilder.Encoded<F>, Message> & WithDefaults<F> & NoLayer,
+): FormStore<Schema.Struct<F>, FormBuilder.Encoded<F>, Message>;
+export function createForm<F extends FormFields, R, Message = unknown>(
+  builder: FormBuilder.FormBuilder<F, R>,
+  options: FormBuilderOptions<F, FormBuilder.Encoded<F>, Message, R> &
+    WithDefaults<F> &
+    WithLayer<R>,
+): FormStore<Schema.Struct<F>, FormBuilder.Encoded<F>, Message, R>;
+export function createForm<F extends FormFields, Message = unknown>(
+  builder: FormBuilder.FormBuilder<F>,
+): FormStore<Schema.Struct<F>, DraftData<F>, Message>;
+export function createForm<F extends FormFields, Message = unknown>(
+  builder: FormBuilder.FormBuilder<F>,
+  options: FormBuilderOptions<F, DraftData<F>, Message> & WithoutDefaults & NoLayer,
+): FormStore<Schema.Struct<F>, DraftData<F>, Message>;
+export function createForm<F extends FormFields, R, Message = unknown>(
+  builder: FormBuilder.FormBuilder<F, R>,
+  options: FormBuilderOptions<F, DraftData<F>, Message, R> & WithoutDefaults & WithLayer<R>,
+): FormStore<Schema.Struct<F>, DraftData<F>, Message, R>;
+export function createForm<S extends FormSchema, Message = unknown>(
   seed: FormSeed<S>,
-  options?: FormOptions<S, S["Type"], Message, R>,
+): FormStore<S, S["Type"], Message>;
+export function createForm<S extends FormSchema, Message = unknown>(
+  seed: FormSeed<S>,
+  options: FormOptions<S, S["Type"], Message> & NoLayer,
+): FormStore<S, S["Type"], Message>;
+export function createForm<S extends FormSchema, R, Message = unknown>(
+  seed: FormSeed<S>,
+  options: FormOptions<S, S["Type"], Message, R> & WithLayer<R>,
 ): FormStore<S, S["Type"], Message, R>;
-export function createForm<S extends Schema.Top, A = S["Type"], Message = unknown, R = never>(
+export function createForm<S extends FormSchema, A extends Path.FormValue, Message = unknown>(
   initial: FormState<A, Message>,
-  options: FormOptions<S, A, Message, R>,
+): FormStore<S, A, Message>;
+export function createForm<S extends FormSchema, A extends Path.FormValue, Message = unknown>(
+  initial: FormState<A, Message>,
+  options: FormOptions<S, A, Message> & NoLayer,
+): FormStore<S, A, Message>;
+export function createForm<S extends FormSchema, A extends Path.FormValue, R, Message = unknown>(
+  initial: FormState<A, Message>,
+  options: FormOptions<S, A, Message, R> & WithLayer<R>,
 ): FormStore<S, A, Message, R>;
-export function createForm(
-  source:
-    | FormBuilder.FormBuilder<Field.FieldsRecord, unknown>
-    | FormSeed<Schema.Top>
-    | FormState<unknown>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options: FormOptions<Schema.Top, any, any, any> & {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    defaults?: any;
-    id?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } = {},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): FormStore<Schema.Top, any, any, any> {
-  if (FormBuilder.isFormBuilder(source)) {
-    const schema: Schema.Top = FormBuilder.buildSchema(source);
-    const builderOptions: Mutable<Form.FromBuilderOptions<Field.FieldsRecord>> = {};
-    if (options.defaults !== undefined) builderOptions.defaults = options.defaults;
-    if (options.id !== undefined) builderOptions.id = options.id;
-    const form = Form.fromBuilder(source, builderOptions);
-    return new FormStore(form.empty(), {
+export function createForm<
+  F extends FormFields,
+  S extends FormSchema,
+  A extends Path.FormValue,
+  R,
+  Message,
+>(
+  ...args: CreateFormArgs<F, S, A, R, Message>
+):
+  | FormStore<Schema.Struct<F>, FormBuilder.Encoded<F>, Message, R>
+  | FormStore<Schema.Struct<F>, FormBuilder.Encoded<F>, Message>
+  | FormStore<Schema.Struct<F>, DraftData<F>, Message, R>
+  | FormStore<Schema.Struct<F>, DraftData<F>, Message>
+  | FormStore<S, S["Type"], Message, R>
+  | FormStore<S, S["Type"], Message>
+  | FormStore<S, A, Message, R>
+  | FormStore<S, A, Message> {
+  type Args = CreateFormArgs<F, S, A, R, Message>;
+  type Leading<T> = readonly [T, ...ReadonlyArray<unknown>];
+  type Trailing<T> = readonly [unknown, T];
+  const isBuilder = (
+    a: Args,
+  ): a is Extract<Args, Leading<FormBuilder.FormBuilder<F> | FormBuilder.FormBuilder<F, R>>> =>
+    FormBuilder.isFormBuilder(a[0]);
+  const isSeed = (a: Args): a is Extract<Args, Leading<FormSeed<S>>> =>
+    P.hasProperty(a[0], "schema") && P.hasProperty(a[0], "defaults");
+  const hasLayer = (a: Args): a is Extract<Args, Trailing<WithLayer<R>>> =>
+    a[1]?.layer !== undefined;
+  const hasDefaults = (a: Args): a is Extract<Args, Trailing<WithDefaults<F>>> =>
+    P.hasProperty(a[1], "defaults") && a[1].defaults !== undefined;
+
+  if (isBuilder(args)) {
+    if (hasDefaults(args)) {
+      if (hasLayer(args)) {
+        const [builder, options] = args;
+        const blank = { ...fromBuilderOptions(options), defaults: options.defaults };
+        const state = Form.fromBuilder<F, R, Message>(builder, blank).empty();
+        return new FormStore<Schema.Struct<F>, FormBuilder.Encoded<F>, Message, R>(state, {
+          ...options,
+          ...builderStoreOptions(builder),
+        });
+      }
+      const [builder, options] = args;
+      const blank = { ...fromBuilderOptions(options), defaults: options.defaults };
+      const state = Form.fromBuilder<F, never, Message>(builder, blank).empty();
+      return new FormStore<Schema.Struct<F>, FormBuilder.Encoded<F>, Message>(state, {
+        ...options,
+        ...builderStoreOptions(builder),
+        layer: Layer.empty,
+      });
+    }
+    if (hasLayer(args)) {
+      const [builder, options] = args;
+      const state: FormState<DraftData<F>, Message> = Form.fromBuilder<F, R, Message>(
+        builder,
+        fromBuilderOptions(options),
+      ).empty();
+      return new FormStore<Schema.Struct<F>, DraftData<F>, Message, R>(state, {
+        ...options,
+        ...builderStoreOptions(builder),
+      });
+    }
+    const [builder, options = {}] = args;
+    const state: FormState<DraftData<F>, Message> = Form.fromBuilder<F, never, Message>(
+      builder,
+      fromBuilderOptions(options),
+    ).empty();
+    return new FormStore<Schema.Struct<F>, DraftData<F>, Message>(state, {
       ...options,
-      schema,
-      fields: source.fields,
-      builder: source,
+      ...builderStoreOptions(builder),
+      layer: Layer.empty,
     });
   }
-  if ("defaults" in source && "schema" in source) {
-    const makeOptions: Mutable<Form.MakeFormOptions<Schema.Top>> = { defaults: source.defaults };
-    if (source.id !== undefined) makeOptions.id = source.id;
-    const state = makeForm(source.schema, makeOptions).empty();
-    return new FormStore(state, { ...options, schema: source.schema });
+  if (isSeed(args)) {
+    if (hasLayer(args)) {
+      const [seed, options] = args;
+      return new FormStore<S, S["Type"], Message, R>(seedState<S, Message>(seed), {
+        ...options,
+        schema: seed.schema,
+      });
+    }
+    const [seed, options = {}] = args;
+    return new FormStore<S, S["Type"], Message>(seedState<S, Message>(seed), {
+      ...options,
+      schema: seed.schema,
+      layer: Layer.empty,
+    });
   }
-  return new FormStore(source, options);
+  if (hasLayer(args)) return new FormStore<S, A, Message, R>(args[0], args[1]);
+  const [initial, options = {}] = args;
+  return new FormStore<S, A, Message>(initial, { ...options, layer: Layer.empty });
 }

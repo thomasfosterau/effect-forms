@@ -50,30 +50,30 @@ describe("objectToEntries / objectToFormData", () => {
     ]);
   });
 
-  it("omits function and symbol leaves at the top level", () => {
-    expect(objectToEntries({ a: () => 1, s: Symbol("x"), n: 1n, b: true, z: null })).toEqual([
+  it("omits undefined leaves at the top level", () => {
+    expect(objectToEntries({ a: undefined, n: 1n, b: true, z: null })).toEqual([
       ["n", "1"],
       ["b", "true"],
       ["z", ""],
     ]);
   });
 
-  it("omits function and symbol leaves nested in an object", () => {
-    expect(
-      objectToEntries({ author: { name: "Ada", greet: () => "hi", tag: Symbol("t") } }),
-    ).toEqual([["author.name", "Ada"]]);
-  });
-
-  it("omits function and symbol items in an array, keeping the others' indices", () => {
-    expect(objectToEntries({ list: ["a", () => 1, Symbol("x"), null, 2n] })).toEqual([
-      ["list[0]", "a"],
-      ["list[3]", ""],
-      ["list[4]", "2"],
+  it("omits undefined leaves nested in an object", () => {
+    expect(objectToEntries({ author: { name: "Ada", bio: undefined } })).toEqual([
+      ["author.name", "Ada"],
     ]);
   });
 
-  it("leaves function and symbol values out of FormData", () => {
-    const fd = objectToFormData({ a: "1", cb: () => 1, sym: Symbol("x") });
+  it("omits undefined items in an array, keeping the others' indices", () => {
+    expect(objectToEntries({ list: ["a", undefined, null, 2n] })).toEqual([
+      ["list[0]", "a"],
+      ["list[2]", ""],
+      ["list[3]", "2"],
+    ]);
+  });
+
+  it("leaves undefined values out of FormData", () => {
+    const fd = objectToFormData({ a: "1", cb: undefined });
     expect([...fd.keys()]).toEqual(["a"]);
   });
 
@@ -174,10 +174,9 @@ describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objec
     ]);
   });
 
-  it("omits Map and Set values (they have no own enumerable fields)", () => {
-    const fd = objectToFormData({ a: "1", map: new Map([["k", "v"]]), set: new Set(["x"]) });
+  it("omits an empty record (it has no own enumerable fields)", () => {
+    const fd = objectToFormData({ a: "1", empty: {} });
     expect([...fd.keys()]).toEqual(["a"]);
-    expect(objectToEntries({ map: new Map([["k", "v"]]), set: new Set(["x"]) })).toEqual([]);
   });
 
   it("round-trips a File and a Date through the core decoder, FormData.formDataToObject", () => {

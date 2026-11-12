@@ -28,7 +28,7 @@ import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { type Form, Result, State } from "@thomasfosterau/effect-forms";
+import { type Form, Result, State, type Validate } from "@thomasfosterau/effect-forms";
 import {
   type Classify,
   type CommandFailure,
@@ -47,9 +47,9 @@ type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, M
 /**
  * A schema whose decoding needs no services — what {@link runFormAction} and
  * {@link formAction} accept, since they run the decode at the action's
- * Promise boundary with nothing to provide.
+ * Promise boundary with nothing to provide. The core's `Validate.ServiceFreeSchema`.
  */
-export type ServiceFreeSchema = Schema.Top & { readonly DecodingServices: never };
+export type ServiceFreeSchema = Validate.ServiceFreeSchema;
 
 /**
  * A command: a Promise-returning function or one returning an `Effect` with

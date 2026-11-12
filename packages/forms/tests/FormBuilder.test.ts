@@ -66,6 +66,27 @@ describe("FormBuilder sync refine (cross-field)", () => {
   });
 });
 
+describe("FormBuilder refinements attached before later fields", () => {
+  const builder = empty
+    .addField("password", Schema.String)
+    .refine((v) => (v.password.length >= 3 ? undefined : { path: ["password"], issue: "short" }))
+    .refineEffect((v) =>
+      Effect.succeed(v.password === "taken" ? { path: ["password"], issue: "taken" } : undefined),
+    )
+    .addField("confirm", Schema.String);
+  const form = fromBuilder(builder);
+
+  it("still run against the wider values", () => {
+    expect(
+      getError(run(form.validate({ password: "ab", confirm: "" })).errors, ["password"]),
+    ).toEqual(Option.some(["short"]));
+    expect(
+      getError(run(form.validate({ password: "taken", confirm: "" })).errors, ["password"]),
+    ).toEqual(Option.some(["taken"]));
+    expect(run(form.validate({ password: "fine", confirm: "" })).valid).toBe(true);
+  });
+});
+
 describe("FormBuilder refine annotations", () => {
   it("carries the caller's annotations onto the schema check", () => {
     const schema = buildSchema(

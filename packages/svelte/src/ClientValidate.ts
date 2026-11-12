@@ -12,7 +12,7 @@
  * @module effect-forms-svelte/ClientValidate
  */
 
-import { Errors, Issues, Validate } from "@thomasfosterau/effect-forms";
+import { Errors, Issues, type Path, Validate } from "@thomasfosterau/effect-forms";
 import * as Option from "effect/Option";
 
 // Terse local aliases onto the namespaced core exports.
@@ -21,12 +21,11 @@ type FormPath = Issues.FormPath;
 type LeafFormatter = Issues.LeafFormatter;
 const { getError, noErrors } = Errors;
 const { validateValueSync } = Validate;
-import type * as Schema from "effect/Schema";
 
 /** Validate the whole form's data, returning the nested error tree (empty when valid). */
 export function validateData(
-  schema: Schema.Top,
-  data: unknown,
+  schema: Validate.ServiceFreeSchema,
+  data: Path.FormValue,
   format?: LeafFormatter,
 ): FormErrors {
   const result = validateValueSync(schema, data, format);
@@ -40,8 +39,8 @@ export function validateData(
  * field only.
  */
 export function validateField(
-  schema: Schema.Top,
-  data: unknown,
+  schema: Validate.ServiceFreeSchema,
+  data: Path.FormValue,
   path: FormPath,
   format?: LeafFormatter,
 ): readonly string[] {

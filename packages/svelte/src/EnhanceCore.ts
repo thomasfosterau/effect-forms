@@ -9,7 +9,7 @@
  * @module effect-forms-svelte/EnhanceCore
  */
 
-import { Errors, Result, State } from "@thomasfosterau/effect-forms";
+import { Errors, type Path, Result, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
@@ -30,7 +30,7 @@ type BodyEntry = [string, string | Blob];
  * Whether a value is a `Blob` (a `File` is one). Guards on `globalThis.Blob`
  * so it holds in any runtime, including one without a global `Blob`.
  */
-const isBlob = (value: unknown): value is Blob =>
+const isBlob = (value: Path.FormValue): value is Blob =>
   !P.isUndefined(globalThis.Blob) && value instanceof Blob;
 
 /**
@@ -47,7 +47,7 @@ const encodeDate = (value: Date): Option.Option<string> => {
 };
 
 /** Append the entries for one named value to `out`, recursing into containers. */
-function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void {
+function appendEntries(out: Array<BodyEntry>, key: string, value: Path.FormValue): void {
   if (value === null) {
     out.push([key, ""]);
   } else if (isBlob(value)) {
@@ -62,13 +62,13 @@ function appendEntries(out: Array<BodyEntry>, key: string, value: unknown): void
   } else if (P.isString(value) || P.isNumber(value) || P.isBoolean(value) || P.isBigInt(value)) {
     out.push([key, String(value)]);
   }
-  // `undefined`, `function` and `symbol` leaves are omitted.
+  // `undefined` leaves are omitted.
 }
 
 /** Append an object's own enumerable fields to `out`, as `prefix.key` names. */
-function appendFields<V>(
+function appendFields(
   out: Array<BodyEntry>,
-  data: R.ReadonlyRecord<string, V>,
+  data: R.ReadonlyRecord<string, Path.FormValue>,
   prefix: string,
 ): void {
   Arr.forEach(R.toEntries(data), ([key, value]) =>
@@ -77,7 +77,7 @@ function appendFields<V>(
 }
 
 /** Flatten `data` into form-body entries, `Blob` / `File` leaves included. */
-function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
+function toBodyEntries(data: Path.FormValue, prefix: string): Array<BodyEntry> {
   const out: Array<BodyEntry> = [];
   if (prefix) appendEntries(out, prefix, data);
   else if (P.isObject(data)) {
@@ -101,16 +101,16 @@ function toBodyEntries(data: unknown, prefix: string): Array<BodyEntry> {
  *   own string field. An invalid `Date` is omitted.
  * - A `Blob` or `File` is omitted here, since a string entry can't carry it;
  *   {@link objectToFormData} keeps it.
- * - An `undefined`, `function` or `symbol` is omitted, as `JSON.stringify`
- *   omits such object properties, so a callback or symbol left in form data
- *   never reaches the form body as `"Symbol(…)"` or function source.
- * - Any other object contributes its own enumerable fields, so one with none
- *   (a `Map`, a `Set`, an empty object) contributes no entries.
+ * - An `undefined` is omitted, as `JSON.stringify` omits such object
+ *   properties.
+ * - A record contributes its own enumerable fields, so an empty one contributes
+ *   no entries. (`data` is a {@link Path.FormValue}, so a function, symbol,
+ *   `Map` or `Set` is a type error.)
  *
  * An omitted array item leaves a gap (where `JSON.stringify` would write
  * `null`), so the remaining items keep their indices (`tags[0]`, `tags[2]`).
  */
-export function objectToEntries(data: unknown, prefix = ""): Array<[string, string]> {
+export function objectToEntries(data: Path.FormValue, prefix = ""): Array<[string, string]> {
   return toBodyEntries(data, prefix).filter((entry): entry is [string, string] =>
     P.isString(entry[1]),
   );
@@ -125,7 +125,7 @@ export function objectToEntries(data: unknown, prefix = ""): Array<[string, stri
  * `<input type="file">` would submit it, so it reaches the core's
  * `FormData.formDataToObject` (`@thomasfosterau/effect-forms`) unchanged.
  */
-export function objectToFormData(data: unknown): FormData {
+export function objectToFormData(data: Path.FormValue): FormData {
   const formData = new FormData();
   Arr.forEach(toBodyEntries(data, ""), ([key, value]) => formData.append(key, value));
   return formData;

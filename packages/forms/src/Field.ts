@@ -91,7 +91,7 @@ export type DecodedFromFields<T extends FieldsRecord> = {
  * HTML input's empty value). Conservative by design — a value that will not
  * decode cleanly is still a valid *starting* value the user edits.
  */
-export function defaultValue(schema: Schema.Top): unknown {
+export function defaultValue(schema: Schema.Top): BlankValue {
   return fromAst(schema.ast);
 }
 
@@ -112,10 +112,10 @@ function unwrapToStructured(ast: SchemaAST.AST): SchemaAST.AST {
 }
 
 /** A seeded blank value: `""` for a leaf, `[]` for an array, a struct of blanks for a struct. */
-type BlankValue = "" | Array<never> | BlankStruct;
+export type BlankValue = "" | Array<never> | BlankStruct;
 
 /** A struct of {@link BlankValue}s, one per property. */
-interface BlankStruct {
+export interface BlankStruct {
   readonly [key: string]: BlankValue;
 }
 
@@ -171,7 +171,7 @@ export function schemaAt(schema: Schema.Top, path: FormPath): Option.Option<Sche
  * depth) by walking `schema`'s AST there — the nested-array counterpart to
  * {@link defaultValue}. Returns `""` when `path` doesn't resolve to an array.
  */
-export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
+export function defaultItemAt(schema: Schema.Top, path: FormPath): BlankValue {
   return schemaAt(schema, path).pipe(
     Option.filter(SchemaAST.isArrays),
     Option.flatMap(arrayElementAst),
@@ -180,6 +180,19 @@ export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
 }
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */
-export function defaultEncodedValues(fields: FieldsRecord): Record<string, unknown> {
+export function defaultEncodedValues(fields: FieldsRecord): Record<string, BlankValue> {
   return R.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
+}
+
+/**
+ * The schema-derived blank of a struct's fields `F`: one {@link BlankValue}
+ * per field. Honestly typed — a blank need not be a valid encoded value (a
+ * numeric field's encoded side is a number, its blank `""`).
+ */
+export type Blanks<F extends Schema.Struct.Fields> = Readonly<Record<keyof F & string, BlankValue>>;
+
+/** Seed a {@link BlankValue} for every field of a `Schema.Struct`'s fields. */
+export function blankValues<F extends Schema.Struct.Fields>(fields: F): Blanks<F> {
+  const byName: Readonly<Record<keyof F & string, Schema.Constraint>> = fields;
+  return R.map(byName, (schema) => fromAst(schema.ast));
 }

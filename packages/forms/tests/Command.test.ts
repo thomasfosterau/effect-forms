@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
+import type { ServiceFreeSchema } from "../src/Validate.ts";
 import {
   blankDefaults,
   createAdapter,
@@ -172,7 +173,7 @@ describe("Command.plan — OptionFrom* fields", () => {
   const optionWrappers = [
     ["OptionFromNullOr", Schema.OptionFromNullOr],
     ["OptionFromUndefinedOr", Schema.OptionFromUndefinedOr],
-    ["OptionFromNullishOr", (s: Schema.Top) => Schema.OptionFromNullishOr(s)],
+    ["OptionFromNullishOr", (s: ServiceFreeSchema) => Schema.OptionFromNullishOr(s)],
   ] as const;
   const fieldWrappers = [
     ["optional", Schema.optional],

@@ -23,7 +23,7 @@
  */
 
 import type { Component } from "svelte";
-import { Command } from "@thomasfosterau/effect-forms";
+import { Command, type Validate } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
@@ -115,7 +115,7 @@ export interface SubmitMessages {
 
 /** The runtime shape `defineEntityForm` accepts for a command struct. */
 export interface CommandStructLike {
-  readonly fields: Record<string, Schema.Top>;
+  readonly fields: Readonly<Record<string, Validate.ServiceFreeSchema>>;
 }
 
 /** The value `defineEntityForm` returns — everything one renderer needs. */

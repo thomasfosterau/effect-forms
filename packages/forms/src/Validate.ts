@@ -22,9 +22,12 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import type * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import { type FormErrors, issuesToErrors } from "./Errors.ts";
+import type { FormValue } from "./Path.ts";
 import {
   filterOutputToFormIssues,
   type FormIssue,
@@ -42,45 +45,53 @@ export type ValidationResult<A> =
     };
 
 /**
- * Decode `input` through `schema`, returning a {@link ValidationResult} on the
- * success channel (decode failures become `valid: false`, not an Effect
- * failure). Decoding-service requirements propagate on the `R` channel.
+ * A schema whose decoding needs no services, so it decodes synchronously at a
+ * Promise or event-handler boundary with nothing to provide. Effect's own
+ * `Schema.ConstraintDecoder<unknown>` (decoding services `never`), narrowed to
+ * full schemas.
+ */
+export type ServiceFreeSchema = Schema.Top & Schema.ConstraintDecoder<unknown>;
+
+/** The {@link ValidationResult} a decode failure folds into. */
+const invalid = <A>(issue: SchemaIssue.Issue, format?: LeafFormatter): ValidationResult<A> => {
+  const issues = schemaIssuesToFormIssues(issue, format);
+  return { valid: false, errors: issuesToErrors(issues), issues };
+};
+
+/**
+ * Decode the form data tree `input` through `schema`, returning a
+ * {@link ValidationResult} on the success channel (decode failures become
+ * `valid: false`, not an Effect failure). Decoding-service requirements
+ * propagate on the `R` channel.
  */
 export function validateValue<S extends Schema.Top>(
   schema: S,
-  input: unknown,
+  input: FormValue,
   format?: LeafFormatter,
 ): Effect.Effect<ValidationResult<S["Type"]>, never, S["DecodingServices"]> {
-  return SchemaParser.decodeUnknownEffect(schema, { errors: "all" })(input).pipe(
-    Effect.matchEffect({
-      onSuccess: (data): Effect.Effect<ValidationResult<S["Type"]>> =>
-        Effect.succeed({ valid: true, data }),
-      onFailure: (issue): Effect.Effect<ValidationResult<S["Type"]>> => {
-        const issues = schemaIssuesToFormIssues(issue, format);
-        return Effect.succeed({ valid: false, errors: issuesToErrors(issues), issues });
-      },
+  return SchemaParser.decodeEffect(schema, { errors: "all" })(input).pipe(
+    Effect.match({
+      onSuccess: (data): ValidationResult<S["Type"]> => ({ valid: true, data }),
+      onFailure: (issue) => invalid<S["Type"]>(issue, format),
     }),
   );
 }
 
 /**
- * Synchronous {@link validateValue} for schemas with no decoding-service
- * requirements (`R = never`) and no async decoding — the common case for plain
- * form schemas. {@link validateValue} never fails on the error channel, so
- * running it with {@link Effect.runSync} is total.
+ * Synchronous {@link validateValue} for a {@link ServiceFreeSchema} — the
+ * common case for plain form schemas. A schema that needs a decoding service
+ * is a type error here; validate it with the Effect-returning
+ * {@link validateValue}.
  */
-export function validateValueSync<S extends Schema.Top>(
+export function validateValueSync<S extends ServiceFreeSchema>(
   schema: S,
-  input: unknown,
+  input: FormValue,
   format?: LeafFormatter,
 ): ValidationResult<S["Type"]> {
-  // SAFETY: `validateValue` never fails on the error channel; the cast drops
-  // the decoding-service requirement, which this function's documented
-  // contract has the caller assert is `never` (the common case for plain form
-  // schemas — a service-requiring schema must use the async {@link validateValue}).
-  return Effect.runSync(
-    validateValue(schema, input, format) as Effect.Effect<ValidationResult<S["Type"]>>,
-  );
+  return Result.match(SchemaParser.decodeResult(schema, { errors: "all" })(input), {
+    onSuccess: (data): ValidationResult<S["Type"]> => ({ valid: true, data }),
+    onFailure: (issue) => invalid<S["Type"]>(issue, format),
+  });
 }
 
 /**
