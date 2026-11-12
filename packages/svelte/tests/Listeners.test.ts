@@ -2,10 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import { changeEvents, dispatchChange, type FormListeners } from "../src/Listeners.ts";
 
 /** The linked-fields recipe's form data: a country and a province within it. */
-interface CountryProvince {
+type CountryProvince = {
   readonly country: string;
   readonly province: string;
-}
+};
 
 describe("changeEvents", () => {
   it("is empty when nothing changed", () => {

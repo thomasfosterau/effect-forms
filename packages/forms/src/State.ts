@@ -75,6 +75,45 @@ export function make<A, Message = unknown>(
   return state;
 }
 
+/** A {@link FormState} that passed validation: its `data` is the decoded value `A`. */
+export interface ValidFormState<A, Message = unknown> extends FormState<A, Message> {
+  readonly isValid: true;
+}
+
+/**
+ * A {@link FormState} that did not pass validation (or was never submitted):
+ * its `data` is whatever the form holds, `D` — the posted values merged over
+ * the blank, or the blank itself.
+ */
+export interface InvalidFormState<D, Message = unknown> extends FormState<D, Message> {
+  readonly isValid: false;
+}
+
+/**
+ * What a validation answers: a {@link ValidFormState} carrying the decoded
+ * `A`, or an {@link InvalidFormState} carrying `A` or the blank / posted
+ * shape `Blank`. Narrow on `isValid` to reach the decoded value.
+ */
+export type ValidatedFormState<A, Blank = A, Message = unknown> =
+  | ValidFormState<A, Message>
+  | InvalidFormState<A | Blank, Message>;
+
+/** {@link make} a {@link ValidFormState}: the decoded `data`, with no errors. */
+export function valid<A, Message = unknown>(
+  data: A,
+  options: Omit<MakeFormStateOptions<Message>, "isValid" | "errors"> = {},
+): ValidFormState<A, Message> {
+  return { ...make<A, Message>(data, options), isValid: true };
+}
+
+/** {@link make} an {@link InvalidFormState}: the held `data`, carrying `errors`. */
+export function invalid<D, Message = unknown>(
+  data: D,
+  options: Omit<MakeFormStateOptions<Message>, "isValid"> = {},
+): InvalidFormState<D, Message> {
+  return { ...make<D, Message>(data, options), isValid: false };
+}
+
 /** Return a new state carrying `message` (and not otherwise changed). */
 export function withMessage<A, Message>(
   state: FormState<A, Message>,

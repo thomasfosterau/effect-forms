@@ -171,7 +171,7 @@ export function schemaAt(schema: Schema.Top, path: FormPath): Option.Option<Sche
  * depth) by walking `schema`'s AST there — the nested-array counterpart to
  * {@link defaultValue}. Returns `""` when `path` doesn't resolve to an array.
  */
-export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
+export function defaultItemAt(schema: Schema.Top, path: FormPath): BlankValue {
   return schemaAt(schema, path).pipe(
     Option.filter(SchemaAST.isArrays),
     Option.flatMap(arrayElementAst),
@@ -182,4 +182,17 @@ export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */
 export function defaultEncodedValues(fields: FieldsRecord): BlankStruct {
   return R.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
+}
+
+/**
+ * The schema-derived blank of a struct's fields `F`: one {@link BlankValue}
+ * per field. Honestly typed — a blank need not be a valid encoded value (a
+ * numeric field's encoded side is a number, its blank `""`).
+ */
+export type Blanks<F extends Schema.Struct.Fields> = Readonly<Record<keyof F & string, BlankValue>>;
+
+/** Seed a {@link BlankValue} for every field of a `Schema.Struct`'s fields. */
+export function blankValues<F extends Schema.Struct.Fields>(fields: F): Blanks<F> {
+  const byName: Readonly<Record<keyof F & string, Schema.Constraint>> = fields;
+  return R.map(byName, (schema) => fromAst(schema.ast));
 }
