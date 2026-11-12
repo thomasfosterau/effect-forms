@@ -21,7 +21,7 @@
  * @module effect-forms-svelte/kit/FormStateReaders
  */
 
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 
 /**
  * The subset of `State.FormState` the readers touch: the posted values and
@@ -39,13 +39,16 @@ export interface ActionFormState {
  * that carried a bare message instead.
  */
 export const formStateOf = (form: unknown): ActionFormState | undefined => {
-  if (!Predicate.isObjectOrArray(form) || !Predicate.hasProperty(form, "form")) return undefined;
+  if (!P.isObjectOrArray(form) || !P.hasProperty(form, "form")) return undefined;
   const state = form.form;
-  if (!Predicate.isObjectOrArray(state)) return undefined;
-  // SAFETY: `ActionFormState` is all-optional and every reader below reaches
-  // `data` / `errors` only through optional chaining and re-checks the value it
-  // finds (`Array.isArray`, `isString`), so any object answers totally.
-  return state as ActionFormState;
+  if (!P.isReadonlyObject(state)) return undefined;
+  // Only the two members the readers touch, each kept only when it is an
+  // object — anything else answers as absent, exactly as reading through it
+  // would.
+  const carried: { -readonly [K in keyof ActionFormState]: ActionFormState[K] } = {};
+  if (P.isReadonlyObject(state["data"])) carried.data = state["data"];
+  if (P.isReadonlyObject(state["errors"])) carried.errors = state["errors"];
+  return carried;
 };
 
 /** Messages attached to a named field, or none. */
@@ -84,5 +87,5 @@ export const valueOf = (
   const value = state?.data?.[field];
   if (value === undefined || value === null) return fallback;
   // oxlint-disable-next-line typescript/no-base-to-string -- posted values are form scalars (a checkbox's boolean, a number); rendering them is the point
-  return Predicate.isString(value) ? value : String(value);
+  return P.isString(value) ? value : String(value);
 };

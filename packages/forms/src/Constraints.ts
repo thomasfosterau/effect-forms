@@ -33,9 +33,9 @@
 
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
-import type * as Schema from "effect/Schema";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as SchemaRepresentation from "effect/SchemaRepresentation";
 import type { FormPath } from "./Issues.ts";
@@ -91,7 +91,7 @@ function flattenChecks(
 ): Array<SchemaAST.Filter<never>> {
   if (checks === undefined) return [];
   return Arr.flatMap(checks, (check) =>
-    Predicate.isTagged(check, "FilterGroup") ? flattenChecks(check.checks) : [check],
+    P.isTagged(check, "FilterGroup") ? flattenChecks(check.checks) : [check],
   );
 }
 
@@ -99,69 +99,77 @@ function flattenChecks(
 type ConstraintPatch = { -readonly [K in keyof InputConstraint]?: InputConstraint[K] };
 
 /**
- * The `representation.payload` shapes of the built-in checks that map onto a
- * native HTML attribute, keyed by the check's stable representation id.
- * Mirrors each check constructor in `effect/Schema` (e.g. `isMinLength`
- * writes `{ id: "effect/schema/isMinLength", payload: { minLength } }`).
+ * A patch from one check's `representation.payload`, decoded through
+ * `payload` first: a payload without the shape the check constructor
+ * publishes yields no patch rather than a malformed one.
  */
-interface CheckPayloads {
-  readonly "effect/schema/isMinLength": { readonly minLength: number };
-  readonly "effect/schema/isMaxLength": { readonly maxLength: number };
-  readonly "effect/schema/isBetweenLength": { readonly minimum: number; readonly maximum: number };
-  readonly "effect/schema/isPattern": { readonly source: string; readonly flags: string };
-  readonly "effect/schema/isGreaterThan": { readonly exclusiveMinimum: number };
-  readonly "effect/schema/isGreaterThanOrEqualTo": { readonly minimum: number };
-  readonly "effect/schema/isLessThan": { readonly exclusiveMaximum: number };
-  readonly "effect/schema/isLessThanOrEqualTo": { readonly maximum: number };
-  readonly "effect/schema/isBetween": { readonly minimum: number; readonly maximum: number };
-  readonly "effect/schema/isMultipleOf": { readonly divisor: number };
-}
+const patchFrom =
+  <A>(payload: Schema.Codec<A>, toPatch: (decoded: A) => ConstraintPatch) =>
+  (json: Schema.Json): Option.Option<ConstraintPatch> =>
+    Option.map(Schema.decodeUnknownOption(payload)(json), toPatch);
 
 /**
  * One constraint patch per recognised representation id — the built-in
- * checks that map onto a native HTML attribute. An id with no entry here
- * (an unannotated custom filter, or a built-in check with no HTML
- * equivalent) derives nothing. `isInt` isn't a plain patch: it only sets
- * `step` as a fallback when nothing more specific already did, so it's
- * handled separately in {@link constraintFromChecks}.
+ * checks that map onto a native HTML attribute — each decoding the payload
+ * shape that check's constructor in `effect/Schema` publishes (e.g.
+ * `isMinLength` writes `{ id: "effect/schema/isMinLength", payload: {
+ * minLength } }`). An id with no entry here (an unannotated custom filter, or
+ * a built-in check with no HTML equivalent) derives nothing. `isInt` isn't a
+ * plain patch: it only sets `step` as a fallback when nothing more specific
+ * already did, so it's handled separately in {@link constraintFromChecks}.
  */
-const payloadPatches = {
-  "effect/schema/isMinLength": (p) => ({ minlength: p.minLength }),
-  "effect/schema/isMaxLength": (p) => ({ maxlength: p.maxLength }),
-  "effect/schema/isBetweenLength": (p) => ({ minlength: p.minimum, maxlength: p.maximum }),
-  "effect/schema/isPattern": (p) => ({ pattern: p.source }),
-  "effect/schema/isGreaterThan": (p) => ({ min: p.exclusiveMinimum }),
-  "effect/schema/isGreaterThanOrEqualTo": (p) => ({ min: p.minimum }),
-  "effect/schema/isLessThan": (p) => ({ max: p.exclusiveMaximum }),
-  "effect/schema/isLessThanOrEqualTo": (p) => ({ max: p.maximum }),
-  "effect/schema/isBetween": (p) => ({ min: p.minimum, max: p.maximum }),
-  "effect/schema/isMultipleOf": (p) => ({ step: p.divisor }),
-} satisfies {
-  readonly [K in keyof CheckPayloads]: (payload: CheckPayloads[K]) => ConstraintPatch;
+const payloadPatches: R.ReadonlyRecord<
+  string,
+  (payload: Schema.Json) => Option.Option<ConstraintPatch>
+> = {
+  "effect/schema/isMinLength": patchFrom(Schema.Struct({ minLength: Schema.Finite }), (p) => ({
+    minlength: p.minLength,
+  })),
+  "effect/schema/isMaxLength": patchFrom(Schema.Struct({ maxLength: Schema.Finite }), (p) => ({
+    maxlength: p.maxLength,
+  })),
+  "effect/schema/isBetweenLength": patchFrom(
+    Schema.Struct({ minimum: Schema.Finite, maximum: Schema.Finite }),
+    (p) => ({ minlength: p.minimum, maxlength: p.maximum }),
+  ),
+  "effect/schema/isPattern": patchFrom(Schema.Struct({ source: Schema.String }), (p) => ({
+    pattern: p.source,
+  })),
+  "effect/schema/isGreaterThan": patchFrom(
+    Schema.Struct({ exclusiveMinimum: Schema.Finite }),
+    (p) => ({ min: p.exclusiveMinimum }),
+  ),
+  "effect/schema/isGreaterThanOrEqualTo": patchFrom(
+    Schema.Struct({ minimum: Schema.Finite }),
+    (p) => ({ min: p.minimum }),
+  ),
+  "effect/schema/isLessThan": patchFrom(
+    Schema.Struct({ exclusiveMaximum: Schema.Finite }),
+    (p) => ({ max: p.exclusiveMaximum }),
+  ),
+  "effect/schema/isLessThanOrEqualTo": patchFrom(
+    Schema.Struct({ maximum: Schema.Finite }),
+    (p) => ({ max: p.maximum }),
+  ),
+  "effect/schema/isBetween": patchFrom(
+    Schema.Struct({ minimum: Schema.Finite, maximum: Schema.Finite }),
+    (p) => ({ min: p.minimum, max: p.maximum }),
+  ),
+  "effect/schema/isMultipleOf": patchFrom(Schema.Struct({ divisor: Schema.Finite }), (p) => ({
+    step: p.divisor,
+  })),
 };
 
-/** Whether `id` names a check {@link payloadPatches} has a patch for (an own key, never an inherited one). */
-const isPatchedCheckId = (id: string): id is keyof CheckPayloads =>
-  Rec.has<string, unknown>(payloadPatches, id);
-
 /**
- * Look up and apply `payloadPatches[representation.id]`. The cast is sound:
- * each payload is authored by the same built-in check constructor its id
- * names, so an entry is never called with a mismatched payload shape.
+ * Look up `payloadPatches[representation.id]` (an own key, never an inherited
+ * one) and apply it to the representation's payload.
  */
-function applyPayloadPatch(
+const applyPayloadPatch = (
   representation: SchemaRepresentation.RepresentationAnnotation,
-): ConstraintPatch | undefined {
-  const id = representation.id;
-  if (!isPatchedCheckId(id)) return undefined;
-  // SAFETY: every `effect/schema/is*` id in `CheckPayloads` is the
-  // representation id of one of Effect's built-in checks, which publishes its
-  // `payload` in exactly the shape `CheckPayloads` records for that id — so
-  // the patch for `id` accepts this representation's payload.
-  const patch = payloadPatches[id] as (payload: Schema.Json) => ConstraintPatch;
-  return patch(representation.payload);
-}
-
+): Option.Option<ConstraintPatch> =>
+  Option.flatMap(R.get(payloadPatches, representation.id), (patch) =>
+    patch(representation.payload),
+  );
 /** Whether a check is `Schema.isInt` (it implies `step="1"`, not an attribute payload). */
 const isIntCheck = (representation: SchemaRepresentation.RepresentationAnnotation): boolean =>
   representation.id === "effect/schema/isInt";
@@ -186,7 +194,9 @@ function constraintFromChecks(outer: SchemaAST.AST, inner: SchemaAST.AST): Input
 
   const empty: ConstraintPatch = {};
   const patched = Arr.reduce(representations, empty, (out, representation) =>
-    isIntCheck(representation) ? out : { ...out, ...applyPayloadPatch(representation) },
+    isIntCheck(representation)
+      ? out
+      : { ...out, ...Option.getOrUndefined(applyPayloadPatch(representation)) },
   );
 
   return Arr.some(representations, isIntCheck) && patched.step === undefined
@@ -239,7 +249,7 @@ function constraintsForType(type: SchemaAST.AST): InputConstraint | InputConstra
 
 /** Build the constraint tree for one object AST node. */
 function constraintsForObjects(ast: SchemaAST.Objects): InputConstraints {
-  return Rec.fromEntries(
+  return R.fromEntries(
     Arr.map(
       ast.propertySignatures,
       (ps) => [String(ps.name), constraintsForType(ps.type)] as const,
@@ -250,7 +260,7 @@ function constraintsForObjects(ast: SchemaAST.Objects): InputConstraints {
 /** Deep-merge constraint overrides over a derived tree. */
 function mergeConstraints(base: InputConstraints, overrides: InputConstraints): InputConstraints {
   const merged = Arr.flatMap(
-    Rec.keys<string, InputConstraints[string]>(overrides),
+    R.keys<string, InputConstraints[string]>(overrides),
     (key): Array<readonly [string, InputConstraint | InputConstraints]> => {
       const override = overrides[key];
       if (override === undefined) return [];
@@ -264,7 +274,7 @@ function mergeConstraints(base: InputConstraints, overrides: InputConstraints): 
       return [[key, override]];
     },
   );
-  return { ...base, ...Rec.fromEntries(merged) };
+  return { ...base, ...R.fromEntries(merged) };
 }
 
 /**
@@ -312,7 +322,7 @@ export function constraintAt(constraints: InputConstraints, path: FormPath): Inp
     path,
     constraints,
     (current, segment) => {
-      if (Predicate.isNumber(segment)) return current;
+      if (P.isNumber(segment)) return current;
       if (current === undefined || isLeafConstraint(current)) return undefined;
       return current[segment];
     },

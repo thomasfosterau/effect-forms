@@ -22,7 +22,7 @@
 
 import { Constraints, FormBuilder, Result, State } from "@thomasfosterau/effect-forms";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { flushSync } from "svelte";
 import { assert, describe, expect, it } from "vite-plus/test";
@@ -36,7 +36,7 @@ const ActionForm = Schema.Struct({ title: Schema.String });
 /** The posted `title`, which the form's text input always sends as a string. */
 const titleOf = (body: FormData): string => {
   const title = body.get("title");
-  assert(Predicate.isString(title), "expected a string title in the posted body");
+  assert(P.isString(title), "expected a string title in the posted body");
   return title;
 };
 
