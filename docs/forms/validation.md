@@ -22,7 +22,7 @@ const signupForm = Form.make(Signup, {
 // In a server action / load:
 declare const request: Request;
 const state = await Effect.runPromise(signupForm.validate(request));
-// state: { id, valid, posted, data, errors, constraints, message? }
+// state: { id, isValid, isPosted, data, errors, constraints, message? }
 ```
 
 Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`, `Errors`, …). `Form.make(schema, { defaults })` is the server-side validate-and-seed entry point:

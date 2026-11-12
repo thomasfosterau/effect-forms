@@ -21,7 +21,7 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
     schema: Signup,        // enables client-side validation
     resetForm: true,
     taintedMessage: "You have unsaved changes.",
-    onUpdated: ({ form }) => form.valid && toast("Saved"),
+    onUpdated: ({ form }) => form.isValid && toast("Saved"),
   });
 </script>
 
@@ -46,7 +46,7 @@ import { signup } from "#lib/forms"; // a FormBuilder
 const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 } });
 ```
 
-**Reactive state** — `data` (mutable, bind inputs to it), `errors` (merged client + server), `clientErrors` / `serverErrors` (per-source views), `message`, `constraints`, `submitting`, `delayed`, `posted`, `valid`, `canSubmit`, `isValidating`, `isSubmitted`, `isSubmitSuccessful`, `submissionAttempts`, `tainted`, `isTainted`, and (against the last submission) `changedSinceSubmit` / `hasChangedSinceSubmit`.
+**Reactive state** — `data` (mutable, bind inputs to it), `errors` (merged client + server), `clientErrors` / `serverErrors` (per-source views), `message`, `constraints`, `submitting`, `delayed`, `isPosted`, `isValid`, `canSubmit`, `isValidating`, `isSubmitted`, `isSubmitSuccessful`, `submissionAttempts`, `tainted`, `isTainted`, and (against the last submission) `changedSinceSubmit` / `hasChangedSinceSubmit`.
 
 **Methods** — `enhance(node)` (the form action), `validate()` / `validateField(path)` (client-side, needs `schema`; also runs a builder's `refineEffect` refinements, on the decoded values as the server does, once they decode), `errorsAt(path)` / `taintedAt(path)` / `isValidatingAt(path)`, `setValue(path, v)` / `valueAt(path)`, `handleBlur(path)` / `setTouched(path)` / `isTouchedAt(path)`, `isDirtyAt(path)` / `isDefaultValueAt(path)` (persistent per-field dirty tracking — see [Field handles](field-handles.md)), `setFieldValidators(path, validators)` (register a field's validators dynamically), `shouldShowError(path)` / `visibleErrorsAt(path)` (mode-aware display gating), `constraintAt(path)`, `revertToLastSubmit()`, `reset()`, `capture()` / `restore()` (SvelteKit snapshots), `setServerState(data, errors)` (apply a result received some other way), `toFormData()`.
 
