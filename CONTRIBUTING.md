@@ -32,7 +32,7 @@ Hooks are managed by Vite+ (`vp config`, run by `prepare`); the editable [.vite-
 1. The gates in [AGENTS.md](AGENTS.md#verification), each with its final pass/fail.
 2. A changeset (`pnpm changeset`) where [AGENTS.md](AGENTS.md#branches-and-pull-requests) requires one.
 3. `git fetch origin trunk && git rebase origin/trunk`
-4. Docs: the package `README.md` for any exported change; the package `AGENTS.md` for a new term or invariant.
+4. Docs: the doc comment on any changed export, and the matching guide under `docs/` (plus the package `README.md` table when a module or entry is added); the package `AGENTS.md` for a new term or invariant.
 
 ## Running individual checks
 

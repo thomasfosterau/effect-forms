@@ -5,7 +5,7 @@ The framework-neutral core. Read the root [AGENTS.md](../../AGENTS.md) first.
 ## Boundary
 
 - Imports `effect` and `@thomasfosterau/effect-ext` (both peers; effect-ext for its `/TriState` subpath) and nothing else at runtime: no framework, no DOM-only or Node-only API beyond the platform types every runtime has (`FormData`, `URLSearchParams`, `Request`, `Blob`). `vp pack` builds it with `platform: "neutral"`. fallow's `forms` zone may import no other zone.
-- One entry, `src/index.ts`, re-exporting every module as a namespace (`export * as Form from "./Form.ts"`). A new module joins the barrel and the API table in `README.md`.
+- One entry, `src/index.ts`, re-exporting every module as a namespace (`export * as Form from "./Form.ts"`). A new module joins the barrel and the module table in `docs/forms/modules.md`.
 
 ## Invariants
 
