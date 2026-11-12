@@ -46,12 +46,12 @@ import { safeRedirect } from "#lib/redirects";
 
 const SignInFields = Schema.Struct({
   email: Schema.String,
-  _password: Schema.String,
+  password: Schema.String,
   redirectTo: Schema.optional(Schema.String),
 });
 
 const signInForm = Form.make(SignInFields, {
-  defaults: { email: "", _password: "", redirectTo: undefined },
+  defaults: { email: "", password: "", redirectTo: undefined },
   id: "sign-in",
 });
 
@@ -60,7 +60,7 @@ type SignIn = typeof SignInFields.Type;
 /** Blank the password before a state is echoed back to the browser. */
 const blankPassword = (state: State.FormState<SignIn>): State.FormState<SignIn> => ({
   ...state,
-  data: { ...state.data, _password: "" },
+  data: { ...state.data, password: "" },
 });
 
 /** A 401 → one generic whole-form message (never reveal whether the email exists). */
@@ -73,7 +73,7 @@ export const actions = {
   default: formAction(
     signInForm,
     (input, { locals }) =>
-      locals.session.signIn({ email: input.email, password: input._password, rememberMe: true }),
+      locals.session.signIn({ email: input.email, password: input.password, rememberMe: true }),
     (_, input) => safeRedirect(input.redirectTo, "/"),
     { classify, redact: blankPassword, unrecognised: "throw" },
   ),
@@ -95,7 +95,7 @@ The page renders server state without a client store:
   {#each rootIssuesOf(state) as message}<p role="alert">{message}</p>{/each}
   <input name="email" value={valueOf(state, "email")} />
   {#each issuesFor(state, "email") as message}<small>{message}</small>{/each}
-  <input name="_password" type="password" />
+  <input name="password" type="password" />
 </form>
 ```
 
