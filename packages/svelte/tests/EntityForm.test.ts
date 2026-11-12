@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { Command } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
 import type { Component } from "svelte";
 import { defineEntityForm, type EntityFormEntry } from "../src/EntityForm.ts";
@@ -42,11 +43,8 @@ const statusOptionLabels = { draft: () => "Draft", published: () => "Published" 
 const Picker: Component<never> = () => ({});
 const RowsWidget: Component<never> = () => ({});
 
-// `createInput` / `updateInput` are typed `Schema.Top`; decode them untyped.
-const decodeInput = (input: Schema.Top) =>
-  // SAFETY: EntityForm builds both inputs with `Command.formInputFields` (plus string
-  // overrides here), a struct of string schemas that needs no decoding service.
-  Schema.decodeUnknownSync(input as Schema.Codec<unknown>);
+// `createInput` / `updateInput` need no decoding services, so they decode synchronously.
+const decodeInput = (input: Command.FormInputField) => Schema.decodeUnknownSync(input);
 
 const submit = { create: () => "Create thing", update: () => "Save changes" };
 

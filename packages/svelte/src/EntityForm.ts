@@ -122,8 +122,8 @@ export interface CommandStructLike {
 export interface EntityFormDefinition {
   readonly plan: Command.CommandPlan;
   readonly entries: readonly EntityFormEntry[];
-  readonly createInput: Schema.Top;
-  readonly updateInput: Schema.Top;
+  readonly createInput: Command.FormInputField;
+  readonly updateInput: Command.FormInputField;
   readonly createDefaults: Readonly<Record<string, string>>;
   readonly updateDefaults: Readonly<Record<string, string>>;
   readonly adaptCreate: (input: Command.FormInputRecord) => Record<string, unknown>;
@@ -193,8 +193,8 @@ export interface DefineEntityFormOptions<C extends CommandStructLike, U extends 
   };
   /** Per-field Form-Input schema overrides, per mode (e.g. an optional create title with a server default). */
   readonly inputOverrides?: {
-    readonly create?: Readonly<Record<string, Schema.Top>>;
-    readonly update?: Readonly<Record<string, Schema.Top>>;
+    readonly create?: Readonly<Record<string, Command.FormInputField>>;
+    readonly update?: Readonly<Record<string, Command.FormInputField>>;
   };
   /**
    * Command fields deliberately absent from the standalone form (a carve-out,
