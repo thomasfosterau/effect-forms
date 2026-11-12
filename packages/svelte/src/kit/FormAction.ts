@@ -42,6 +42,13 @@ type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
 
 /**
+ * A schema whose decoding needs no services — what {@link runFormAction} and
+ * {@link formAction} accept, since they run the decode at the action's
+ * Promise boundary with nothing to provide.
+ */
+export type ServiceFreeSchema = Schema.Top & { readonly DecodingServices: never };
+
+/**
  * A command: a Promise-returning function or one returning an `Effect` with
  * no requirements (provide them first, e.g. through a `ManagedRuntime`).
  */
@@ -189,7 +196,7 @@ const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormStat
  * check it. {@link formAction} hands it to SvelteKit's `redirect`, which
  * accepts only a same-origin location (see there).
  */
-export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
+export async function runFormAction<S extends ServiceFreeSchema, O, Message = unknown>(
   form: Form.Form<S, Message>,
   request: Request,
   run: Command<S["Type"], O>,
@@ -198,12 +205,8 @@ export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
 ): Promise<FormActionResult<S["Type"]>> {
   const redact = options.redact ?? ((state: FormState<S["Type"]>) => state);
   const classify = options.classify ?? jsonapiFailure;
-  // SAFETY: a posted form needs no decoding services at runtime; schemas
-  // projected from elsewhere can still carry an unreduced `DecodingServices`
-  // type, so only the requirements channel is narrowed here.
-  const validate = form.validate(request) as Effect.Effect<FormState<S["Type"], Message>>;
   const program = Effect.flatMap(
-    validate,
+    form.validate(request),
     (state): Effect.Effect<FormActionResult<S["Type"]>, unknown> => {
       if (!state.valid) return Effect.succeed(Result.failure(redact(state), 400));
       const idempotent = options.idempotent;
@@ -289,7 +292,7 @@ const actionData = <A>(data: FormActionData<A>): FormActionData<A> => data;
  * };
  * ```
  */
-export function formAction<S extends Schema.Top, O, Message = unknown>(
+export function formAction<S extends ServiceFreeSchema, O, Message = unknown>(
   form: Form.Form<S, Message>,
   run: ActionCommand<S["Type"], O>,
   locationFor: (output: O, input: S["Type"]) => string,

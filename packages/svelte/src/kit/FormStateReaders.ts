@@ -41,11 +41,14 @@ export interface ActionFormState {
 export const formStateOf = (form: unknown): ActionFormState | undefined => {
   if (!P.isObjectOrArray(form) || !P.hasProperty(form, "form")) return undefined;
   const state = form.form;
-  if (!P.isObjectOrArray(state)) return undefined;
-  // SAFETY: `ActionFormState` is all-optional and every reader below reaches
-  // `data` / `errors` only through optional chaining and re-checks the value it
-  // finds (`Array.isArray`, `isString`), so any object answers totally.
-  return state as ActionFormState;
+  if (!P.isReadonlyObject(state)) return undefined;
+  // Only the two members the readers touch, each kept only when it is an
+  // object — anything else answers as absent, exactly as reading through it
+  // would.
+  const carried: { -readonly [K in keyof ActionFormState]: ActionFormState[K] } = {};
+  if (P.isReadonlyObject(state["data"])) carried.data = state["data"];
+  if (P.isReadonlyObject(state["errors"])) carried.errors = state["errors"];
+  return carried;
 };
 
 /** Messages attached to a named field, or none. */

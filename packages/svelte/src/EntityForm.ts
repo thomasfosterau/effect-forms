@@ -158,22 +158,24 @@ export interface EntryBuilders<K extends string> {
   /**
    * A bespoke string-valued widget (an FK picker). The renderer supplies
    * `name` / `value` / `onChange` / `errors`; `props()` supplies the rest at
-   * render time (labels stay thunk-resolved).
+   * render time (labels stay thunk-resolved). `Props` is inferred from
+   * `component`; the entry keeps it as {@link WidgetEntry.component}.
    */
-  custom(
+  custom<Props extends Record<string, any>>(
     key: K,
-    component: Component<never>,
+    component: Component<Props>,
     props: () => Readonly<Record<string, unknown>>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
   /**
    * A bespoke row-list widget (a contributor list). The renderer owns the row
    * state and supplies `name` / `value` / `onChange` / `errors`; the widget
-   * owns the wire serialisation (its hidden input).
+   * owns the wire serialisation (its hidden input). `Props` is inferred from
+   * `component`, as for {@link EntryBuilders.custom}.
    */
-  rows(
+  rows<Props extends Record<string, any>>(
     key: K,
-    component: Component<never>,
+    component: Component<Props>,
     props: () => Readonly<Record<string, unknown>>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
@@ -213,12 +215,7 @@ const builders: EntryBuilders<string> = {
     _tag: "widget",
     key,
     bridge: "value",
-    // SAFETY: `Component<never>` is the widest component type (every component
-    // is assignable to it); the entry erases its props to `any` because the
-    // renderer only ever mounts it with this entry's own `props()` plus the
-    // widget-contract bridge props, the props the definition module chose
-    // this component for.
-    component: component as Component<any>,
+    component,
     props,
     options,
   }),
@@ -226,12 +223,7 @@ const builders: EntryBuilders<string> = {
     _tag: "widget",
     key,
     bridge: "rows",
-    // SAFETY: `Component<never>` is the widest component type (every component
-    // is assignable to it); the entry erases its props to `any` because the
-    // renderer only ever mounts it with this entry's own `props()` plus the
-    // widget-contract bridge props, the props the definition module chose
-    // this component for.
-    component: component as Component<any>,
+    component,
     props,
     options,
   }),
