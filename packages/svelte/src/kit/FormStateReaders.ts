@@ -21,7 +21,10 @@
  * @module effect-forms-svelte/kit/FormStateReaders
  */
 
+import { flow } from "effect/Function";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import * as Schema from "effect/Schema";
 
 /**
  * The subset of `State.FormState` the readers touch: the posted values and
@@ -34,22 +37,41 @@ export interface ActionFormState {
 }
 
 /**
- * The carried form state, or `undefined` when there is none — a first
- * render, a successful submission (which redirects), or an action result
- * that carried a bare message instead.
+ * An action result that carries a form state: an object whose `form` member
+ * is itself an object. Its `data` / `errors` members are checked by
+ * {@link carriedState}, so a malformed member reads as absent rather than
+ * rejecting the whole state.
  */
-export const formStateOf = (form: unknown): ActionFormState | undefined => {
-  if (!P.isObjectOrArray(form) || !P.hasProperty(form, "form")) return undefined;
-  const state = form.form;
-  if (!P.isReadonlyObject(state)) return undefined;
-  // Only the two members the readers touch, each kept only when it is an
-  // object — anything else answers as absent, exactly as reading through it
-  // would.
+const CarriedForm = Schema.Struct({
+  form: Schema.Struct({
+    data: Schema.optionalKey(Schema.Unknown),
+    errors: Schema.optionalKey(Schema.Unknown),
+  }),
+});
+
+/**
+ * Only the two members the readers touch, each kept only when it is an
+ * object — anything else answers as absent, exactly as reading through it
+ * would.
+ */
+const carriedState = ({ form: state }: typeof CarriedForm.Type): ActionFormState => {
   const carried: { -readonly [K in keyof ActionFormState]: ActionFormState[K] } = {};
-  if (P.isReadonlyObject(state["data"])) carried.data = state["data"];
-  if (P.isReadonlyObject(state["errors"])) carried.errors = state["errors"];
+  if (P.isReadonlyObject(state.data)) carried.data = state.data;
+  if (P.isReadonlyObject(state.errors)) carried.errors = state.errors;
   return carried;
 };
+
+/**
+ * The carried form state, or `undefined` when there is none — a first
+ * render, a successful submission (which redirects), or an action result
+ * that carried a bare message instead. Decodes the page's `form` prop (typed
+ * by SvelteKit as the route's `ActionData | null`) at this boundary.
+ */
+export const formStateOf = flow(
+  Schema.decodeUnknownOption(CarriedForm),
+  Option.map(carriedState),
+  Option.getOrUndefined,
+);
 
 /** Messages attached to a named field, or none. */
 export const issuesFor = (
