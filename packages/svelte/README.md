@@ -103,7 +103,7 @@ const form = createForm(
 
 **Error sources** — a field's server-reported error (from the last submission) survives a client-side revalidation of some _other_ field; it clears once _that_ field's own value changes (or the server clears it on the next submit). `errors` is the merged view; `clientErrors` / `serverErrors` expose the two trees separately for a UI that wants to style them differently.
 
-**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to `fetch` to the form's action, parsing a JSON [`FormActionResult`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Result.ts) or a bare `FormState`).
+**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to a POST to the form's action through Effect's `HttpClient` on the platform `fetch`, parsing a JSON [`FormActionResult`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Result.ts) or a bare `FormState`).
 
 ## API
 
