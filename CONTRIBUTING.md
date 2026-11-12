@@ -32,21 +32,18 @@ Hooks are managed by Vite+ (`vp config`, run by `prepare`); the editable [.vite-
 1. The gates in [AGENTS.md](AGENTS.md#verification), each with its final pass/fail.
 2. A changeset (`pnpm changeset`) where [AGENTS.md](AGENTS.md#branches-and-pull-requests) requires one.
 3. `git fetch origin trunk && git rebase origin/trunk`
-4. Docs: the package `README.md` for any exported change; the package `CLAUDE.md` for a new term or invariant.
+4. Docs: the package `README.md` for any exported change; the package `AGENTS.md` for a new term or invariant.
 
 ## Running individual checks
 
+The whole-gate commands are in [AGENTS.md](AGENTS.md#commands); these are the single-check variants.
+
 ```sh
-vp fmt                                       # oxfmt
-vp lint                                      # oxlint (+ @enfect/oxlint's Effect rules)
+vp fmt                                       # oxfmt only
+vp lint                                      # oxlint only (+ @enfect/oxlint's Effect rules)
 vp check --fix                               # both, autofixing
-vp run check                                 # the whole type gate
 vp run --filter ./packages/svelte check      # one package's type gate
-vp run -r test:unit                          # unit tests
 vp test run tests/Path.test.ts               # a single file (from inside the package)
-vp run -r build                              # emit dist/
-vp run docgen                                # compile and run packages/forms' @examples
-vp run test:coverage                         # one Istanbul map for fallow
 pnpm run fallow                              # fallow's dead-code / duplication / health summary
 pnpm run fallow:audit                        # change-set review (not a CI gate)
 ```
