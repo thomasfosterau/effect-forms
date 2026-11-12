@@ -62,11 +62,21 @@ describe("validateValue with a custom leaf formatter", () => {
   });
 });
 
-describe("runSyncFieldValidator", () => {
-  const passing: SyncFieldValidator<string> = () => undefined;
-  const failing: SyncFieldValidator<string> = (value) =>
-    value.length < 3 ? "Too short" : undefined;
+const passing: SyncFieldValidator<string> = () => undefined;
+const failing: SyncFieldValidator<string> = (value) => (value.length < 3 ? "Too short" : undefined);
 
+const takenValidator: AsyncFieldValidator<string> = (value) =>
+  Effect.succeed(value === "taken" ? "Username taken" : undefined);
+
+const multiIssueValidator: AsyncFieldValidator<string> = () =>
+  Effect.succeed(["First problem", "Second problem"]);
+
+const onChange: SyncFieldValidator<string> = () => undefined;
+const onBlur: SyncFieldValidator<string> = () => undefined;
+const onChangeAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
+const onBlurAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
+
+describe("runSyncFieldValidator", () => {
   it("returns no issues when the validator passes", () => {
     expect(runSyncFieldValidator(passing, "anything")).toEqual([]);
   });
@@ -89,9 +99,7 @@ describe("runAsyncFieldValidator", () => {
   it("runs immediately with no debounce (default)", () =>
     runTest(
       Effect.gen(function* () {
-        const validator: AsyncFieldValidator<string> = (value) =>
-          Effect.succeed(value === "taken" ? "Username taken" : undefined);
-        const issues = yield* runAsyncFieldValidator(validator, "taken");
+        const issues = yield* runAsyncFieldValidator(takenValidator, "taken");
         expect(issues).toEqual([{ path: [], message: "Username taken" }]);
       }),
     ));
@@ -183,9 +191,7 @@ describe("runAsyncFieldValidator", () => {
   it("propagates the value's FilterOutput array into multiple FormIssues", () =>
     runTest(
       Effect.gen(function* () {
-        const validator: AsyncFieldValidator<string> = () =>
-          Effect.succeed(["First problem", "Second problem"]);
-        const issues = yield* runAsyncFieldValidator(validator, "x");
+        const issues = yield* runAsyncFieldValidator(multiIssueValidator, "x");
         expect(issues).toEqual([
           { path: [], message: "First problem" },
           { path: [], message: "Second problem" },
@@ -195,11 +201,6 @@ describe("runAsyncFieldValidator", () => {
 });
 
 describe("resolveFieldTrigger", () => {
-  const onChange: SyncFieldValidator<string> = () => undefined;
-  const onBlur: SyncFieldValidator<string> = () => undefined;
-  const onChangeAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
-  const onBlurAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
-
   it("picks onChange / onChangeAsync for the change trigger", () => {
     const resolved = resolveFieldTrigger(
       { onChange, onBlur, onChangeAsync, onBlurAsync, asyncDebounceMs: 300 },
