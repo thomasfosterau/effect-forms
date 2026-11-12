@@ -46,7 +46,7 @@ catalog:
   # moves with the `effect` pin below (Dependabot's `effect` group). It peers
   # on `vitest >=5 <6` and imports `vitest`, which the `vitest@*` override
   # resolves to the copy `vite-plus/test` re-exports: one runner instance.
-  "@effect/vitest": 4.1.2
+  "@effect/vitest": 4.1.3
   # The Effect rule set for Oxlint (the successor of
   # `@mpsuesser/oxlint-plugin-effect`, same `effect/` rule namespace), wired in
   # the root vite.config.ts as `effect.configs.recommended`. It loads into the
