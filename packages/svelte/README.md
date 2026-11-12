@@ -54,6 +54,8 @@ import { signup } from "#lib/forms"; // a FormBuilder
 const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 } });
 ```
 
+The bound schema must be service-free with `FormValue` decoded and encoded sides (`FormSchema`; a builder's fields are `FormFields`), since the browser validates synchronously and the store walks and posts the data as a `Path.FormValue` tree. A builder store's `data` is the builder's encoded type when you pass `defaults`, and `DraftData<F>` (one `FormValue` per field) when the blanks are schema-derived.
+
 **Reactive state** — `data` (mutable, bind inputs to it), `errors` (merged client + server), `clientErrors` / `serverErrors` (per-source views), `message`, `constraints`, `submitting`, `delayed`, `posted`, `valid`, `canSubmit`, `isValidating`, `isSubmitted`, `isSubmitSuccessful`, `submissionAttempts`, `tainted`, `isTainted`, and (against the last submission) `changedSinceSubmit` / `hasChangedSinceSubmit`.
 
 **Methods** — `enhance(node)` (the form action), `validate()` / `validateField(path)` (client-side, needs `schema`; also runs a builder's `refineEffect` refinements, on the decoded values as the server does, once they decode), `errorsAt(path)` / `taintedAt(path)` / `isValidatingAt(path)`, `setValue(path, v)` / `valueAt(path)`, `handleBlur(path)` / `setTouched(path)` / `isTouchedAt(path)`, `isDirtyAt(path)` / `isDefaultValueAt(path)` (persistent per-field dirty tracking — see [Field handles](#field-handles)), `setFieldValidators(path, validators)` (register a field's validators dynamically), `shouldShowError(path)` / `visibleErrorsAt(path)` (mode-aware display gating), `constraintAt(path)`, `revertToLastSubmit()`, `reset()`, `capture()` / `restore()` (SvelteKit snapshots), `setServerState(data, errors)` (apply a result received some other way), `toFormData()`.
@@ -84,7 +86,7 @@ const form = createForm(signup, { mode: { validation: "onChange", debounce: 300 
 
 **Validation modes** — the `mode` option (see [`Mode`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Mode.ts)) drives when the form validates: `onSubmit` (default), `onBlur` (call `handleBlur` from an input's blur), or `onChange` (debounced). `onBlur` / `onChange` may `autoSubmit`, turning the form into a live-saving surface. `revalidate` (`"onChange"` default / `"onBlur"` / `"never"`) governs what happens _after_ a failed post in `onSubmit` mode: fixing a field re-validates just that field, clearing its error without a resubmit. Errors are computed for the whole form; gate their display per field with `visibleErrorsAt(path)` (shown only once the field is tainted / touched, or after a submit).
 
-**Per-field validators** — the `validators` option (or `setFieldValidators`) attaches TanStack-Form-style `{ onChange?, onBlur?, onChangeAsync?, onBlurAsync?, asyncDebounceMs? }` per field, keyed by `Path.toString` (e.g. `"author.name"`, `"tags[0]"`). Sync validators return a `Schema.FilterOutput`; async ones are `Effect`s, run as a fiber per field — a new value interrupts the field's in-flight fiber before forking the next run, which is what gives the debounce + "latest wins" cancellation (no timer bookkeeping needed). Pass `layer` when a validator (or a builder's `refineEffect` refinement) needs services on its `R` channel:
+**Per-field validators** — the `validators` option (or `setFieldValidators`) attaches TanStack-Form-style `{ onChange?, onBlur?, onChangeAsync?, onBlurAsync?, asyncDebounceMs? }` per field, keyed by `Path.toString` (e.g. `"author.name"`, `"tags[0]"`). A validator receives the field's runtime `Path.FormValue` and narrows it itself. Sync validators return a `Schema.FilterOutput`; async ones are `Effect`s, run as a fiber per field — a new value interrupts the field's in-flight fiber before forking the next run, which is what gives the debounce + "latest wins" cancellation (no timer bookkeeping needed). Pass `layer` exactly when a validator (or a builder's `refineEffect` refinement) needs services on its `R` channel; without one, the store's `R` is `never`:
 
 ```ts
 const form = createForm(
@@ -92,7 +94,8 @@ const form = createForm(
   {
     validators: {
       username: {
-        onChangeAsync: (value) => Api.checkUsernameAvailable(value as string),
+        onChangeAsync: (value) =>
+          P.isString(value) ? Api.checkUsernameAvailable(value) : Effect.succeed("Expected text"),
         asyncDebounceMs: 300,
       },
     },
@@ -111,9 +114,9 @@ Everything below is exported flat from the root entry (`@thomasfosterau/effect-f
 
 | Module                                                                                                              | Exports                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`FormStore`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/FormStore.svelte.ts)    | `createForm`, `FormStore`, `FieldHandle`, `FieldMeta`, `FormOptions`, `FormSeed` — the reactive store above.                                                                                    |
+| [`FormStore`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/FormStore.svelte.ts)    | `createForm`, `FormStore`, `FieldHandle`, `FieldMeta`, `FormOptions`, `StoreOptions`, `FormSeed`, `FormSchema` / `FormFields`, `DraftData`, `refinementsOf` — the reactive store above.         |
 | [`EntityForm`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/EntityForm.ts)         | `defineEntityForm` — an ordered, key-checked field list over a core `Command.plan`, walked by one generic renderer component; its entry types (`ScalarEntry`, `SelectEntry`, `WidgetEntry`, …). |
-| [`SvelteKit`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/SvelteKit.ts)           | `applyActionResult` — apply a SvelteKit `ActionResult` (`ServerActionResult`) to a store; returns whether it consumed a validation failure.                                                     |
+| [`SvelteKit`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/SvelteKit.ts)           | `applyActionResult` — apply a SvelteKit `ActionResult` (`ServerActionResult`) to a store (any `ServerStateTarget`); returns whether it consumed a validation failure.                           |
 | [`Listeners`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/Listeners.ts)           | `changeEvents` / `dispatchChange` and the `FormListeners` / `FieldListener` types — per-field and form-wide change listeners (linked fields).                                                   |
 | [`Tainted`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/Tainted.ts)               | Deep-diff the data to compute the tainted tree.                                                                                                                                                 |
 | [`ClientValidate`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/src/ClientValidate.ts) | `validateData` / `validateField` — validate the form, or one field, against the schema.                                                                                                         |
