@@ -240,18 +240,19 @@ export async function runFormAction<
   Message = unknown,
   E = never,
   F = never,
+  Blank = S["Type"],
 >(
-  form: Form.Form<S, Message>,
+  form: Form.Form<S, Message, Blank, never>,
   request: Request,
   run: Command<S["Type"], O, E>,
   locationFor: (output: O, input: S["Type"]) => string,
-  options: FormActionOptions<S["Type"], O, E, F> = {},
-): Promise<FormActionResult<S["Type"]>> {
-  const redact = options.redact ?? ((state: FormState<S["Type"]>) => state);
+  options: FormActionOptions<S["Type"] | Blank, O, E, F> = {},
+): Promise<FormActionResult<S["Type"] | Blank>> {
+  const redact = options.redact ?? ((state: FormState<S["Type"] | Blank>) => state);
   const classify = options.classify ?? jsonapiFailure;
   const program = Effect.flatMap(
     form.validate(request),
-    (state): Effect.Effect<FormActionResult<S["Type"]>, E | CommandRejected> => {
+    (state): Effect.Effect<FormActionResult<S["Type"] | Blank>, E | CommandRejected> => {
       if (!state.isValid) return Effect.succeed(Result.failure(redact(state), 400));
       const idempotent = options.idempotent;
       const command =
@@ -340,11 +341,18 @@ const actionData = <A>(data: FormActionData<A>): FormActionData<A> => data;
  * };
  * ```
  */
-export function formAction<S extends ServiceFreeSchema, O, Message = unknown, E = never, F = never>(
-  form: Form.Form<S, Message>,
+export function formAction<
+  S extends ServiceFreeSchema,
+  O,
+  Message = unknown,
+  E = never,
+  F = never,
+  Blank = S["Type"],
+>(
+  form: Form.Form<S, Message, Blank, never>,
   run: ActionCommand<S["Type"], O, E>,
   locationFor: (output: O, input: S["Type"]) => string,
-  options?: FormActionOptions<S["Type"], O, E, F>,
+  options?: FormActionOptions<S["Type"] | Blank, O, E, F>,
 ) {
   return async (event: RequestEvent) => {
     const result = await runFormAction(
@@ -356,11 +364,13 @@ export function formAction<S extends ServiceFreeSchema, O, Message = unknown, E 
     );
     return Match.valueTags(result, {
       Redirect: (redirectResult) => redirect(redirectResult.status, redirectResult.location),
-      Failure: (failure) => fail(failure.status, actionData<S["Type"]>({ form: failure.state })),
-      Error: (error) => fail(error.status, actionData<S["Type"]>({ message: error.message })),
+      Failure: (failure) =>
+        fail(failure.status, actionData<S["Type"] | Blank>({ form: failure.state })),
+      Error: (error) =>
+        fail(error.status, actionData<S["Type"] | Blank>({ message: error.message })),
       // `runFormAction` answers success with a redirect; a success result
       // carrying state is echoed back as-is.
-      Success: (success) => actionData<S["Type"]>({ form: success.state }),
+      Success: (success) => actionData<S["Type"] | Blank>({ form: success.state }),
     });
   };
 }

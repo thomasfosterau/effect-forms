@@ -3,7 +3,7 @@
  * (website's cases, plus gardeneria's decoded-input case), driven with a fake
  * command rather than an API client.
  */
-import { Errors, Form, State } from "@thomasfosterau/effect-forms";
+import { Errors, Form, FormBuilder, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -468,5 +468,34 @@ describe("runFormAction", () => {
       (id) => `/organisations/${id}`,
     );
     expect(result).toEqual({ _tag: "Redirect", status: 303, location: "/organisations/org-1" });
+  });
+});
+
+describe("runFormAction with a Form.fromBuilder form", () => {
+  const builderForm = Form.fromBuilder(FormBuilder.empty.addField("age", Schema.FiniteFromString));
+
+  it("hands the command the decoded value from the valid branch", async () => {
+    const seen: Array<number> = [];
+    const result = await runFormAction(
+      builderForm,
+      post({ age: "42" }),
+      async (input) => {
+        seen.push(input.age);
+        return "person-1";
+      },
+      (id) => `/people/${id}`,
+    );
+    expect(seen).toEqual([42]);
+    expect(result).toEqual({ _tag: "Redirect", status: 303, location: "/people/person-1" });
+  });
+
+  it("answers an invalid submission with the posted values, never running the command", async () => {
+    const command = vi.fn<(input: { readonly age: number }) => Promise<string>>(
+      async () => "person-1",
+    );
+    const result = await runFormAction(builderForm, post({ age: "x" }), command, (id) => id);
+    expect(command).not.toHaveBeenCalled();
+    assert(P.isTagged(result, "Failure"));
+    expect(result.state.data).toEqual({ age: "x" });
   });
 });
