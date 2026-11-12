@@ -1,8 +1,10 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect, it } from "vite-plus/test";
 import { getError } from "../src/Errors.ts";
-import { make } from "../src/Form.ts";
+import { make, UnreadableBody } from "../src/Form.ts";
 
 const Signup = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(2)),
@@ -77,6 +79,19 @@ describe("Form.make → validate", () => {
     const state = await Effect.runPromise(form.validate(request));
     expect(state.valid).toBe(true);
     expect(state.data).toEqual({ name: "Cy", age: 5 });
+  });
+
+  it("dies with UnreadableBody, carrying the rejection, on a body that isn't a form", async () => {
+    const request = new Request("https://example.test", {
+      method: "POST",
+      body: `{"name":"Cy"}`,
+      headers: { "content-type": "application/json" },
+    });
+    const exit = await Effect.runPromiseExit(form.validate(request));
+    assert(Exit.isFailure(exit));
+    const defect = Cause.squash(exit.cause);
+    assert.instanceOf(defect, UnreadableBody);
+    assert.instanceOf(defect.cause, Error);
   });
 
   it("can opt out of constraint derivation", () => {

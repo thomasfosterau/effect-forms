@@ -26,7 +26,7 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as P from "effect/Predicate";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { constraintsFromSchema, type InputConstraints } from "./Constraints.ts";
 import { defaultEncodedValues } from "./Field.ts";
@@ -72,6 +72,8 @@ export interface Form<S extends Schema.Top, Message = unknown> {
   /**
    * Validate a submission into a {@link FormState}. Never fails on the error
    * channel — schema failures become `errors` on the returned (invalid) state.
+   * A `Request` whose body can't be read as a form dies with
+   * {@link UnreadableBody}.
    */
   validate(
     input: FormInput,
@@ -82,15 +84,28 @@ export interface Form<S extends Schema.Top, Message = unknown> {
 const parseInput: Form<Schema.Top>["parse"] = (input) =>
   input instanceof FormData || input instanceof URLSearchParams ? formDataToObject(input) : input;
 
+/**
+ * The defect {@link Form.validate} dies with when a `Request`'s body can't be
+ * read as a form (e.g. a JSON body, or a wrong content-type).
+ *
+ * `validate` never fails, and an unreadable body is not a validation failure
+ * but a caller bug, so it dies; `cause` is the platform's original rejection
+ * (from `request.formData()`).
+ */
+export class UnreadableBody extends Schema.TaggedError<
+  UnreadableBody,
+  { readonly brand: unique symbol }
+>()("UnreadableBody", {
+  cause: Schema.Defect(),
+}) {}
+
 const toStructured = (input: FormInput): Effect.Effect<Record<string, unknown> | null> => {
   if (input === null || input === undefined) return Effect.succeed(null);
   if (input instanceof Request) {
-    // A body that can't be read as a form (e.g. a wrong content-type) is a
-    // defect, not a validation failure: `validate` never fails, so the
-    // rejection reason dies as-is.
-    return Effect.tryPromise({ try: () => requestToObject(input), catch: (cause) => cause }).pipe(
-      Effect.orDie,
-    );
+    return Effect.tryPromise({
+      try: () => requestToObject(input),
+      catch: (cause) => new UnreadableBody({ cause }),
+    }).pipe(Effect.orDie);
   }
   if (input instanceof FormData || input instanceof URLSearchParams) {
     return Effect.succeed(formDataToObject(input));
