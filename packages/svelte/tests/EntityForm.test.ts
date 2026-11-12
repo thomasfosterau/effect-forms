@@ -226,7 +226,7 @@ describe("defineEntityForm", () => {
       ],
     );
     const entry = withStatus.entries.find((e) => e.key === "status");
-    expect(entry?._tag).toBe("select");
+    expect(entry).toMatchObject({ _tag: "select" });
     // Option values live on the plan (derived from the enum kind), not the entry.
     expect(entry).not.toHaveProperty("values");
     expect(withStatus.fieldFor("status").kind).toBe("enum");

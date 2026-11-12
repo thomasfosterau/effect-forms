@@ -205,17 +205,17 @@ describe("parseActionResult", () => {
   it("maps a bare valid FormState to Success", () => {
     const state = makeFormState({ a: 1 });
     const parsed = parseActionResult(state, 200);
-    expect(parsed._tag).toBe("Success");
+    expect(parsed).toMatchObject({ _tag: "Success" });
   });
 
   it("maps a bare invalid FormState to Failure", () => {
     const state = makeFormState({ a: 1 }, { errors: { a: ["bad"] } });
     const parsed = parseActionResult(state, 400);
-    expect(parsed._tag).toBe("Failure");
+    expect(parsed).toMatchObject({ _tag: "Failure" });
   });
 
   it("returns an Error for an unrecognised body", () => {
-    expect(parseActionResult({ nope: true })._tag).toBe("Error");
+    expect(parseActionResult({ nope: true })).toMatchObject({ _tag: "Error" });
   });
 });
 
