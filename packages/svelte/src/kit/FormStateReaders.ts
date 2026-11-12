@@ -106,7 +106,9 @@ const isRecord = (value: Path.FormValue): value is { readonly [key: string]: Pat
 /**
  * Every leaf of a posted value tree, keyed by its flat field name under
  * `prefix`: a nested object or array contributes one entry per leaf
- * (`author.name`, `tags[0]`), and `null` / `undefined` contributes none.
+ * (`author.name`, `tags[0]`), and `null` / `undefined` contributes none,
+ * as does a `Blob`: a file input can't be refilled, and its text would be
+ * `[object File]`.
  */
 const postedLeaves = (value: Path.FormValue, prefix: Issues.FormPath): Array<[string, string]> => {
   if (P.isNullish(value)) return [];
@@ -116,7 +118,7 @@ const postedLeaves = (value: Path.FormValue, prefix: Issues.FormPath): Array<[st
   if (isRecord(value)) {
     return Arr.flatMap(R.toEntries(value), ([key, item]) => postedLeaves(item, [...prefix, key]));
   }
-  // oxlint-disable-next-line typescript/no-base-to-string -- posted values are form scalars (a checkbox's boolean, a number); rendering them is the point
+  if (value instanceof Blob) return [];
   return [[Path.toString(prefix), P.isString(value) ? value : String(value)]];
 };
 
@@ -126,9 +128,10 @@ const postedLeaves = (value: Path.FormValue, prefix: Issues.FormPath): Array<[st
  * absent, exactly as reading through it would.
  *
  * Each posted value is rendered as a field shows it, under its flat field
- * name: a string as itself, `null` / `undefined` as absent, and any other
- * value (a checkbox's boolean, a number) through `String(...)` rather than
- * dropped — the point of repopulation is that the user sees what they sent.
+ * name: a string as itself, `null` / `undefined` / a `Blob` as absent, and
+ * any other value (a checkbox's boolean, a number, a `Date`) through
+ * `String(...)` rather than dropped — the point of repopulation is that the
+ * user sees what they sent.
  */
 const carriedState = ({ form: state }: typeof CarriedForm.Type): ActionFormState => {
   const carried: { -readonly [K in keyof ActionFormState]: ActionFormState[K] } = {};
