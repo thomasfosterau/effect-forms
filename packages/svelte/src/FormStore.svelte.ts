@@ -65,7 +65,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
 import type * as SchemaIssue from "effect/SchemaIssue";
@@ -115,14 +115,7 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 const typedErrors = <A>(errors: FormErrors): TypedFormErrors<A> => {
   // SAFETY: `TypedFormErrors<A>` is a compile-time projection of `FormErrors`
   // onto `A`'s field names (the same runtime tree), so no value is reinterpreted.
-  return errors as never;
-};
-
-/** Forget the data-shaped typing of a {@link TypedFormErrors} tree, back to the runtime {@link FormErrors}. */
-const untypedErrors = <A>(errors: TypedFormErrors<A>): FormErrors => {
-  // SAFETY: every `TypedFormErrors<A>` this store hands out was produced by
-  // `typedErrors` from a `FormErrors` tree, so the runtime value is one.
-  return errors as FormErrors;
+  return errors as TypedFormErrors<A>;
 };
 
 /** Per-field state exposed on a {@link FieldHandle}, mirroring TanStack Form's field meta. */
@@ -143,6 +136,24 @@ export interface FieldMeta {
 }
 
 /**
+ * The path-addressed slice of a {@link FormStore} a {@link FieldHandle} reads
+ * and writes through. Independent of the store's type parameters, so every
+ * `FormStore` is one as it stands.
+ */
+export type FieldHost = Pick<
+  FormStore<Schema.Top>,
+  | "valueAt"
+  | "setValue"
+  | "errorsAt"
+  | "visibleErrorsAt"
+  | "constraintAt"
+  | "isTouchedAt"
+  | "isDirtyAt"
+  | "isDefaultValueAt"
+  | "handleBlur"
+>;
+
+/**
  * A typed, reactive handle to one field, returned by {@link FormStore.field}.
  * Bundles everything a single input needs — `bind:value={field.value}`,
  * `name={field.name}`, `onblur={field.handleBlur}`, `{...field.constraints}`,
@@ -151,12 +162,12 @@ export interface FieldMeta {
  * type-checked.
  */
 export class FieldHandle<V> {
-  readonly #store: FormStore<Schema.Top, object>;
+  readonly #store: FieldHost;
   readonly #path: FormPath;
   /** The path in flat field-name notation — use as the input's `name` attribute. */
   readonly name: string;
 
-  constructor(store: FormStore<Schema.Top, object>, path: FormPath) {
+  constructor(store: FieldHost, path: FormPath) {
     this.#store = store;
     this.#path = path;
     this.name = Path.toString(path);
@@ -350,21 +361,6 @@ const defaultSubmit = async <A, Message>(
   );
 };
 
-/**
- * Erase a store's type parameters for {@link FieldHandle}, which only calls
- * its path-addressed methods.
- */
-const eraseStore = <S extends Schema.Top, A, Message, R>(
-  store: FormStore<S, A, Message, R>,
-): FormStore<Schema.Top, object> => {
-  const erased: object = store;
-  // SAFETY: `FieldHandle` only calls the store's path-addressed methods
-  // (`valueAt`, `setValue`, `errorsAt`, `handleBlur`, …), whose signatures take
-  // a `FormPath` and `unknown` values whatever `S` / `A` / `Message` / `R` are,
-  // so erasing those parameters loses nothing it relies on.
-  return erased as FormStore<Schema.Top, object>;
-};
-
 /** Whether `index` is a valid position in an array of `length`. */
 const inRange = (index: number, length: number): boolean => index >= 0 && index < length;
 
@@ -374,9 +370,7 @@ type FieldTrigger = "change" | "blur";
 /** A reactive form, returned by {@link createForm}. */
 export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R = never> {
   /** The reactive form data — bind inputs to its fields. */
-  // SAFETY: the constructor assigns `data` before it returns, and nothing
-  // reads it earlier, so it is never observed as `undefined`.
-  data: A = $state<A>() as A;
+  data: A;
   /** The current status message, if any. */
   message: Message | undefined = $state();
   /** Native input constraints derived server-side. */
@@ -392,8 +386,12 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** How many times {@link FormStore.enhance}'s submit handler has actually attempted a submission. */
   submissionAttempts = $state(0);
 
-  /** The values sent by the last submission (for revert / changed-since-submit). */
-  #lastSubmitted: A | undefined = $state();
+  /**
+   * The values sent by the last submission (for revert / changed-since-submit).
+   * Raw (never proxied): it is only ever replaced wholesale by a detached
+   * copy, so reading it yields that plain value.
+   */
+  #lastSubmitted: A | undefined = $state.raw();
   /**
    * Per-field blurred flags, keyed by {@link Path.toString}. Drives `onBlur`
    * display (via {@link shouldShowError}) and {@link FieldMeta.isBlurred}.
@@ -446,13 +444,16 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly #decodeForRefinements: Option.Option<
     (input: A) => Effect.Effect<Field.DecodedFromFields<Field.FieldsRecord>, SchemaIssue.Issue, R>
   >;
-  /** The data snapshot the field-tracking watcher last diffed against. */
-  #previousData: A;
+  /**
+   * The data snapshot the field-tracking watcher last diffed against. Only
+   * ever diffed (`computeTainted` takes `unknown`), so typed no tighter.
+   */
+  #previousData: unknown;
 
+  /** The runtime error tree behind {@link errors}: server errors merged with client errors. */
+  readonly #mergedErrors: FormErrors = $derived(mergeSourced(this.#sourced));
   /** The current nested error tree (server errors merged with client errors), typed to the form data's shape. */
-  readonly errors: TypedFormErrors<A> = $derived.by(() =>
-    typedErrors<A>(mergeSourced(this.#sourced)),
-  );
+  readonly errors: TypedFormErrors<A> = $derived.by(() => typedErrors<A>(this.#mergedErrors));
   /** Client-side-sourced errors only (schema, per-field validators, `refineEffect`). */
   readonly clientErrors: TypedFormErrors<A> = $derived.by(() =>
     typedErrors<A>(this.#sourced.client),
@@ -489,6 +490,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   readonly hasChangedSinceSubmit: boolean = $derived(isAnyTainted(this.changedSinceSubmit));
 
   constructor(initial: FormState<A, Message>, options: FormOptions<S, A, Message, R> = {}) {
+    this.data = $state(structuredClone(initial.data));
     this.id = initial.id;
     this.#initial = structuredClone(initial.data);
     this.#previousData = structuredClone(initial.data);
@@ -503,7 +505,6 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#decodeForRefinements = Option.map(Option.fromUndefinedOr(options.builder), (builder) =>
       SchemaParser.decodeUnknownEffect(FormBuilder.buildSchema(builder), { errors: "all" }),
     );
-    this.data = structuredClone(initial.data);
     this.#sourced = { client: noErrors, server: initial.errors ?? noErrors };
     this.message = initial.message;
     // The `{ schema, defaults }` overload always arrives with `constraints`
@@ -542,7 +543,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /** The messages currently attached to `path` (for dynamic / nested paths). */
   errorsAt(path: FormPath): readonly string[] {
-    return Errors.getError(untypedErrors(this.errors), path) ?? [];
+    return Errors.getError(this.#mergedErrors, path) ?? [];
   }
 
   /** Whether the async validator(s) at `path` are currently running. */
@@ -641,7 +642,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * Path.FieldPath}); a typo'd segment or wrong-shaped path is a compile error.
    */
   field<P extends Path.FieldPath<A>>(path: P): FieldHandle<Path.PathValue<A, P>> {
-    return new FieldHandle(eraseStore(this), Path.fromString(path));
+    return new FieldHandle(this, Path.fromString(path));
   }
 
   /**
@@ -738,11 +739,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     return this.shouldShowError(path) ? this.errorsAt(path) : [];
   }
 
-  /** Read the array at `path` (empty when absent). */
+  /** Read the array at `path` (empty when absent, or when `path` holds no array). */
   #arrayAt(path: FormPath): readonly unknown[] {
-    // SAFETY: the array mutators' contract is that `path` names an array field
-    // of `data` (or one not yet present, read as `[]`).
-    return (getAt(this.data, path) ?? []) as readonly unknown[];
+    const value = getAt(this.data, path);
+    return Arr.isArray(value) ? value : [];
   }
 
   /** Append an item to the array at `path` (a blank item is derived when omitted). */
@@ -860,11 +860,9 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   /** Revert `data` to the values sent by the last submission (no-op before any submit). */
   revertToLastSubmit(): void {
     if (this.#lastSubmitted === undefined) return;
-    // `#lastSubmitted` is `$state`; reading it yields a proxy `structuredClone`
-    // rejects — snapshot first (same rule as `#detachedData`).
-    // SAFETY: `#lastSubmitted` holds an `A`, and `$state.snapshot` of form data
-    // (plain, structured-cloneable values) is a deep copy of the same shape.
-    this.data = structuredClone($state.snapshot(this.#lastSubmitted)) as A;
+    // `#lastSubmitted` is `$state.raw`, so this is the plain value, which
+    // `structuredClone` accepts (a deep-`$state` proxy it would reject).
+    this.data = structuredClone(this.#lastSubmitted);
     this.#previousData = this.#detachedData();
     this.#sourced = emptySourced;
   }
@@ -878,7 +876,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
   #defaultItem(path: FormPath) {
     if (this.#options.schema) return Field.defaultItemAt(this.#options.schema, path);
     const fields = this.#options.fields;
-    if (fields && path.length === 1 && Predicate.isString(path[0])) {
+    if (fields && path.length === 1 && P.isString(path[0])) {
       const def = fields[path[0]];
       if (def && Field.isArrayFieldDef(def)) return Field.defaultValue(def.itemSchema);
     }
@@ -1141,7 +1139,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       valid: this.valid,
       posted: this.posted,
       data: this.#detachedData(),
-      errors: untypedErrors(this.errors),
+      errors: this.#mergedErrors,
       message: this.message,
       constraints: this.constraints,
     };
@@ -1206,14 +1204,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     this.#lastSubmitOutcome = this.valid ? "success" : "failure";
     this.posted = true;
     this.#options.onUpdated?.({
-      form: { data: this.data, errors: untypedErrors(this.errors), valid: this.valid },
+      form: { data: this.data, errors: this.#mergedErrors, valid: this.valid },
     });
   }
 
   #applyRedirect(location: string): void {
     this.#lastSubmitOutcome = "success";
     if (this.#options.onRedirect) this.#options.onRedirect({ location });
-    else if (!Predicate.isUndefined(globalThis.window)) window.location.assign(location);
+    else if (!P.isUndefined(globalThis.window)) window.location.assign(location);
   }
 
   #applyError(error: string): void {
@@ -1234,11 +1232,10 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
    * actually just saved, not the original seed.
    */
   #applySubmittedData(data: A, result: FormActionResult<A, Message>): void {
-    // SAFETY: `#lastSubmitted` / `data` hold an `A`, and `$state.snapshot` of
-    // form data (plain, structured-cloneable values) is a copy of the same shape.
-    const submittedData = $state.snapshot(this.#lastSubmitted ?? this.data) as A;
+    // Both are detached from `data`'s proxy: `#lastSubmitted` is `$state.raw`.
+    const submittedData = this.#lastSubmitted ?? this.#detachedData();
     const applied = computeDataApplication({
-      isSuccess: Predicate.isTagged(result, "Success"),
+      isSuccess: P.isTagged(result, "Success"),
       appliedData: data,
       initial: this.#initial,
       // The snapshot actually sent (see `#runSubmit`), not the live `data` —
@@ -1294,8 +1291,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
     try {
       const submit = this.#options.submit ?? defaultSubmit;
-      const action =
-        node.action || (Predicate.isUndefined(globalThis.location) ? "" : location.href);
+      const action = node.action || (P.isUndefined(globalThis.location) ? "" : location.href);
       let result: FormActionResult<A, Message>;
       if (resolved !== undefined) {
         result = resolved;
@@ -1307,7 +1303,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
       this.#options.onResult?.({ result });
       this.#applyUpdate(resultToUpdate(result), result);
     } catch (cause) {
-      const message = Predicate.isError(cause) ? cause.message : "Submission failed";
+      const message = P.isError(cause) ? cause.message : "Submission failed";
       this.#lastSubmitOutcome = "failure";
       this.#options.onError?.({ error: message });
     } finally {
@@ -1333,7 +1329,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     const beforeUnload = (event: BeforeUnloadEvent): void => {
       if (this.#options.taintedMessage && this.isTainted) event.preventDefault();
     };
-    if (this.#options.taintedMessage && !Predicate.isUndefined(globalThis.window)) {
+    if (this.#options.taintedMessage && !P.isUndefined(globalThis.window)) {
       window.addEventListener("beforeunload", beforeUnload);
     }
 
@@ -1377,9 +1373,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
     const stopFieldWatching = $effect.root(() => {
       $effect(() => {
-        // SAFETY: `data` holds an `A`, and `$state.snapshot` of form data
-        // (plain, structured-cloneable values) is a copy of the same shape.
-        const snapshot = $state.snapshot(this.data) as A;
+        const snapshot = $state.snapshot(this.data);
         const changed = taintedLeafPaths(computeTainted(this.#previousData, snapshot));
         this.#previousData = snapshot;
         Arr.forEach(changed, (path) => this.#onFieldChanged(path));
@@ -1389,7 +1383,7 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
     return {
       destroy: () => {
         node.removeEventListener("submit", handleSubmit);
-        if (!Predicate.isUndefined(globalThis.window))
+        if (!P.isUndefined(globalThis.window))
           window.removeEventListener("beforeunload", beforeUnload);
         stopWatching?.();
         stopFieldWatching?.();
@@ -1404,9 +1398,14 @@ export class FormStore<S extends Schema.Top, A = S["Type"], Message = unknown, R
 
   /** Attachment form of {@link FormStore.enhance} for {@link FormStore.props}. */
   readonly #enhanceAttachment = (node: Element): (() => void) => {
-    // SAFETY: this attachment is only reachable through `props`, which is
-    // spread onto the `<form>` element (`<form {...form.props}>`).
-    return this.enhance(node as HTMLFormElement).destroy;
+    // Only reachable through `props`, which belongs on a `<form>`
+    // (`<form {...form.props}>`); anywhere else is a usage error.
+    if (!(node instanceof HTMLFormElement)) {
+      throw new TypeError(
+        `FormStore.props must be spread onto a <form>, not a <${node.localName}>`,
+      );
+    }
+    return this.enhance(node).destroy;
   };
 
   /**
@@ -1469,8 +1468,10 @@ export function createForm<S extends Schema.Top, A = S["Type"], Message = unknow
   options: FormOptions<S, A, Message, R>,
 ): FormStore<S, A, Message, R>;
 export function createForm(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  source: FormBuilder.FormBuilder<any, any> | FormSeed<Schema.Top> | FormState<unknown>,
+  source:
+    | FormBuilder.FormBuilder<Field.FieldsRecord, unknown>
+    | FormSeed<Schema.Top>
+    | FormState<unknown>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options: FormOptions<Schema.Top, any, any, any> & {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1499,7 +1500,5 @@ export function createForm(
     const state = makeForm(source.schema, makeOptions).empty();
     return new FormStore(state, { ...options, schema: source.schema });
   }
-  // SAFETY: `source` is neither a builder (`isFormBuilder`) nor a seed (it
-  // lacks `defaults` / `schema`), so it is the `FormState`-hydration overload's.
-  return new FormStore(source as FormState<unknown>, options);
+  return new FormStore(source, options);
 }

@@ -5,13 +5,13 @@
 ```ts
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Field, Form, FormBuilder } from "@thomasfosterau/effect-forms";
+import { Form, FormBuilder } from "@thomasfosterau/effect-forms";
 
 const signup = FormBuilder.empty
   .addField("email", Schema.String.check(Schema.isMinLength(3)))
   .addField("password", Schema.String.check(Schema.isMinLength(8)))
   .addField("confirm", Schema.String)
-  .addField(Field.makeArrayField("tags", Schema.String)) // an array field
+  .addArrayField("tags", Schema.String) // an array field
   .refine((v) =>
     v.password === v.confirm ? undefined : { path: ["confirm"], issue: "Passwords must match" },
   );

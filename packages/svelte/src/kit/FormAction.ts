@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import type * as Schema from "effect/Schema";
 import { type Form, Result, State } from "@thomasfosterau/effect-forms";
 import {
@@ -40,6 +40,13 @@ import { fieldFromPointer } from "./Pointer.ts";
 type FormState<A, Message = unknown> = State.FormState<A, Message>;
 type FormActionResult<A, Message = unknown> = Result.FormActionResult<A, Message>;
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
+
+/**
+ * A schema whose decoding needs no services — what {@link runFormAction} and
+ * {@link formAction} accept, since they run the decode at the action's
+ * Promise boundary with nothing to provide.
+ */
+export type ServiceFreeSchema = Schema.Top & { readonly DecodingServices: never };
 
 /**
  * A command: a Promise-returning function or one returning an `Effect` with
@@ -60,16 +67,13 @@ const toEffect = <O>(
 // ── Idempotent client-id create retry ──────────────────────────────────
 
 const isConflict = (cause: unknown): boolean =>
-  Predicate.isObjectOrArray(cause) &&
-  Predicate.hasProperty(cause, "status") &&
+  P.isObjectOrArray(cause) &&
+  P.hasProperty(cause, "status") &&
   cause.status === 409 &&
-  (Predicate.isTagged(cause, "JsonapiError") || Predicate.isTagged(cause, "ErrorResponse"));
+  (P.isTagged(cause, "JsonapiError") || P.isTagged(cause, "ErrorResponse"));
 
 const submittedId = (input: unknown): Option.Option<string> =>
-  Predicate.isObjectOrArray(input) &&
-  Predicate.hasProperty(input, "id") &&
-  Predicate.isString(input.id) &&
-  input.id !== ""
+  P.isObjectOrArray(input) && P.hasProperty(input, "id") && P.isString(input.id) && input.id !== ""
     ? Option.some(input.id)
     : Option.none();
 
@@ -166,7 +170,7 @@ const fieldPath = (error: ErrorObject): ReadonlyArray<string> =>
  * form-level message surface (`form.errors._errors`).
  */
 const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormState<A> =>
-  Predicate.isTagged(failure, "Routed")
+  P.isTagged(failure, "Routed")
     ? failure.errors.reduce(
         (acc, error) => State.withError(acc, fieldPath(error), detailOf(error)),
         state,
@@ -192,7 +196,7 @@ const routeFailure = <A>(state: FormState<A>, failure: CommandFailure): FormStat
  * check it. {@link formAction} hands it to SvelteKit's `redirect`, which
  * accepts only a same-origin location (see there).
  */
-export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
+export async function runFormAction<S extends ServiceFreeSchema, O, Message = unknown>(
   form: Form.Form<S, Message>,
   request: Request,
   run: Command<S["Type"], O>,
@@ -201,12 +205,8 @@ export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
 ): Promise<FormActionResult<S["Type"]>> {
   const redact = options.redact ?? ((state: FormState<S["Type"]>) => state);
   const classify = options.classify ?? jsonapiFailure;
-  // SAFETY: a posted form needs no decoding services at runtime; schemas
-  // projected from elsewhere can still carry an unreduced `DecodingServices`
-  // type, so only the requirements channel is narrowed here.
-  const validate = form.validate(request) as Effect.Effect<FormState<S["Type"], Message>>;
   const program = Effect.flatMap(
-    validate,
+    form.validate(request),
     (state): Effect.Effect<FormActionResult<S["Type"]>, unknown> => {
       if (!state.valid) return Effect.succeed(Result.failure(redact(state), 400));
       const idempotent = options.idempotent;
@@ -229,10 +229,7 @@ export async function runFormAction<S extends Schema.Top, O, Message = unknown>(
                 options.unrecognised === "throw"
                   ? Effect.fail(cause)
                   : Effect.succeed(
-                      Result.errorResult(
-                        Predicate.isError(cause) ? cause.message : DEFAULT_MESSAGE,
-                        500,
-                      ),
+                      Result.errorResult(P.isError(cause) ? cause.message : DEFAULT_MESSAGE, 500),
                     ),
             });
           }),
@@ -295,7 +292,7 @@ const actionData = <A>(data: FormActionData<A>): FormActionData<A> => data;
  * };
  * ```
  */
-export function formAction<S extends Schema.Top, O, Message = unknown>(
+export function formAction<S extends ServiceFreeSchema, O, Message = unknown>(
   form: Form.Form<S, Message>,
   run: ActionCommand<S["Type"], O>,
   locationFor: (output: O, input: S["Type"]) => string,

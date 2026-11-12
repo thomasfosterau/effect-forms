@@ -3,27 +3,20 @@
  * applications' `form-action-derive.test.ts`, against the real
  * `@sveltejs/kit` `redirect()` / `fail()`.
  */
-import { isRedirect, type RequestEvent } from "@sveltejs/kit";
+import { isRedirect } from "@sveltejs/kit";
 import { Form } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { formAction, runFormAction } from "../../src/kit/index.ts";
-import { post, testFailure } from "./fixtures.ts";
+import { post, requestEvent, testFailure } from "./fixtures.ts";
 
 // A stand-in entity command schema: one trimmed, required field.
 const Org = Schema.Struct({ name: Schema.Trim.check(Schema.isMinLength(1)) });
 const form = Form.make(Org, { defaults: { name: "" } });
 
-// Minimal RequestEvent — formAction only reads `request`, and hands the event
-// to the command.
-const event = (body: Record<string, string>) => {
-  const stub: Pick<RequestEvent, "request"> & { readonly locals: object } = {
-    request: post(body),
-    locals: { user: "u-1" },
-  };
-  // SAFETY: formAction reads only `request` and hands `locals` to the command.
-  return stub as RequestEvent;
-};
+// formAction reads `request` and hands the whole event to the command.
+const session = { signIn: async () => {} };
+const event = (body: Record<string, string>) => requestEvent(post(body), { session });
 
 describe("formAction (derived SvelteKit page action)", () => {
   it("redirects (throws) to the resource on a valid submission", async () => {
@@ -43,13 +36,13 @@ describe("formAction (derived SvelteKit page action)", () => {
     const action = formAction(
       form,
       async (_input, { locals }) => {
-        seen = locals;
+        seen = locals.session;
         return "org-1";
       },
       (id) => `/organisations/${id}`,
     );
     await expect(action(event({ name: "Acme" }))).rejects.toMatchObject({ status: 303 });
-    expect(seen).toEqual({ user: "u-1" });
+    expect(seen).toBe(session);
   });
 
   it("returns fail({ form }) with field errors on invalid input", async () => {

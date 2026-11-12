@@ -28,8 +28,8 @@ import * as Arr from "effect/Array";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Record from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 
 /** A render-time message thunk — pass the message function itself, uncalled. */
@@ -122,8 +122,8 @@ export interface CommandStructLike {
 export interface EntityFormDefinition {
   readonly plan: Command.CommandPlan;
   readonly entries: readonly EntityFormEntry[];
-  readonly createInput: Schema.Top;
-  readonly updateInput: Schema.Top;
+  readonly createInput: Command.FormInputField;
+  readonly updateInput: Command.FormInputField;
   readonly createDefaults: Readonly<Record<string, string>>;
   readonly updateDefaults: Readonly<Record<string, string>>;
   readonly adaptCreate: (input: Command.FormInputRecord) => Record<string, unknown>;
@@ -158,23 +158,25 @@ export interface EntryBuilders<K extends string> {
   /**
    * A bespoke string-valued widget (an FK picker). The renderer supplies
    * `name` / `value` / `onChange` / `errors`; `props()` supplies the rest at
-   * render time (labels stay thunk-resolved).
+   * render time (labels stay thunk-resolved). `Props` is inferred from
+   * `component`; the entry keeps it as {@link WidgetEntry.component}.
    */
-  custom<P extends Record<string, unknown>>(
+  custom<Props extends Record<string, any>>(
     key: K,
-    component: Component<never>,
-    props: () => P,
+    component: Component<Props>,
+    props: () => Readonly<Record<string, unknown>>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
   /**
    * A bespoke row-list widget (a contributor list). The renderer owns the row
    * state and supplies `name` / `value` / `onChange` / `errors`; the widget
-   * owns the wire serialisation (its hidden input).
+   * owns the wire serialisation (its hidden input). `Props` is inferred from
+   * `component`, as for {@link EntryBuilders.custom}.
    */
-  rows<P extends Record<string, unknown>>(
+  rows<Props extends Record<string, any>>(
     key: K,
-    component: Component<never>,
-    props: () => P,
+    component: Component<Props>,
+    props: () => Readonly<Record<string, unknown>>,
     options?: WidgetEntryOptions,
   ): EntityFormEntry;
 }
@@ -191,8 +193,8 @@ export interface DefineEntityFormOptions<C extends CommandStructLike, U extends 
   };
   /** Per-field Form-Input schema overrides, per mode (e.g. an optional create title with a server default). */
   readonly inputOverrides?: {
-    readonly create?: Readonly<Record<string, Schema.Top>>;
-    readonly update?: Readonly<Record<string, Schema.Top>>;
+    readonly create?: Readonly<Record<string, Command.FormInputField>>;
+    readonly update?: Readonly<Record<string, Command.FormInputField>>;
   };
   /**
    * Command fields deliberately absent from the standalone form (a carve-out,
@@ -213,12 +215,7 @@ const builders: EntryBuilders<string> = {
     _tag: "widget",
     key,
     bridge: "value",
-    // SAFETY: `Component<never>` is the widest component type (every component
-    // is assignable to it); the entry erases its props to `any` because the
-    // renderer only ever mounts it with this entry's own `props()` plus the
-    // widget-contract bridge props, the props the definition module chose
-    // this component for.
-    component: component as Component<any>,
+    component,
     props,
     options,
   }),
@@ -226,12 +223,7 @@ const builders: EntryBuilders<string> = {
     _tag: "widget",
     key,
     bridge: "rows",
-    // SAFETY: `Component<never>` is the widest component type (every component
-    // is assignable to it); the entry erases its props to `any` because the
-    // renderer only ever mounts it with this entry's own `props()` plus the
-    // widget-contract bridge props, the props the definition module chose
-    // this component for.
-    component: component as Component<any>,
+    component,
     props,
     options,
   }),
@@ -284,7 +276,7 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
   const withoutOmitted = (struct: CommandStructLike): CommandStructLike =>
     HashSet.size(omitted) === 0
       ? struct
-      : { fields: Record.filter(struct.fields, (_, key) => !HashSet.has(omitted, key)) };
+      : { fields: R.filter(struct.fields, (_, key) => !HashSet.has(omitted, key)) };
   const plan = Command.plan(withoutOmitted(options.create), withoutOmitted(options.update));
   const entries = build(builders);
 
@@ -301,7 +293,7 @@ export const defineEntityForm = <C extends CommandStructLike, U extends CommandS
         message: `defineEntityForm: entry "${entry.key}" is declared twice`,
       });
     }
-    if (Predicate.isTagged(entry, "select")) validateSelectEntry(entry, field.value);
+    if (P.isTagged(entry, "select")) validateSelectEntry(entry, field.value);
     return HashSet.add(seen, entry.key);
   });
   const missing = Arr.map(
