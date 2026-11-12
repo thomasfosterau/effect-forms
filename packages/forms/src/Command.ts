@@ -4,12 +4,17 @@
  * A host app's write surface is a pair of flat command `Schema.Struct`s per
  * entity — a create struct (required fields bare, the rest `optional`) and an
  * update struct (keyed by a required `id`, every field `optional`, clearable
- * fields `optional(NullOr(...))` carrying the value / `null` / `undefined`
- * tri-state). This module reads that pair into a plain-data {@link CommandPlan}
- * and derives the three per-entity form artefacts that were previously
- * hand-written per entity: the all-string Form-Input schema fields, the blank
- * defaults, and the tri-state adapters that map a validated multipart input
- * onto the encoded command payload.
+ * fields `optional(NullOr(...))` — `TriState.clearableNullOr` — whose wire
+ * value / `null` / absent means set / clear / carry forward). This module
+ * reads that pair into a plain-data {@link CommandPlan} and derives the three
+ * per-entity form artefacts that were previously hand-written per entity: the
+ * all-string Form-Input schema fields, the blank defaults, and the tri-state
+ * adapters that map a validated multipart input onto the encoded command
+ * payload. Each field coerces to a `TriState` from
+ * `@thomasfosterau/effect-ext/TriState` (`Assign` / `Clear` /
+ * `CarryForward`); the adapter encodes it onto the wire as the value, `null`,
+ * or an omitted key, so the posted JSON is what the command's own decode
+ * expects.
  *
  * Classification leads with behavioural decode probes — date codecs are
  * transformations and branded ids erase to `String`, so "what does this
@@ -40,12 +45,13 @@ import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import * as SchemaParser from "effect/SchemaParser";
 import {
-  emptyToNull,
-  emptyToUndefined,
+  emptyToCarryForward,
+  emptyToClear,
   numberFromField,
-  trimToNull,
-  trimToUndefined,
+  trimToCarryForward,
+  trimToClear,
 } from "./Coerce.ts";
+import * as TriState from "@thomasfosterau/effect-ext/TriState";
 
 /** How a command field renders and coerces at the form boundary. */
 export type FieldKind =
@@ -87,8 +93,16 @@ export interface CommandPlan {
   readonly clientId: boolean;
 }
 
-/** Per-field adapter overrides — the escape hatch for genuinely irregular coercion. */
-export type AdaptOverrides = Readonly<Record<string, (raw: FormInputValue) => CommandPayloadValue>>;
+/**
+ * Per-field adapter overrides — the escape hatch for genuinely irregular
+ * coercion. An override reads the raw multipart value and returns the field's
+ * `TriState` of a {@link CommandPayloadValue}, which the adapter encodes
+ * exactly as it encodes a default coercion (`Assign` → the value, `Clear` →
+ * `null`, `CarryForward` → the key is omitted).
+ */
+export type AdaptOverrides = Readonly<
+  Record<string, (raw: FormInputValue) => TriState.TriState<CommandPayloadValue>>
+>;
 
 /**
  * A Form-Input schema field: any schema with no decoding or encoding service
@@ -428,8 +442,9 @@ export type JsonRow = typeof JsonRow.Type;
 
 /**
  * Parse a JSON-encoded row list (a contributor list) from a multipart form
- * field. A blank or absent field yields `undefined` (skip — leave the existing
- * list untouched); an empty JSON array (`"[]"`) clears the list. Rows keep
+ * field. A blank or absent field carries forward (`CarryForward` — leave the
+ * existing list untouched); a list, an empty JSON array (`"[]"`) included, is
+ * assigned (`Assign`), so `"[]"` empties the list. Never `Clear`s. Rows keep
  * `id` / `creditedName` when present; `orderingPosition` falls back to the
  * row's array index. Throws an `InvalidJsonRowsError` on a malformed payload — mapping
  * that onto a framework response is the caller's concern.
@@ -437,8 +452,8 @@ export type JsonRow = typeof JsonRow.Type;
 export const jsonRowsFromField = (
   raw: FormInputValue,
   label: string,
-): ReadonlyArray<JsonRow> | undefined => {
-  if (raw === undefined || raw.trim() === "") return undefined;
+): TriState.TriState<ReadonlyArray<JsonRow>> => {
+  if (raw === undefined || raw.trim() === "") return TriState.carryForward;
   const decoded = decodeJson(raw);
   if (Exit.isFailure(decoded)) {
     throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected JSON array` });
@@ -447,7 +462,7 @@ export const jsonRowsFromField = (
   if (!Arr.isArray(parsed)) {
     throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected array` });
   }
-  return Arr.map(parsed, (row, index) => {
+  const rows = Arr.map(parsed, (row, index): JsonRow => {
     if (!P.isObjectOrArray(row)) {
       throw new InvalidJsonRowsError({ message: `Invalid ${label} entry at index ${index}` });
     }
@@ -469,6 +484,7 @@ export const jsonRowsFromField = (
       orderingPosition: P.isNumber(orderingPosition) ? orderingPosition : index,
     };
   });
+  return TriState.assign(rows);
 };
 
 /** Parse a JSON text (`JSON.parse` semantics) to a success or a failed `Exit`. */
@@ -478,53 +494,67 @@ const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.J
 interface CoerceContext {
   /** Required at create: emit the raw value's canonical form, never skip. */
   readonly required: boolean;
-  /** Blank clears (`null`) rather than skips (`undefined`). */
+  /** Blank clears (`Clear`) rather than carries forward (`CarryForward`). */
   readonly clearable: boolean;
   /** Trim before the create-mode blank check (dates trim only at create). */
   readonly trimCreate: boolean;
 }
 
 /** Text fields: trim always; required create fields never skip. */
-const coerceText = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue =>
-  ctx.required ? (raw ?? "").trim() : ctx.clearable ? trimToNull(raw) : trimToUndefined(raw);
+const coerceText = (ctx: CoerceContext, raw: FormInputValue): TriState.TriState<string> =>
+  ctx.required
+    ? TriState.assign((raw ?? "").trim())
+    : ctx.clearable
+      ? trimToClear(raw)
+      : trimToCarryForward(raw);
 
-/** Id fields: no trimming (pickers emit `""` or a UUID); required create FKs pass through raw. */
-const coerceId = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue =>
-  ctx.required ? raw : ctx.clearable ? emptyToNull(raw) : emptyToUndefined(raw);
+/**
+ * Id fields: no trimming (pickers emit `""` or a UUID); required create FKs
+ * pass through raw (an absent one carries forward, for the command's decode
+ * to reject).
+ */
+const coerceId = (ctx: CoerceContext, raw: FormInputValue): TriState.TriState<string> =>
+  ctx.required
+    ? TriState.readNullOr(raw)
+    : ctx.clearable
+      ? emptyToClear(raw)
+      : emptyToCarryForward(raw);
 
-/** Numeric text fields: blank clears on the clearable path, skips otherwise. */
-const coerceNumber = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue =>
-  ctx.clearable
-    ? numberFromField(raw, { nullable: true })
-    : numberFromField(raw, { nullable: false });
+/** Numeric text fields: blank clears on the clearable path, carries forward otherwise. */
+const coerceNumber = (ctx: CoerceContext, raw: FormInputValue): TriState.TriState<number> =>
+  numberFromField(raw, { nullable: ctx.clearable });
 
 /** Date fields stay encoded (`YYYY-MM-DD` strings); create trims, update passes through. */
-const coerceDate = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue => {
+const coerceDate = (ctx: CoerceContext, raw: FormInputValue): TriState.TriState<string> => {
   const value = ctx.trimCreate ? raw?.trim() : raw;
-  return ctx.clearable ? emptyToNull(value) : emptyToUndefined(value);
+  return ctx.clearable ? emptyToClear(value) : emptyToCarryForward(value);
 };
 
 /**
  * Boolean fields: a `<select>`'s value set, not a checkbox — the only truthy
  * raw value is the literal string `"true"`, everything else (`"false"`,
  * blank, absent) reads as `false`. Create defaults an absent/blank field to
- * `false` (never skips); update skips absent/blank unless clearable, in which
- * case it clears (`null`) instead — the create-defaults / update-skips
- * asymmetry the Content family already hand-writes.
+ * `false` (never skips); update carries absent/blank forward unless
+ * clearable, in which case it clears instead — the create-defaults /
+ * update-skips asymmetry the Content family already hand-writes.
  */
-const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue => {
+const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): TriState.TriState<boolean> => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") {
-    return ctx.required ? false : ctx.clearable ? null : undefined;
+    return ctx.required
+      ? TriState.assign(false)
+      : ctx.clearable
+        ? TriState.clear
+        : TriState.carryForward;
   }
-  return trimmed === "true";
+  return TriState.assign(trimmed === "true");
 };
 
 /**
  * Parse a JSON-encoded structured document (inline / block ProseKit JSON)
- * from a multipart field. Blank or absent skips (`undefined`) or, on the
- * clearable path, clears (`null`); a present value is decoded as JSON and
- * passed through as-is — shape validation is the command's own decode's job,
+ * from a multipart field. Blank or absent carries forward or, on the
+ * clearable path, clears; a present value is decoded as JSON and assigned
+ * as-is — shape validation is the command's own decode's job,
  * exactly as {@link jsonRowsFromField} leaves row-shape validation to itself
  * rather than duplicating it here. Throws an `InvalidStructuredJsonError` on
  * malformed JSON, as {@link jsonRowsFromField} throws an `InvalidJsonRowsError`
@@ -535,14 +565,16 @@ const structuredFromField = (
   raw: FormInputValue,
   clearable: boolean,
   label: string,
-): Schema.Json | undefined => {
+): TriState.TriState<Schema.Json> => {
   const trimmed = raw?.trim();
-  if (trimmed === undefined || trimmed === "") return clearable ? null : undefined;
+  if (trimmed === undefined || trimmed === "") {
+    return clearable ? TriState.clear : TriState.carryForward;
+  }
   const decoded = decodeJson(trimmed);
   if (Exit.isFailure(decoded)) {
     throw new InvalidStructuredJsonError({ message: `Invalid ${label} payload — expected JSON` });
   }
-  return decoded.value;
+  return TriState.assign(decoded.value);
 };
 
 /** Build one field's {@link CoerceContext} for one mode. */
@@ -552,14 +584,15 @@ const coerceContextFor = (field: FieldPlan, mode: "create" | "update"): CoerceCo
   trimCreate: mode === "create",
 });
 
-/** The default coercion for one field in one mode. */
+/** The default coercion for one field in one mode, as the field's `TriState`. */
 const coerce = (
   field: FieldPlan,
   mode: "create" | "update",
   raw: FormInputValue,
-): CommandPayloadValue => {
+): TriState.TriState<CommandPayloadValue> => {
   const ctx = coerceContextFor(field, mode);
   return Match.value(field.kind).pipe(
+    Match.withReturnType<TriState.TriState<CommandPayloadValue>>(),
     Match.when(Match.is("text", "enum"), () => coerceText(ctx, raw)),
     Match.when("id", () => coerceId(ctx, raw)),
     Match.when("number", () => coerceNumber(ctx, raw)),
@@ -572,9 +605,24 @@ const coerce = (
 };
 
 /**
- * Adapt every field of `commandPlan` present in `mode`, in plan order, to a
- * `[key, value]` entry: through the field's override when it has one, else
- * the default {@link coerce}.
+ * Encode one field's `TriState` onto the wire as payload
+ * entries: `Assign` → `[key, value]`, `Clear` → `[key, null]`, `CarryForward`
+ * → no entry, so the key is absent.
+ */
+const toWireEntries = (
+  key: string,
+  state: TriState.TriState<CommandPayloadValue>,
+): Array<readonly [string, CommandPayloadValue]> =>
+  TriState.match<CommandPayloadValue, Array<readonly [string, CommandPayloadValue]>>({
+    onCarryForward: () => [],
+    onClear: () => [[key, null]],
+    onAssign: (value) => [[key, value]],
+  })(state);
+
+/**
+ * Adapt every field of `commandPlan` present in `mode`, in plan order, to its
+ * wire entries ({@link toWireEntries}): through the field's override when it
+ * has one, else the default {@link coerce}.
  */
 const adaptFields = (
   commandPlan: CommandPlan,
@@ -586,27 +634,29 @@ const adaptFields = (
     if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
     const override = overrides[field.key];
     const raw = input[field.key];
-    return [[field.key, override ? override(raw) : coerce(field, mode, raw)]];
+    return toWireEntries(field.key, override ? override(raw) : coerce(field, mode, raw));
   });
 
 /**
  * Derive the create adapter: validated all-string input → encoded create
- * command payload. `overrides` replace the default per-field coercion for
- * genuinely irregular fields (e.g. a create-time fallback default).
+ * command payload (a value for an assigned field; a field that carries
+ * forward, blank or absent, is left out). `overrides` replace the default
+ * per-field coercion for genuinely irregular fields (e.g. a create-time
+ * fallback default).
  */
 export const createAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
   (input: FormInputRecord): CommandPayload =>
     R.fromEntries([
-      ...(commandPlan.clientId ? [["id", trimToUndefined(input.id)] as const] : []),
+      ...(commandPlan.clientId ? toWireEntries("id", trimToCarryForward(input.id)) : []),
       ...adaptFields(commandPlan, overrides, "create", input),
     ]);
 
 /**
  * Derive the update adapter: validated all-string input → encoded update
- * command payload (value sets, `null` clears a clearable field, `undefined`
- * skips). The required `id` passes through as-is — the command's canonical
- * decode brands it.
+ * command payload: an assigned value sets, `null` clears a clearable field,
+ * and a field that carries forward is left out of the payload. The required
+ * `id` passes through as-is — the command's canonical decode brands it.
  */
 export const updateAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>

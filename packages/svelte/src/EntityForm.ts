@@ -197,7 +197,13 @@ export interface DefineEntityFormOptions<C extends CommandStructLike, U extends 
   readonly create: C;
   readonly update: U;
   readonly submit: SubmitMessages;
-  /** Per-field adapter overrides, per mode — the irregular-coercion escape hatch. */
+  /**
+   * Per-field adapter overrides, per mode — the irregular-coercion escape
+   * hatch. Each returns the field's `TriState` from
+   * `@thomasfosterau/effect-ext/TriState` (`TriState.assign(value)`,
+   * `TriState.clear` or `TriState.carryForward`), which the adapter encodes
+   * as the value, `null` or an absent key.
+   */
   readonly adaptOverrides?: {
     readonly create?: Command.AdaptOverrides;
     readonly update?: Command.AdaptOverrides;

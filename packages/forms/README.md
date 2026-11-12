@@ -5,10 +5,10 @@ Framework-neutral, **Effect-native** form validation and state: schema-driven va
 ## Install
 
 ```sh
-pnpm add @thomasfosterau/effect-forms effect
+pnpm add @thomasfosterau/effect-forms @thomasfosterau/effect-ext effect
 ```
 
-`effect` is a peer dependency; the package never bundles its own copy.
+`effect` and `@thomasfosterau/effect-ext` (`^0.1.0 || ^0.2.0`) are peer dependencies; the package never bundles its own copy. `Coerce` and `Command` return effect-ext's `TriState`: import it as `import * as TriState from "@thomasfosterau/effect-ext/TriState"` (this package does not re-export it).
 
 ## Example
 
