@@ -260,7 +260,7 @@ describe("Command.plan — OptionFrom* fields", () => {
   });
 
   it("decodes a filled create payload to Some", () => {
-    const decoded = Schema.decodeUnknownSync(CreateEntry)(createAdapter(entry)(filled));
+    const decoded = Schema.decodeSync(CreateEntry)(createAdapter(entry)(filled));
     expect(Option.map(decoded.startedAt ?? Option.none(), isoString)).toEqual(
       Option.some("2024-01-02T00:00:00.000Z"),
     );
@@ -272,7 +272,7 @@ describe("Command.plan — OptionFrom* fields", () => {
     const blank = { startedAt: "", content: "", certainty: "" };
     const payload = createAdapter(entry)(blank);
     expect(payload).toEqual({ startedAt: undefined, content: undefined, certainty: undefined });
-    const decoded = Schema.decodeUnknownSync(CreateEntry)(payload);
+    const decoded = Schema.decodeSync(CreateEntry)(payload);
     expect(decoded.startedAt ?? Option.none()).toEqual(Option.none());
     expect(decoded.content ?? Option.none()).toEqual(Option.none());
   });
