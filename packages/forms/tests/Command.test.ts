@@ -8,6 +8,7 @@ import {
   blankDefaults,
   createAdapter,
   formInputFields,
+  type FormInputField,
   jsonRowsFromField,
   plan,
   updateAdapter,
@@ -294,14 +295,8 @@ describe("Command.plan — OptionFrom* fields", () => {
   });
 });
 
-type FormInputField = Schema.String | Schema.optional<Schema.String>;
-
-const decodeFormInput = (fields: { readonly [key: string]: Schema.Top }) => {
-  // SAFETY: formInputFields emits only `Schema.String` (possibly `.check`ed) or
-  // `Schema.optional(Schema.String)` per key, and the overrides passed below are too.
-  const stringFields = fields as { readonly [key: string]: FormInputField };
-  return Schema.decodeUnknownSync(Schema.Struct(stringFields));
-};
+const decodeFormInput = (fields: { readonly [key: string]: FormInputField }) =>
+  Schema.decodeUnknownSync(Schema.Struct(fields));
 
 describe("Command.formInputFields / blankDefaults", () => {
   it("derives the all-string create shape with min-length on required fields", () => {

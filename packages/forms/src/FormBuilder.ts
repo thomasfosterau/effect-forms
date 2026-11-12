@@ -2,8 +2,9 @@
  * Compose a form schema one field at a time, with cross-field refinements.
  *
  * {@link make} (aliased {@link empty}) starts an empty builder;
- * {@link FormBuilder.addField} adds a scalar or array field, {@link
- * FormBuilder.merge} folds another builder in, and {@link FormBuilder.refine} /
+ * {@link FormBuilder.addField} adds a scalar field and {@link
+ * FormBuilder.addArrayField} an array field, {@link FormBuilder.merge} folds
+ * another builder in, and {@link FormBuilder.refine} /
  * {@link FormBuilder.refineEffect} attach cross-field validations. The point is
  * incremental composition — assemble a large form from small, reusable
  * field-group builders — plus a home for whole-form rules (`password ===
@@ -45,19 +46,20 @@ import { filterOutputToFormIssues as issuesFromFilterOutput } from "./Issues.ts"
 export const TypeId: unique symbol = Symbol.for("@thomasfosterau/effect-forms/FormBuilder");
 export type TypeId = typeof TypeId;
 
-/** A synchronous cross-field refinement — becomes a struct-level schema check. */
-interface SyncRefinement {
+/** A synchronous cross-field refinement over values `A` — becomes a struct-level schema check. */
+interface SyncRefinement<A> {
   readonly _tag: "sync";
-  readonly fn: (values: unknown) => Schema.FilterOutput;
+  readonly fn: (values: A) => Schema.FilterOutput;
 }
 
-/** An asynchronous cross-field refinement — run by the Effect validate path. */
-interface AsyncRefinement {
+/** An asynchronous cross-field refinement over values `A` — run by the Effect validate path. */
+interface AsyncRefinement<A, R> {
   readonly _tag: "async";
-  readonly fn: (values: unknown) => Effect.Effect<Schema.FilterOutput, never, unknown>;
+  readonly fn: (values: A) => Effect.Effect<Schema.FilterOutput, never, R>;
 }
 
-type Refinement = SyncRefinement | AsyncRefinement;
+/** Either refinement, typed against the decoded values `A` it checks and the services `R` it needs. */
+type Refinement<A, R> = SyncRefinement<A> | AsyncRefinement<A, R>;
 
 /**
  * A form assembled field by field. `TFields` accumulates the field record;
@@ -67,22 +69,25 @@ type Refinement = SyncRefinement | AsyncRefinement;
 export interface FormBuilder<TFields extends FieldsRecord, R> {
   readonly [TypeId]: TypeId;
   readonly fields: TFields;
-  readonly refinements: ReadonlyArray<Refinement>;
+  /**
+   * The refinements attached so far, in order, each typed against this
+   * builder's decoded values (a refinement added before a later field still
+   * accepts the wider value, which carries every field it saw).
+   */
+  readonly refinements: ReadonlyArray<Refinement<DecodedFromFields<TFields>, R>>;
   readonly _R?: R;
 
-  /** Add a scalar field from a {@link FieldDef}. */
-  addField<K extends string, S extends Schema.Top>(
-    field: FieldDef<K, S>,
-  ): FormBuilder<TFields & { readonly [key in K]: FieldDef<K, S> }, R | S["DecodingServices"]>;
-  /** Add an array field from an {@link ArrayFieldDef}. */
-  addField<K extends string, S extends Schema.Top>(
-    field: ArrayFieldDef<K, S>,
-  ): FormBuilder<TFields & { readonly [key in K]: ArrayFieldDef<K, S> }, R | S["DecodingServices"]>;
   /** Add a scalar field from a key and schema. */
   addField<K extends string, S extends Schema.Top>(
     key: K,
     schema: S,
   ): FormBuilder<TFields & { readonly [key in K]: FieldDef<K, S> }, R | S["DecodingServices"]>;
+
+  /** Add an array field from a key and its item schema; the field is a list of items. */
+  addArrayField<K extends string, S extends Schema.Top>(
+    key: K,
+    itemSchema: S,
+  ): FormBuilder<TFields & { readonly [key in K]: ArrayFieldDef<K, S> }, R | S["DecodingServices"]>;
 
   /** Fold another builder's fields and refinements into this one. */
   merge<TFields2 extends FieldsRecord, R2>(
@@ -106,50 +111,31 @@ export interface FormBuilder<TFields extends FieldsRecord, R> {
   ): FormBuilder<TFields, R | RD>;
 }
 
-/** `addField`'s overloads as one argument list: a field definition, or a key with its schema. */
-type AddFieldArgs = readonly [field: AnyFieldDef] | readonly [key: string, schema: Schema.Top];
-
-/** Whether `addField` was called with the `(key, schema)` overload — the only one whose first argument is a string. */
-const isKeyedArgs = (args: AddFieldArgs): args is readonly [key: string, schema: Schema.Top] =>
-  P.isString(args[0]);
-
-const proto = {
-  [TypeId]: TypeId,
-  addField(
-    this: FormBuilder<FieldsRecord, unknown>,
-    ...args: AddFieldArgs
-  ): FormBuilder<FieldsRecord, unknown> {
-    const field = isKeyedArgs(args) ? Field.makeField(...args) : args[0];
-    return build({ ...this.fields, [field.key]: field }, this.refinements);
-  },
-  merge(
-    this: FormBuilder<FieldsRecord, unknown>,
-    other: FormBuilder<FieldsRecord, unknown>,
-  ): FormBuilder<FieldsRecord, unknown> {
-    return build({ ...this.fields, ...other.fields }, [...this.refinements, ...other.refinements]);
-  },
-  refine(
-    this: FormBuilder<FieldsRecord, unknown>,
-    predicate: (values: unknown) => Schema.FilterOutput,
-  ): FormBuilder<FieldsRecord, unknown> {
-    return build(this.fields, [...this.refinements, { _tag: "sync", fn: predicate }]);
-  },
-  refineEffect(
-    this: FormBuilder<FieldsRecord, unknown>,
-    predicate: (values: unknown) => Effect.Effect<Schema.FilterOutput, never, unknown>,
-  ): FormBuilder<FieldsRecord, unknown> {
-    return build(this.fields, [...this.refinements, { _tag: "async", fn: predicate }]);
-  },
-};
-
+/** A builder over `fields` carrying `refinements`, its methods closing over both. */
 function build<TFields extends FieldsRecord, R>(
   fields: TFields,
-  refinements: ReadonlyArray<Refinement>,
+  refinements: ReadonlyArray<Refinement<DecodedFromFields<TFields>, R>>,
 ): FormBuilder<TFields, R> {
-  const self = Object.create(proto);
-  self.fields = fields;
-  self.refinements = refinements;
-  return self;
+  return {
+    [TypeId]: TypeId,
+    fields,
+    refinements,
+    addField: (key, schema) =>
+      build({ ...fields, ...R.singleton(key, Field.makeField(key, schema)) }, refinements),
+    addArrayField: (key, itemSchema) =>
+      build({ ...fields, ...R.singleton(key, Field.makeArrayField(key, itemSchema)) }, refinements),
+    merge: <TFields2 extends FieldsRecord, R2>(other: FormBuilder<TFields2, R2>) =>
+      build<TFields & TFields2, R | R2>({ ...fields, ...other.fields }, [
+        ...refinements,
+        ...other.refinements,
+      ]),
+    refine: (predicate) => build(fields, [...refinements, { _tag: "sync", fn: predicate }]),
+    refineEffect: <RD>(
+      predicate: (
+        values: DecodedFromFields<TFields>,
+      ) => Effect.Effect<Schema.FilterOutput, never, RD>,
+    ) => build<TFields, R | RD>(fields, [...refinements, { _tag: "async", fn: predicate }]),
+  };
 }
 
 /** Whether `u` is a {@link FormBuilder}. */
@@ -181,17 +167,19 @@ export function buildSchema<TFields extends FieldsRecord, R>(
     }),
   );
 
-  const struct: Schema.Top = Schema.Struct(structFields);
-  const schema = Arr.reduce(self.refinements, struct, (refined, refinement) =>
-    P.isTagged(refinement, "sync") ? refined.check(Schema.makeFilter(refinement.fn)) : refined,
-  );
-
+  const erased: Schema.Top = Schema.Struct(structFields);
   // SAFETY: the struct has exactly one property per entry of `self.fields` —
   // a scalar field's schema, or an array field's item schema under
   // `Schema.Array` — which is the shape `DecodedFromFields` /
-  // `EncodedFromFields` compute; checks leave `Type` and `Encoded` unchanged;
-  // and `R` is by construction the union of those schemas' decoding services.
-  return schema as Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>;
+  // `EncodedFromFields` compute, and `R` is by construction the union of
+  // those schemas' decoding services. TypeScript can't relate `Schema.Struct`'s
+  // own computed types to those mapped types over the unresolved `TFields`,
+  // nor witness the phantom `R`, so this is asserted once, here.
+  const struct = erased as Schema.Codec<DecodedFromFields<TFields>, EncodedFromFields<TFields>, R>;
+  // Checks leave `Type` and `Encoded` unchanged.
+  return Arr.reduce(self.refinements, struct, (refined, refinement) =>
+    P.isTagged(refinement, "sync") ? refined.check(Schema.makeFilter(refinement.fn)) : refined,
+  );
 }
 
 /** The asynchronous refinements carried on a builder, as bare predicates. */
@@ -200,17 +188,9 @@ export function asyncRefinements<TFields extends FieldsRecord, R>(
 ): ReadonlyArray<
   (values: DecodedFromFields<TFields>) => Effect.Effect<Schema.FilterOutput, never, R>
 > {
-  return Arr.flatMap(self.refinements, (refinement) => {
-    if (!P.isTagged(refinement, "async")) return [];
-    // SAFETY: `refineEffect` stores a predicate typed against this builder's
-    // decoded values, with its requirements folded into `R`; the builder keeps
-    // it as `(values: unknown) => Effect<…, unknown>` only to share one
-    // `Refinement` type across builders, so this restores the original type.
-    const fn = refinement.fn as (
-      values: DecodedFromFields<TFields>,
-    ) => Effect.Effect<Schema.FilterOutput, never, R>;
-    return [fn];
-  });
+  return Arr.flatMap(self.refinements, (refinement) =>
+    P.isTagged(refinement, "async") ? [refinement.fn] : [],
+  );
 }
 
 /**

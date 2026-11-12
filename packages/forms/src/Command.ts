@@ -89,6 +89,15 @@ export interface CommandPlan {
 /** Per-field adapter overrides — the escape hatch for genuinely irregular coercion. */
 export type AdaptOverrides = Readonly<Record<string, (raw: string | undefined) => unknown>>;
 
+/**
+ * A Form-Input schema field: any schema with no decoding or encoding service
+ * requirements, so the struct {@link formInputFields} builds decodes
+ * synchronously. The derived fields are strings (min-length or UUID checked
+ * where the plan requires it) or optional strings; an override may be any
+ * such schema.
+ */
+export type FormInputField = Schema.Codec<unknown, unknown>;
+
 /** A validated all-string multipart input, as the Form-Input schemas produce it. */
 export type FormInputRecord = Readonly<Record<string, string | undefined>>;
 
@@ -306,9 +315,9 @@ export const plan = (create: StructLike, update: StructLike): CommandPlan => {
 export const formInputFields = (
   commandPlan: CommandPlan,
   mode: "create" | "update",
-  overrides: Readonly<Record<string, Schema.Top>> = {},
-): Record<string, Schema.Top> => {
-  const idField: Array<readonly [string, Schema.Top]> =
+  overrides: Readonly<Record<string, FormInputField>> = {},
+): Readonly<Record<string, FormInputField>> => {
+  const idField: Array<readonly [string, FormInputField]> =
     mode === "update"
       ? [["id", Schema.String.check(Schema.isUUID())]]
       : commandPlan.clientId
@@ -316,7 +325,7 @@ export const formInputFields = (
         : [];
   const planFields = Arr.flatMap(
     commandPlan.fields,
-    (field): Array<readonly [string, Schema.Top]> => {
+    (field): Array<readonly [string, FormInputField]> => {
       if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
       return [
         [

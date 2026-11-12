@@ -6,7 +6,6 @@ import * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { describe, expect, it } from "vite-plus/test";
 import { getError } from "../src/Errors.ts";
-import { makeArrayField } from "../src/Field.ts";
 import { fromBuilder } from "../src/Form.ts";
 import { buildSchema, empty, isFormBuilder } from "../src/FormBuilder.ts";
 
@@ -15,7 +14,7 @@ const run = <A, E>(eff: Effect.Effect<A, E>) => Effect.runSync(eff);
 describe("FormBuilder composition", () => {
   it("accumulates fields via addField (key+schema, def, array) and merge", () => {
     const names = empty.addField("name", Schema.String).addField("age", Schema.FiniteFromString);
-    const extra = empty.addField(makeArrayField("tags", Schema.String));
+    const extra = empty.addArrayField("tags", Schema.String);
     const builder = names.merge(extra);
 
     expect(isFormBuilder(builder)).toBe(true);
@@ -34,7 +33,7 @@ describe("FormBuilder.buildSchema", () => {
   const builder = empty
     .addField("name", Schema.String.check(Schema.isMinLength(2)))
     .addField("age", Schema.FiniteFromString)
-    .addField(makeArrayField("tags", Schema.String));
+    .addArrayField("tags", Schema.String);
 
   it("collapses to a schema that decodes fields and array items", () => {
     const schema = buildSchema(builder);
@@ -69,7 +68,7 @@ describe("FormBuilder sync refine (cross-field)", () => {
 describe("Form.fromBuilder", () => {
   const builder = empty
     .addField("name", Schema.String.check(Schema.isMinLength(2)))
-    .addField(makeArrayField("tags", Schema.String));
+    .addArrayField("tags", Schema.String);
   const form = fromBuilder(builder, { id: "signup" });
 
   it("derives blank encoded defaults when none are given", () => {
