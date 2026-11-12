@@ -118,21 +118,28 @@ class InvalidJsonRowsError extends Schema.TaggedError<
 // ── probes ────────────────────────────────────────────────────────────
 
 /**
+ * A sample value a probe feeds a field schema: one representative input per
+ * {@link FieldKind}, plus the absent values (`undefined`, `null`) the
+ * required / clearable checks try.
+ */
+type ProbeInput = ReadonlyArray<never> | boolean | number | string | null | undefined;
+
+/**
  * Run one decode probe: whether the schema accepts the input, plus the decoded
  * value for instance checks (the date probe needs to see a `Date` come out,
  * not just a successful decode).
  */
-const probe = (schema: Schema.Top, input: unknown): Exit.Exit<unknown, unknown> => {
+const probe = (schema: Schema.Top, input: ProbeInput): Exit.Exit<unknown, unknown> => {
   // SAFETY: the cast only drops `schema`'s decoding-service requirement. The
   // decode runs to an `Exit`, so a schema that does need a service (or decodes
   // asynchronously, or throws) yields a failed `Exit` — which a probe reads as
   // "does not decode", exactly as it reads an ordinary schema issue.
   const decoder = schema as Schema.Codec<unknown>;
-  return SchemaParser.decodeUnknownExit(decoder)(input);
+  return SchemaParser.decodeExit(decoder)(input);
 };
 
 /** True when a schema decodes the given input without failing. */
-const decodes = (schema: Schema.Top, input: unknown): boolean =>
+const decodes = (schema: Schema.Top, input: ProbeInput): boolean =>
   Exit.isSuccess(probe(schema, input));
 
 /** A syntactically valid UUID no other field kind accepts as non-text. */
