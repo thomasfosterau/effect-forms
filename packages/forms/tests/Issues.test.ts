@@ -1,13 +1,12 @@
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
-import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { schemaIssuesToFormIssues } from "../src/Issues.ts";
 
-const issueOf = (schema: Schema.Decoder<unknown>, input: unknown): SchemaIssue.Issue => {
-  const exit = Schema.decodeUnknownExit(schema)(input);
+const issueOf = (schema: Schema.Decoder<unknown>, input: Schema.Json): SchemaIssue.Issue => {
+  const exit = Schema.decodeExit(schema)(input);
   assert(Exit.isFailure(exit), "expected the decode to fail");
   const reason = exit.cause.reasons[0];
   assert(
@@ -54,12 +53,12 @@ describe("schemaIssuesToFormIssues default messages", () => {
   });
 
   it("passes a custom formatter the terminal issue", () => {
-    const tags: string[] = [];
+    const seen: SchemaIssue.Issue[] = [];
     schemaIssuesToFormIssues(issueOf(Schema.String, 1), (issue) => {
-      tags.push(issue._tag);
+      seen.push(issue);
       return "custom";
     });
-    expect(tags).toEqual(["InvalidType"]);
+    expect(seen).toMatchObject([{ _tag: "InvalidType" }]);
   });
 });
 
@@ -91,14 +90,11 @@ describe("schemaIssuesToFormIssues shapes", () => {
 
   it("hands a failed check to a custom formatter as the wrapping Filter node", () => {
     const schema = Schema.String.check(Schema.isMinLength(3));
-    const seen: Array<{ tag: string; inner: string | undefined }> = [];
+    const seen: SchemaIssue.Issue[] = [];
     schemaIssuesToFormIssues(issueOf(schema, "x"), (issue) => {
-      seen.push({
-        tag: issue._tag,
-        inner: P.isTagged(issue, "Filter") ? issue.issue._tag : undefined,
-      });
+      seen.push(issue);
       return "custom";
     });
-    expect(seen).toEqual([{ tag: "Filter", inner: "InvalidValue" }]);
+    expect(seen).toMatchObject([{ _tag: "Filter", issue: { _tag: "InvalidValue" } }]);
   });
 });

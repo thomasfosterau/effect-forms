@@ -59,13 +59,12 @@ const safeRedirect = (target: string | undefined, fallback: string): string =>
 
 const SignInFields = Schema.Struct({
   email: Schema.String,
-  // `_password`, so devtools don't auto-fill it from the wrong context.
-  _password: Schema.String,
+  password: Schema.String,
   redirectTo: Schema.optional(Schema.String),
 });
 
 const signInForm = Form.make(SignInFields, {
-  defaults: { email: "", _password: "", redirectTo: undefined },
+  defaults: { email: "", password: "", redirectTo: undefined },
   id: "sign-in",
 });
 
@@ -74,7 +73,7 @@ type SignIn = typeof SignInFields.Type;
 /** Blank the password before a state is echoed back to the browser. */
 const blankPassword = (state: State.FormState<SignIn>): State.FormState<SignIn> => ({
   ...state,
-  data: { ...state.data, _password: "" },
+  data: { ...state.data, password: "" },
 });
 
 /** A 401 → one generic whole-form message; everything else is unexpected. */
@@ -91,7 +90,7 @@ export const actions = {
         throw new MissingSessionTransport({ message: "no session transport" });
       return locals.session.signIn({
         email: input.email,
-        password: input._password,
+        password: input.password,
         rememberMe: true,
       });
     },

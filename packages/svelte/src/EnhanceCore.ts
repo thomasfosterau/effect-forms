@@ -129,18 +129,16 @@ export function objectToFormData(data: unknown): FormData {
   return formData;
 }
 
+/** The `_tag`s of the four {@link FormActionResult} variants. */
+const ACTION_RESULT_TAGS = ["Success", "Failure", "Redirect", "Error"] as const;
+
 /**
  * Whether a value looks like a {@link FormActionResult} (carries a known
  * `_tag`). Only the tag is checked: `A` / `Message` are the caller's declared
  * expectation of the server's response, not verified here.
  */
 function isActionResult<A, Message>(value: unknown): value is FormActionResult<A, Message> {
-  return (
-    P.isObjectOrArray(value) &&
-    P.hasProperty(value, "_tag") &&
-    P.isString(value._tag) &&
-    ["Success", "Failure", "Redirect", "Error"].includes(value._tag)
-  );
+  return P.isObjectOrArray(value) && Arr.some(ACTION_RESULT_TAGS, (tag) => P.isTagged(value, tag));
 }
 
 /**
@@ -152,20 +150,34 @@ function isFormState<A, Message>(value: unknown): value is FormState<A, Message>
 }
 
 /**
- * Normalise a parsed JSON response body into a {@link FormActionResult}. The
- * server may return a full action result (`{ _tag, … }`) or a bare
- * {@link FormState} — a bare state maps to `Success` / `Failure` by its `valid`
- * flag, using `status` for the failure code.
+ * A form response body the store understands: a full {@link FormActionResult}
+ * (`{ _tag, … }`) or a bare {@link FormState}.
+ */
+export type ActionResponse<A, Message> = FormActionResult<A, Message> | FormState<A, Message>;
+
+/**
+ * Whether a parsed JSON response body is an {@link ActionResponse} — the
+ * check to run at the response boundary before {@link parseActionResult}.
+ * Only the `_tag` (or a bare state's keys) is checked: `A` / `Message` are
+ * the caller's declared expectation of the server's response, not verified
+ * here.
+ */
+export function isActionResponse<A, Message>(body: unknown): body is ActionResponse<A, Message> {
+  return isActionResult<A, Message>(body) || isFormState<A, Message>(body);
+}
+
+/**
+ * Normalise an {@link ActionResponse} into a {@link FormActionResult}. A full
+ * action result passes through; a bare {@link FormState} maps to `Success` /
+ * `Failure` by its `valid` flag, using `status` for the failure code. Check a
+ * raw body with {@link isActionResponse} first.
  */
 export function parseActionResult<A, Message>(
-  body: unknown,
+  body: ActionResponse<A, Message>,
   status = 200,
 ): FormActionResult<A, Message> {
-  if (isActionResult<A, Message>(body)) return body;
-  if (isFormState<A, Message>(body)) {
-    return body.valid ? success(body, status) : failure(body, status);
-  }
-  return { _tag: "Error", status, message: "Unrecognised form response" };
+  if ("_tag" in body) return body;
+  return body.valid ? success(body, status) : failure(body, status);
 }
 
 /** The mutation a {@link FormActionResult} implies for the store. */

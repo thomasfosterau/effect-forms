@@ -3,7 +3,7 @@
  * `vite.config.ts`): `enhance` records the submit callback so a test can
  * drive it, `applyAction` records what it was handed.
  */
-import type { SubmitFunction } from "$app/forms";
+import type { ActionResult, SubmitFunction } from "$app/forms";
 import { vi } from "vite-plus/test";
 
 type Submit = SubmitFunction;
@@ -17,4 +17,4 @@ export const enhance = vi.fn<(node: HTMLFormElement, submit: Submit) => { destro
   },
 );
 
-export const applyAction = vi.fn<(result: unknown) => Promise<void>>(async () => {});
+export const applyAction = vi.fn<(result: ActionResult) => Promise<void>>(async () => {});

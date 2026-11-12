@@ -3,7 +3,7 @@
  * (website's cases, plus gardeneria's decoded-input case), driven with a fake
  * command rather than an API client.
  */
-import { Form, State } from "@thomasfosterau/effect-forms";
+import { Errors, Form, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -83,7 +83,7 @@ describe("runFormAction", () => {
       (id: string) => `/${id}`,
     );
     expect(ran.called).toBe(false); // the command never runs on invalid input
-    expect(result._tag).toBe("Failure");
+    expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(400);
     expect(result.state.errors.name).toBeDefined();
@@ -152,7 +152,7 @@ describe("runFormAction", () => {
       },
       (id: string) => `/${id}`,
     );
-    expect(result._tag).toBe("Failure");
+    expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(422);
     expect(result.state.errors.name).toEqual(["Name is already taken by another organisation."]);
@@ -179,10 +179,10 @@ describe("runFormAction", () => {
       },
       (id: string) => `/${id}`,
     );
-    expect(result._tag).toBe("Failure");
+    expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
-    expect(result.state.errors._errors).toEqual(["That value is already in use."]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(["That value is already in use."]);
     expect(result.state.errors.name).toBeUndefined();
   });
 
@@ -195,10 +195,12 @@ describe("runFormAction", () => {
       },
       (id: string) => `/${id}`,
     );
-    expect(result._tag).toBe("Failure");
+    expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(413);
-    expect(result.state.errors._errors).toEqual(["The uploaded file exceeds the 10 MiB limit."]);
+    expect(Errors.getError(result.state.errors, [])).toEqual([
+      "The uploaded file exceeds the 10 MiB limit.",
+    ]);
   });
 
   it("routes an ErrorResponse's document errors, and its message when it has none", async () => {
@@ -234,7 +236,7 @@ describe("runFormAction", () => {
     );
     expect(bare).toMatchObject({ _tag: "Failure", status: 502 });
     assert(P.isTagged(bare, "Failure"));
-    expect(bare.state.errors._errors).toEqual(["Request failed (502)"]);
+    expect(Errors.getError(bare.state.errors, [])).toEqual(["Request failed (502)"]);
   });
 
   // ── Effect commands ────────────────────────────────────────────────────
@@ -298,7 +300,7 @@ describe("runFormAction", () => {
     );
     expect(result).toMatchObject({ _tag: "Failure", status: 401 });
     assert(P.isTagged(result, "Failure"));
-    expect(result.state.errors._errors).toEqual(["Invalid email or password"]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(["Invalid email or password"]);
   });
 
   it("redacts every echoed state: an invalid submission and a routed failure", async () => {
@@ -321,7 +323,7 @@ describe("runFormAction", () => {
     );
     expect(redact).toHaveBeenCalledTimes(2);
     Arr.forEach([invalid, routed], (result) => {
-      expect(result._tag).toBe("Failure");
+      expect(result).toMatchObject({ _tag: "Failure" });
       assert(P.isTagged(result, "Failure"));
       expect(result.state.data).toEqual({ name: "" });
     });
@@ -357,10 +359,10 @@ describe("runFormAction", () => {
       (id) => `/organisations/${id}`,
       { idempotent: { clientId: true, fetchExisting } },
     );
-    expect(result._tag).toBe("Failure");
+    expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
-    expect(result.state.errors._errors).toEqual(["Position collision."]);
+    expect(Errors.getError(result.state.errors, [])).toEqual(["Position collision."]);
   });
 
   it("does not wrap the command when clientId is false, even with fetchExisting supplied", async () => {
@@ -375,7 +377,7 @@ describe("runFormAction", () => {
       { idempotent: { clientId: false, fetchExisting } },
     );
     expect(fetchExisting).not.toHaveBeenCalled();
-    expect(result._tag).toBe("Failure");
+    expect(result).toMatchObject({ _tag: "Failure" });
     assert(P.isTagged(result, "Failure"));
     expect(result.status).toBe(409);
   });

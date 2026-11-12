@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import { assert, describe, expect, it, onTestFinished, vi } from "vite-plus/test";
 import {
   computeDataApplication,
+  isActionResponse,
   objectToEntries,
   objectToFormData,
   parseActionResult,
@@ -205,17 +206,25 @@ describe("parseActionResult", () => {
   it("maps a bare valid FormState to Success", () => {
     const state = makeFormState({ a: 1 });
     const parsed = parseActionResult(state, 200);
-    expect(parsed._tag).toBe("Success");
+    expect(parsed).toMatchObject({ _tag: "Success" });
   });
 
   it("maps a bare invalid FormState to Failure", () => {
     const state = makeFormState({ a: 1 }, { errors: { a: ["bad"] } });
     const parsed = parseActionResult(state, 400);
-    expect(parsed._tag).toBe("Failure");
+    expect(parsed).toMatchObject({ _tag: "Failure" });
+  });
+});
+
+describe("isActionResponse", () => {
+  it("accepts a tagged action result and a bare FormState", () => {
+    expect(isActionResponse(success(makeFormState({ a: 1 })))).toBe(true);
+    expect(isActionResponse(makeFormState({ a: 1 }))).toBe(true);
   });
 
-  it("returns an Error for an unrecognised body", () => {
-    expect(parseActionResult({ nope: true })._tag).toBe("Error");
+  it("rejects an unrecognised body", () => {
+    expect(isActionResponse({ nope: true })).toBe(false);
+    expect(isActionResponse(null)).toBe(false);
   });
 });
 
