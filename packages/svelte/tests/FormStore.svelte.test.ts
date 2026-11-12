@@ -239,15 +239,15 @@ describe("constraints — createForm overload symmetry (issue #1330)", () => {
   });
 });
 
-describe("enhance — change listeners and teardown", () => {
-  const mount = (): HTMLFormElement => {
-    const node = document.createElement("form");
-    node.action = "/posts";
-    node.method = "post";
-    document.body.append(node);
-    return node;
-  };
+const mount = (): HTMLFormElement => {
+  const node = document.createElement("form");
+  node.action = "/posts";
+  node.method = "post";
+  document.body.append(node);
+  return node;
+};
 
+describe("enhance — change listeners and teardown", () => {
   it("dispatches onChange for each changed leaf while attached", () => {
     const seen: string[] = [];
     const store = createForm(

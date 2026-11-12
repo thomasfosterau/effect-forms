@@ -82,16 +82,16 @@ describe("objectToEntries / objectToFormData", () => {
   });
 });
 
-describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objects", () => {
-  const file = (): File => new File(["hello"], "avatar.png", { type: "image/png" });
-  // Fixture `Date` values for the encoder under test, built from fixed instants.
-  const utcDate = (input: string | number): Date => DateTime.toDateUtc(DateTime.makeUnsafe(input));
-  const invalidDate = (): Date => {
-    const date = utcDate(0);
-    date.setTime(Number.NaN);
-    return date;
-  };
+const file = (): File => new File(["hello"], "avatar.png", { type: "image/png" });
+// Fixture `Date` values for the encoder under test, built from fixed instants.
+const utcDate = (input: string | number): Date => DateTime.toDateUtc(DateTime.makeUnsafe(input));
+const invalidDate = (): Date => {
+  const date = utcDate(0);
+  date.setTime(Number.NaN);
+  return date;
+};
 
+describe("objectToEntries / objectToFormData: File, Blob, Date and keyless objects", () => {
   it("appends a top-level File to FormData as the same File, keeping its name and content", async () => {
     const avatar = file();
     const got = objectToFormData({ avatar }).get("avatar");
