@@ -3,8 +3,8 @@ name: CI
 # ONE command: `vp run ci`, the `ci` task in vite.config.ts, which runs the
 # whole gate (AGENTS.md "Verification" steps 2-7) in order, so local and CI
 # are the same thing. It runs on the current LTS and the latest released
-# Node.js. The final `ci` job is the one stable check name for required-check
-# rulesets. Nothing here needs a database, a stage or a credential. Hardened
+# Node.js. Each leg is its own check, `ci (node <leg>)`, and rulesets require
+# each one by name. Nothing here needs a database, a stage or a credential. Hardened
 # for Dependabot PRs: no permissions beyond `contents: read`, no secrets,
 # pinned actions, `persist-credentials: false`, no event text in `run:`, and
 # no `$GITHUB_PATH` writes of our own; checked with zizmor.
@@ -23,7 +23,7 @@ concurrency:
 permissions: {}
 
 jobs:
-  test:
+  ci:
     name: ci (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -69,17 +69,3 @@ jobs:
 
       - name: CI
         run: vp run ci
-
-  # The one stable check name for rulesets: green only when every matrix leg is.
-  ci:
-    name: ci
-    needs: [test]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Every matrix leg passed
-        env:
-          RESULT: ${{ needs.test.result }}
-        run: test "$RESULT" = "success"
