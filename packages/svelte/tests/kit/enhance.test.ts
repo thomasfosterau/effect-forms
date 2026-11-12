@@ -94,7 +94,7 @@ describe("enhanceForm", () => {
     const after = await submitWith(submit, node);
     expect(store.submitting).toBe(true);
 
-    const update = vi.fn(async () => {});
+    const update = vi.fn<(options?: { reset?: boolean }) => Promise<void>>(async () => {});
     await finish(
       after,
       node,
@@ -148,7 +148,7 @@ describe("enhanceForm", () => {
     const { store, setServerState } = realStore();
     const { submit, node } = attach(store);
     const after = await submitWith(submit, node);
-    const update = vi.fn(async () => {});
+    const update = vi.fn<(options?: { reset?: boolean }) => Promise<void>>(async () => {});
     await finish(
       after,
       node,

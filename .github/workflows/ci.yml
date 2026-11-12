@@ -6,8 +6,8 @@ name: CI
 # the effect-web library's CI. Nothing here needs a database, a stage or a
 # credential, so every PR runs the whole gate, in AGENTS.md "Verification"
 # order. Hardened for Dependabot PRs: no permissions beyond `contents: read`,
-# no secrets, SHA-pinned actions, `persist-credentials: false`, and no
-# `$GITHUB_PATH` writes (bins run through `pnpm exec`); checked with zizmor.
+# no secrets, pinned actions, `persist-credentials: false`, and no
+# `$GITHUB_PATH` writes of our own; checked with zizmor.
 
 on:
   pull_request:
@@ -41,9 +41,23 @@ jobs:
         with:
           persist-credentials: false
 
-      # Installs with --frozen-lockfile: a stale pnpm-lock.yaml fails here.
-      - name: Setup toolchain
-        uses: ./.github/actions/setup
+      # Vite+ at the catalog's `vite-plus` pin, the Node.js it manages, the
+      # `packageManager` pnpm, and the dependency cache. --frozen-lockfile
+      # fails on a stale pnpm-lock.yaml; --ignore-scripts blocks dependency
+      # lifecycle scripts (a common supply-chain vector).
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          cache: true
+          run-install: |
+            args: ["--frozen-lockfile", "--ignore-scripts"]
+
+      # The one lifecycle script that does run: ours (`vp config` and
+      # `effect-tsgo patch --typescript --oxlint`), first-party and on its own
+      # line rather than smuggled in by dropping --ignore-scripts.
+      - name: Patch the toolchain (repository `prepare` script)
+        run: pnpm run prepare
 
       - name: Restore the Vite+ task cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -54,23 +68,23 @@ jobs:
             vp-task-v1-${{ runner.os }}-
 
       - name: Format and lint
-        run: pnpm exec vp check
+        run: vp check
 
       # Every package's native, Effect-patched `tsc` (plus svelte-check over
       # packages/svelte) and the root config. packages/svelte resolves the core
       # through its `exports` (→ `dist/`), so this builds the core first.
       - name: Type gate
-        run: pnpm exec vp run check
+        run: vp run check
 
       - name: Unit tests
-        run: pnpm exec vp run -r test:unit
+        run: vp run -r test:unit
 
       - name: Build
-        run: pnpm exec vp run -r build
+        run: vp run -r build
 
       # Type-checks AND runs every JSDoc @example against the built dist/.
       - name: Verify documentation examples (docgen)
-        run: pnpm exec vp run docgen
+        run: vp run docgen
 
       - name: Audit
         run: pnpm audit --audit-level high

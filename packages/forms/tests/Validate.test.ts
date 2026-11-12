@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schema from "effect/Schema";
 import { assert, describe, expect, it } from "vite-plus/test";
 import { TestClock } from "effect/testing";
@@ -15,9 +16,16 @@ import {
 } from "../src/Validate.ts";
 
 // Local Effect test runner — `@effect/vitest` (`it.effect`, its TestClock
-// wiring) doesn't work against this repo's vitest alias; provide
-// `TestClock.layer()` explicitly per test instead.
+// wiring) doesn't work against this repo's vitest alias.
 const runTest = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
+
+// Each test is its own entry point: a fresh `ManagedRuntime` built from
+// `TestClock.layer()` (so every test starts its clock at zero), disposed
+// once the test's program settles.
+const runWithTestClock = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
+  const runtime = ManagedRuntime.make(TestClock.layer());
+  return runtime.runPromise(effect).finally(() => runtime.dispose());
+};
 
 const Field = Schema.String.check(Schema.isMinLength(3));
 
@@ -62,11 +70,21 @@ describe("validateValue with a custom leaf formatter", () => {
   });
 });
 
-describe("runSyncFieldValidator", () => {
-  const passing: SyncFieldValidator<string> = () => undefined;
-  const failing: SyncFieldValidator<string> = (value) =>
-    value.length < 3 ? "Too short" : undefined;
+const passing: SyncFieldValidator<string> = () => undefined;
+const failing: SyncFieldValidator<string> = (value) => (value.length < 3 ? "Too short" : undefined);
 
+const takenValidator: AsyncFieldValidator<string> = (value) =>
+  Effect.succeed(value === "taken" ? "Username taken" : undefined);
+
+const multiIssueValidator: AsyncFieldValidator<string> = () =>
+  Effect.succeed(["First problem", "Second problem"]);
+
+const onChange: SyncFieldValidator<string> = () => undefined;
+const onBlur: SyncFieldValidator<string> = () => undefined;
+const onChangeAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
+const onBlurAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
+
+describe("runSyncFieldValidator", () => {
   it("returns no issues when the validator passes", () => {
     expect(runSyncFieldValidator(passing, "anything")).toEqual([]);
   });
@@ -89,15 +107,13 @@ describe("runAsyncFieldValidator", () => {
   it("runs immediately with no debounce (default)", () =>
     runTest(
       Effect.gen(function* () {
-        const validator: AsyncFieldValidator<string> = (value) =>
-          Effect.succeed(value === "taken" ? "Username taken" : undefined);
-        const issues = yield* runAsyncFieldValidator(validator, "taken");
+        const issues = yield* runAsyncFieldValidator(takenValidator, "taken");
         expect(issues).toEqual([{ path: [], message: "Username taken" }]);
       }),
     ));
 
   it("waits the full debounce before running the validator", () =>
-    runTest(
+    runWithTestClock(
       Effect.gen(function* () {
         let calls = 0;
         const validator: AsyncFieldValidator<string> = (value) => {
@@ -114,11 +130,11 @@ describe("runAsyncFieldValidator", () => {
         const issues = yield* Fiber.join(fiber);
         expect(calls).toBe(1);
         expect(issues).toEqual([{ path: [], message: "Taken" }]);
-      }).pipe(Effect.provide(TestClock.layer())),
+      }),
     ));
 
   it("interrupting mid-debounce skips the validator entirely (true debounce)", () =>
-    runTest(
+    runWithTestClock(
       Effect.gen(function* () {
         let calls = 0;
         const validator: AsyncFieldValidator<string> = () => {
@@ -131,11 +147,11 @@ describe("runAsyncFieldValidator", () => {
         yield* Fiber.interrupt(fiber);
 
         expect(calls).toBe(0);
-      }).pipe(Effect.provide(TestClock.layer())),
+      }),
     ));
 
   it("latest-wins: interrupting an in-flight run before forking the next only keeps the last result", () =>
-    runTest(
+    runWithTestClock(
       Effect.gen(function* () {
         const started: string[] = [];
         const completed: string[] = [];
@@ -157,11 +173,11 @@ describe("runAsyncFieldValidator", () => {
 
         expect(started).toEqual(["a", "b"]);
         expect(completed).toEqual(["b"]);
-      }).pipe(Effect.provide(TestClock.layer())),
+      }),
     ));
 
   it("interrupting mid-sleep-inside-validator aborts the validator (not just the debounce)", () =>
-    runTest(
+    runWithTestClock(
       Effect.gen(function* () {
         let sawCompletion = false;
         const validator: AsyncFieldValidator<string> = () =>
@@ -177,15 +193,13 @@ describe("runAsyncFieldValidator", () => {
         yield* TestClock.adjust("1 second");
 
         expect(sawCompletion).toBe(false);
-      }).pipe(Effect.provide(TestClock.layer())),
+      }),
     ));
 
   it("propagates the value's FilterOutput array into multiple FormIssues", () =>
     runTest(
       Effect.gen(function* () {
-        const validator: AsyncFieldValidator<string> = () =>
-          Effect.succeed(["First problem", "Second problem"]);
-        const issues = yield* runAsyncFieldValidator(validator, "x");
+        const issues = yield* runAsyncFieldValidator(multiIssueValidator, "x");
         expect(issues).toEqual([
           { path: [], message: "First problem" },
           { path: [], message: "Second problem" },
@@ -195,11 +209,6 @@ describe("runAsyncFieldValidator", () => {
 });
 
 describe("resolveFieldTrigger", () => {
-  const onChange: SyncFieldValidator<string> = () => undefined;
-  const onBlur: SyncFieldValidator<string> = () => undefined;
-  const onChangeAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
-  const onBlurAsync: AsyncFieldValidator<string> = () => Effect.succeed(true);
-
   it("picks onChange / onChangeAsync for the change trigger", () => {
     const resolved = resolveFieldTrigger(
       { onChange, onBlur, onChangeAsync, onBlurAsync, asyncDebounceMs: 300 },
