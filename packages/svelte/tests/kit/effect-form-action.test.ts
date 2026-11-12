@@ -105,7 +105,6 @@ describe("runFormAction", () => {
     const result = await runFormAction(
       form,
       post({ name: "Acme" }),
-      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the point of the case
       () => Promise.reject("nope"),
       (id: string) => `/${id}`,
     );

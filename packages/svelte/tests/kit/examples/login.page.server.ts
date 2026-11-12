@@ -43,7 +43,6 @@ export interface SessionTransport {
 }
 
 declare global {
-  // oxlint-disable-next-line typescript/no-namespace -- SvelteKit's app-level type augmentation
   namespace App {
     interface Locals {
       session?: SessionTransport;

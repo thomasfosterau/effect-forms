@@ -18,7 +18,7 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   // Staged-file checks run by `vp staged` (the pre-commit hook).
   // Format with fixes, lint WITHOUT them: `vp check --fix` would also apply
-  // the autofixes of type-aware rules (even those at `warn`, such as
+  // the autofixes of type-aware rules (such as
   // `no-unnecessary-type-assertion`) to staged files at commit time, so the
   // commit would differ from the tree that was verified.
   // `--no-error-on-unmatched-pattern`: a commit that stages only CSS / JSON /
@@ -45,74 +45,38 @@ export default defineConfig({
       suspicious: "error",
       perf: "error",
     },
+    // Every rule is at `error`, and nothing is disabled inline. The only
+    // exceptions are the scoped `off` overrides below: sites where a rule
+    // cannot apply, each with its reason. A new override needs the same.
     rules: {
-      // Hard-codes abbreviations (`Arr`, `P`, `R`, …) with no options, so it is
-      // unsatisfiable under the full-name convention (`import * as Option from
-      // "effect/Option"`) this family shares with its consumers.
-      "effect/prefer-namespace-imports": "off",
-      // `casting-awareness` is an awareness prompt, not a defect rule — it
-      // fires on every `as`, including the ones
-      // `require-safety-comment-for-type-assertion` (at `error`) already makes
-      // justify themselves. Stays visible as a warning.
-      "effect/casting-awareness": "warn",
-
-      // ---- Effect preset: rules the published API shape cuts across -------
-      // Each of these asks for a different *signature*, not a different
-      // implementation, and every site is in (or feeds) the published API the
-      // consuming applications compile against: changing one is a breaking
-      // release of both packages, decided per export in an issue, never as a
-      // lint sweep. They stay visible as warnings.
-      //
-      // `prefer-option-over-null` also fires on `?: T | undefined`, which is
-      // the ONLY spelling of an optional member `exactOptionalPropertyTypes`
-      // lets a caller forward an optional of its own into, and on the
-      // `T | undefined` readers a Svelte template binds to directly.
-      "effect/prefer-option-over-null": "warn",
-      // `unknown` is the honest type at the boundary a form library IS: a
-      // posted `FormData` / JSON body before its schema decodes it, a
-      // command's failure before a classifier reads it, a free-form message
-      // payload. Narrowing these would move the parse out of the library and
-      // into every caller.
-      "effect/no-unknown-parameters": "warn",
-      "effect/no-unknown-returns": "warn",
-      "effect/no-unsafe-dictionary-type": "warn",
+      "effect/prefer-namespace-imports": "error",
+      "effect/casting-awareness": "error",
+      "effect/prefer-option-over-null": "error",
+      "effect/no-unknown-parameters": "error",
+      "effect/no-unknown-returns": "error",
+      "effect/no-unsafe-dictionary-type": "error",
 
       "vite-plus/prefer-vite-plus-imports": "error",
 
       // ---- @effect/tsgo preset rules the preset leaves at `warn` (#116) ----
-      // Set explicitly, so a new site is an error, not a warning.
       "effecttsgo/schema-class-missing-brand": "error",
       "effecttsgo/schema-number": "error",
       "effecttsgo/effect-succeed-with-void": "error",
       "effecttsgo/unnecessary-typeof-type": "error",
       "effecttsgo/unknown-in-effect-catch": "error",
       "effecttsgo/prefer-typed-schema-decoder": "error",
+      "effecttsgo/unstable-api-usage": "error",
 
-      // ---- Type-aware rules (tsgolint) at `warn`, with their site counts ---
-      // Debt tracked on #91, not headroom: a new site is a
-      // defect, and a rule whose count reaches zero goes back to `error`.
-      //
-      // 38 sites. Every one already carries the `// SAFETY:` invariant that
-      // `require-safety-comment-for-type-assertion` (at `error`) demands —
-      // erasing a store's or builder's type parameters, `$state` proxies,
-      // SvelteKit's untyped `RequestEvent` / DOM targets, test fixtures — so
-      // removing each is a per-site redesign, not a lint sweep.
-      "typescript/no-unsafe-type-assertion": "warn",
-      // The other type-aware rules are at `error`; their can't-apply sites
-      // are scoped overrides below ("Type-aware rules: can't-apply sites").
+      // ---- Type-aware rules (tsgolint, #91) --------------------------------
+      "typescript/no-unsafe-type-assertion": "error",
       "effecttsgo/any-unknown-in-error-context": "error",
       "effecttsgo/unsafe-effect-type-assertion": "error",
       "typescript/no-unnecessary-type-parameters": "error",
       "typescript/no-generated-empty-object-type": "error",
 
-      // ---- Oxlint's own plugins (suspicious / perf categories) ------------
-      // `_tag` is Effect's discriminant and a leading `_` marks a form field
-      // that is never echoed back to the client (`_password`, `_errors`) —
-      // both published conventions this rule would rename away.
-      "eslint/no-underscore-dangle": "off",
-      // Every `vi.fn` here wraps a typed implementation; a type parameter
-      // would only restate the implementation's own signature.
-      "vitest/require-mock-type-parameters": "off",
+      // ---- Oxlint's own plugins ---------------------------------------------
+      "eslint/no-underscore-dangle": "error",
+      "vitest/require-mock-type-parameters": "error",
       // `@effect/vitest`'s `it.effect` / `it.live` (and the `it` a `layer`
       // block hands its callback) register a test like `it` does, so an
       // `expect` in their body is inside a test, not standalone (#161).
@@ -121,174 +85,48 @@ export default defineConfig({
         { additionalTestBlockFunctions: ["it.effect", "it.live"] },
       ],
     },
+    // ---- Can't-apply sites ----------------------------------------------------
     overrides: [
-      // A `tryPromise` whose rejection is `unknown` by contract: a caller's
-      // command failure reaches `classify` as-is (the published `Command`
-      // type's error channel is `unknown`), and an unreadable request body
-      // dies as its own reason (`validate` never fails). Same sites as
-      // `effecttsgo/any-unknown-in-error-context` (#91).
+      // `@effect/vitest` marks `it` / `layer` unstable, and every suite that
+      // runs an Effect uses them (the test convention in AGENTS.md).
       {
-        files: ["packages/svelte/src/kit/FormAction.ts", "packages/forms/src/Form.ts"],
+        files: ["**/tests/**"],
         rules: {
-          "effecttsgo/unknown-in-effect-catch": "off",
+          "effecttsgo/unstable-api-usage": "off",
         },
       },
-      // The suggested `Document.ErrorObject` type doesn't exist at the
-      // `@thomasfosterau/effect-jsonapi` peer floor (0.16.0 exports it only
-      // as a value), so the published `CommandFailure.ErrorObject` keeps
-      // `typeof Document.ErrorObject.Type`, and its type test mirrors it.
-      {
-        files: [
-          "packages/svelte/src/kit/CommandFailure.ts",
-          "packages/svelte/tests/kit/CommandFailure.types.test.ts",
-        ],
-        rules: {
-          "effecttsgo/unnecessary-typeof-type": "off",
-        },
-      },
-      // Build/test configs are evaluated by Vite and Vitest in bare Node,
-      // before any Effect runtime exists — there is no `Config` provider to
-      // read from and no `FileSystem` service to call, so `process.env` and
-      // `node:*` are the only things that work there. The Effect preset's
-      // service rules have no satisfiable fix in these files.
-      {
-        files: ["**/vite.config.ts", "**/svelte.config.js"],
-        rules: {
-          "effect/avoid-node-imports": "off",
-          "effect/avoid-process-env": "off",
-          // `...(process.env.X ? { x } : {})` is how a Vite option is left
-          // unset under `exactOptionalPropertyTypes`.
-          "effect/no-conditional-empty-object-spread": "off",
-        },
-      },
-      // Tests are the runtime boundary: `@effect/vitest` is not a dependency,
-      // so a suite runs its Effects with `Effect.runPromise` / `runSync`.
-      {
-        files: ["**/tests/**/*.ts"],
-        rules: {
-          "effect/effect-run-in-body": "off",
-          // A test is an application entry point: each case provides its own
-          // `TestClock.layer()` (see `packages/forms/tests/Validate.test.ts`).
-          "effecttsgo/strict-effect-provide": "off",
-          // A helper declared inside the `it` that uses it keeps each case
-          // self-contained; `src/` still hoists them.
-          "unicorn/consistent-function-scoping": "off",
-        },
-      },
-      // Its expect-error directives ARE the assertions: each marks a
-      // `FieldPath` / `PathValue` misuse that must fail to compile.
-      {
-        files: ["packages/forms/tests/Path.test.ts"],
-        rules: {
-          "effect/avoid-ts-ignore": "off",
-        },
-      },
-      // Pins that the body encoder drops native `Map` / `Set` values, so the
-      // fixtures must be the native collections.
-      {
-        files: ["packages/svelte/tests/EnhanceCore.test.ts"],
-        rules: {
-          "effect/avoid-native-object-helpers": "off",
-        },
-      },
-      // The store is the browser's runtime boundary: its default submit is the
-      // platform `fetch` (an Effect HttpClient would add runtime weight to every
-      // consumer's bundle), it interrupts its own validator fibers with
-      // `Effect.runFork` from synchronous Svelte event / teardown code, and its
-      // submit wraps a caller's Promise handler in try / finally to reset
-      // `submitting` / `delayed` at exactly the point it does today.
+      // The store's default submit is an Effect `HttpClient` over
+      // `FetchHttpClient.layer`, and `effect/http/*` is marked unstable.
+      // `message` mirrors the wire `FormState.message?` and is rendered
+      // directly in markup (family decision: Svelte-rendered / wire-mirroring
+      // values stay native). `#detachedData` claims `A` back from
+      // `$state.snapshot`, whose `Snapshot<A>` can't be related to a generic
+      // `A` (`// SAFETY:` at the site).
       {
         files: ["packages/svelte/src/FormStore.svelte.ts"],
         rules: {
-          "effect/avoid-native-fetch": "off",
-          "effect/effect-run-in-body": "off",
-          "effect/avoid-try-catch": "off",
+          "effecttsgo/unstable-api-usage": "off",
+          "effect/prefer-option-over-null": "off",
+          "typescript/no-unsafe-type-assertion": "off",
+          "effect/casting-awareness": "off",
         },
       },
-      // `validateValueSync` is the published synchronous API; its
-      // `Effect.runSync` is the boundary by design.
+      // Wire shapes and literal values. `FormErrors`, `InputConstraints` and
+      // `TaintedFields` are plain-JSON trees whose index signatures must
+      // admit `undefined` (an absent key); an `Option` is not JSON.
+      // `FormLeaf` is the `null` / `undefined` an input or a posted body holds
+      // for a blank, and `ProbeInput` the literal `null` / `undefined` a probe
+      // feeds a field schema: values, not absence.
       {
-        files: ["packages/forms/src/Validate.ts"],
+        files: [
+          "packages/forms/src/Errors.ts",
+          "packages/forms/src/Constraints.ts",
+          "packages/forms/src/Path.ts",
+          "packages/forms/src/Command.ts",
+          "packages/svelte/src/Tainted.ts",
+        ],
         rules: {
-          "effect/effect-run-in-body": "off",
-        },
-      },
-      // `structuredFromField`'s contract (tested) is to throw the platform
-      // `SyntaxError` on malformed JSON, which only `JSON.parse` produces.
-      {
-        files: ["packages/forms/src/Command.ts"],
-        rules: {
-          "effect/avoid-direct-json": "off",
-        },
-      },
-      // `valid` / `posted` are fields of the published `FormState` wire
-      // format (`FormStateSchema`); renaming them breaks every consumer.
-      {
-        files: ["packages/forms/src/State.ts"],
-        rules: {
-          "effect/require-is-prefix-for-boolean-schema-field": "off",
-        },
-      },
-      // A builder `refine` becomes an anonymous, per-form filter; an
-      // `identifier` / `title` / `description` would surface as JSON Schema
-      // annotations in the caller's own schema.
-      {
-        files: ["packages/forms/src/FormBuilder.ts"],
-        rules: {
-          "effect/require-filter-metadata": "off",
-        },
-      },
-
-      // ---- Type-aware rules: can't-apply sites (#91) ----------------------
-      // A caller's command rejection is `unknown` by contract: the published
-      // `Command` type is `Promise<O> | Effect<O, unknown>`, and the cause
-      // reaches the caller's `classify` as-is. Typing it means wrapping it in
-      // a tagged error every classifier then unwraps — a breaking change to
-      // `Command` / `classify`. `form.validate`'s cast only narrows a
-      // decoding-service requirement a posted form never has at runtime
-      // (`// SAFETY:` at the site).
-      {
-        files: ["packages/svelte/src/kit/FormAction.ts"],
-        rules: {
-          "effecttsgo/any-unknown-in-error-context": "off",
-          "effecttsgo/unsafe-effect-type-assertion": "off",
-        },
-      },
-      // An unreadable request body dies as its own rejection reason
-      // (`validate` never fails); `Effect.promise` would say the same, but
-      // `effect/effect-promise-vs-trypromise` forbids it.
-      {
-        files: ["packages/forms/src/Form.ts"],
-        rules: {
-          "effecttsgo/any-unknown-in-error-context": "off",
-        },
-      },
-      // `validateValueSync` is the published sync contract: the caller asserts
-      // the schema needs no decoding services, and the cast drops that
-      // requirement (`// SAFETY:` at the site).
-      {
-        files: ["packages/forms/src/Validate.ts"],
-        rules: {
-          "effecttsgo/unsafe-effect-type-assertion": "off",
-        },
-      },
-      // `FormBuilder.make` is deliberately `FormBuilder<{}, never>`: the
-      // builder with no fields, which `addField` extends by intersection.
-      // `{}` is the published type; `Record<never, never>` would change it.
-      {
-        files: ["packages/forms/src/FormBuilder.ts"],
-        rules: {
-          "typescript/no-generated-empty-object-type": "off",
-        },
-      },
-      // Published signatures (`validateData` / `validateField`,
-      // `EntityFormBuilder.custom` / `.rows`): dropping the type parameter
-      // breaks every caller that passes it explicitly. A breaking change
-      // decided per export on #91.
-      {
-        files: ["packages/svelte/src/ClientValidate.ts", "packages/svelte/src/EntityForm.ts"],
-        rules: {
-          "typescript/no-unnecessary-type-parameters": "off",
+          "effect/prefer-option-over-null": "off",
         },
       },
     ],

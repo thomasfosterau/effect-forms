@@ -98,6 +98,16 @@ describe("valueOf", () => {
     expect(valueOf(state, field.key("count"))).toBe("3");
   });
 
+  it("falls back for a posted file, which a file input can't be refilled with", () => {
+    expect(
+      valueOf(
+        formStateOf({ form: { data: { name: new File(["x"], "a.txt") } } }),
+        field.key("name"),
+        "Stored",
+      ),
+    ).toBe("Stored");
+  });
+
   it("falls back for a posted null", () => {
     expect(
       valueOf(formStateOf({ form: { data: { name: null } } }), field.key("name"), "Stored"),
