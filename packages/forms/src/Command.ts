@@ -459,29 +459,33 @@ export const jsonRowsFromField = (
     throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected JSON array` });
   }
   const parsed = decoded.value;
-  if (!Arr.isArray(parsed)) {
+  if (!isJsonArray(parsed)) {
     throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected array` });
   }
   const rows = Arr.map(parsed, (row, index): JsonRow => {
-    if (!P.isObjectOrArray(row)) {
+    // A parsed JSON value is an object exactly when it is an array or a record.
+    if (!P.isObjectKeyword(row)) {
       throw new InvalidJsonRowsError({ message: `Invalid ${label} entry at index ${index}` });
     }
-    // `row[key]`, `undefined` when absent — what a plain property read gives.
-    const propertyOf = (key: string): unknown => (P.hasProperty(row, key) ? row[key] : undefined);
-    const agentId = propertyOf("agentId");
-    if (!P.isString(agentId)) {
+    // A JSON array row has no named members.
+    const member = (key: string): Option.Option<Schema.Json> =>
+      isJsonArray(row) ? Option.none() : R.get<string, Schema.Json>(row, key);
+    const stringMember = (key: string): Option.Option<string> =>
+      Option.filter(member(key), P.isString);
+    const agentId = stringMember("agentId");
+    if (Option.isNone(agentId)) {
       throw new InvalidJsonRowsError({
         message: `${label} entry at index ${index} missing agentId`,
       });
     }
-    const id = propertyOf("id");
-    const creditedName = propertyOf("creditedName");
-    const orderingPosition = propertyOf("orderingPosition");
     return {
-      id: P.isString(id) ? id : undefined,
-      agentId,
-      creditedName: P.isString(creditedName) ? creditedName : undefined,
-      orderingPosition: P.isNumber(orderingPosition) ? orderingPosition : index,
+      id: Option.getOrUndefined(stringMember("id")),
+      agentId: agentId.value,
+      creditedName: Option.getOrUndefined(stringMember("creditedName")),
+      orderingPosition: Option.getOrElse(
+        Option.filter(member("orderingPosition"), P.isNumber),
+        () => index,
+      ),
     };
   });
   return TriState.assign(rows);
@@ -489,6 +493,9 @@ export const jsonRowsFromField = (
 
 /** Parse a JSON text (`JSON.parse` semantics) to a success or a failed `Exit`. */
 const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.Json));
+
+/** Whether a parsed JSON value is an array. */
+const isJsonArray = Schema.is(Schema.Array(Schema.Json));
 
 /** Coercion context for one field in one mode. */
 interface CoerceContext {

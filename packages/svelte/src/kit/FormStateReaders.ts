@@ -14,8 +14,9 @@
  * that is not a form state at all. A create page that threw on
  * `form === null` would fail on the one render it does most.
  *
- * `undefined` rather than `Option` for "no submission": these are called from
- * Svelte templates, where `Option` has no rendering.
+ * "No submission" is `Option.none()`: {@link formStateOf} answers an
+ * `Option`, and the readers take it and answer plain strings and arrays,
+ * which is what a Svelte template renders.
  *
  * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/FormStateReaders
@@ -139,16 +140,12 @@ const carriedState = ({ form: state }: typeof CarriedForm.Type): ActionFormState
 };
 
 /**
- * The carried form state, or `undefined` when there is none — a first
- * render, a successful submission (which redirects), or an action result
- * that carried a bare message instead. Decodes the page's `form` prop (typed
- * by SvelteKit as the route's `ActionData | null`) at this boundary.
+ * The carried form state, or `None` when there is none — a first render, a
+ * successful submission (which redirects), or an action result that carried
+ * a bare message instead. Decodes the page's `form` prop (typed by SvelteKit
+ * as the route's `ActionData | null`) at this boundary.
  */
-export const formStateOf = flow(
-  Schema.decodeUnknownOption(CarriedForm),
-  Option.map(carriedState),
-  Option.getOrUndefined,
-);
+export const formStateOf = flow(Schema.decodeUnknownOption(CarriedForm), Option.map(carriedState));
 
 /**
  * Messages attached to the field a focus names (any `Focus` from
@@ -156,12 +153,12 @@ export const formStateOf = flow(
  * or none.
  */
 export const issuesFor = (
-  state: ActionFormState | undefined,
+  state: Option.Option<ActionFormState>,
   field: Focus.HasPath,
 ): ReadonlyArray<string> =>
   Option.getOrElse(
-    Option.flatMap(Option.fromUndefinedOr(state?.errors), (errors) =>
-      Errors.getError(errors, field.path),
+    Option.flatMap(state, ({ errors }) =>
+      Option.flatMap(Option.fromUndefinedOr(errors), (tree) => Errors.getError(tree, field.path)),
     ),
     () => [],
   );
@@ -171,7 +168,7 @@ export const issuesFor = (
  * rejected command). {@link runFormAction} routes them to the error tree's
  * empty path, which the nested tree exposes as `_errors`.
  */
-export const rootIssuesOf = (state: ActionFormState | undefined): ReadonlyArray<string> =>
+export const rootIssuesOf = (state: Option.Option<ActionFormState>): ReadonlyArray<string> =>
   issuesFor(state, { path: [] });
 
 /**
@@ -184,7 +181,15 @@ export const rootIssuesOf = (state: ActionFormState | undefined): ReadonlyArray<
  * the user sees what they sent.
  */
 export const valueOf = (
-  state: ActionFormState | undefined,
+  state: Option.Option<ActionFormState>,
   field: Focus.HasPath,
   fallback = "",
-): string => state?.data?.[Path.toString(field.path)] ?? fallback;
+): string =>
+  Option.getOrElse(
+    Option.flatMap(state, ({ data }) =>
+      Option.flatMap(Option.fromUndefinedOr(data), (posted) =>
+        R.get(posted, Path.toString(field.path)),
+      ),
+    ),
+    () => fallback,
+  );
