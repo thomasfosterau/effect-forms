@@ -21,8 +21,8 @@
  */
 
 import * as Arr from "effect/Array";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import { parseFieldPath } from "./FormData.ts";
 import type { FormPath } from "./Issues.ts";
 
@@ -36,11 +36,41 @@ export function getAt(obj: unknown, path: FormPath): unknown {
   // A missing key reads as `undefined` either way, so guarding on `in` first
   // matches a plain property read on any object or array.
   return Arr.reduce(path, obj, (current, segment) =>
-    Predicate.isObjectOrArray(current) && Predicate.hasProperty(current, segment)
-      ? current[segment]
-      : undefined,
+    P.isObjectOrArray(current) && P.hasProperty(current, segment) ? current[segment] : undefined,
   );
 }
+
+/** An object or array a {@link setAt} write copies along its path. */
+type Container = Readonly<Record<PropertyKey, unknown>> | Array<unknown>;
+
+/**
+ * The untyped core of {@link setAt}: the copy of the container `obj` with
+ * `value` written at `path` (the empty path yields `value` itself). An array
+ * is copied as an array (a string segment on it lands on the copy as a
+ * property, as a write would) and any other object as a plain object of its
+ * own enumerable properties; a missing or primitive container further down is
+ * replaced by a fresh one.
+ */
+const setIn = <V>(obj: Container, path: FormPath, value: V): V | Container =>
+  Arr.match(path, {
+    onEmpty: () => value,
+    onNonEmpty: ([head, ...rest]) => {
+      const next = Arr.match(rest, {
+        onEmpty: () => value,
+        onNonEmpty: (tail) => {
+          const child = getAt(obj, [head]);
+          return setIn(
+            P.isObjectOrArray(child) ? child : P.isNumber(tail[0]) ? [] : {},
+            tail,
+            value,
+          );
+        },
+      });
+      return Arr.isArray(obj)
+        ? Object.assign([...obj], { [head]: next })
+        : { ...obj, [head]: next };
+    },
+  });
 
 /**
  * Return a new tree with the value at `path` replaced by `value`. Objects and
@@ -59,37 +89,14 @@ export function getAt(obj: unknown, path: FormPath): unknown {
  * ```
  */
 export function setAt<T>(obj: T, path: FormPath, value: unknown): T {
-  return Arr.match(path, {
-    // SAFETY: the empty path addresses the whole tree, so `value` is the new
-    // root; `setAt`'s documented contract is that the caller writes a value of
-    // the shape `T` expects at `path`, which here is `T` itself.
-    onEmpty: () => value as T,
-    onNonEmpty: ([head, ...rest]) => {
-      // `Object(obj)` boxes a primitive root so the spread type-checks; spreading
-      // the box copies exactly what spreading `obj` itself would.
-      // SAFETY: `clone` is a fresh shallow copy — an array or a plain object —
-      // and both accept a read or write under any string or number key.
-      const clone = (Arr.isArray(obj) ? [...obj] : { ...Object(obj) }) as Record<
-        PropertyKey,
-        unknown
-      >;
-      const child = clone[head];
-      clone[head] = Arr.match(rest, {
-        onEmpty: () => value,
-        onNonEmpty: (tail) =>
-          setAt(
-            Predicate.isObjectOrArray(child) ? child : Predicate.isNumber(tail[0]) ? [] : {},
-            tail,
-            value,
-          ),
-      });
-      // SAFETY: `clone` is a shallow copy of `obj` (an array when `obj` is
-      // one, a plain object otherwise) differing only at `head`, where the
-      // caller's `value` (by `setAt`'s contract, of the type `T` holds at
-      // `path`) was written.
-      return clone as T;
-    },
-  });
+  // SAFETY: `setIn` returns a copy of `obj` that differs only at `path`, where
+  // `value` was written (a root that is not an object or array has no
+  // properties to keep, so it starts from an empty object). `setAt`'s documented contract is that the caller
+  // writes a value of the type `T` holds at `path` (at the empty path, `T`
+  // itself), so the copy is still a `T`. `value` is `unknown` on purpose — the
+  // reactive bindings write untyped input values — so no type relates it to
+  // `T`, and this is the single point where that caller contract is assumed.
+  return setIn(P.isObjectOrArray(obj) ? obj : {}, path, value) as T;
 }
 
 /** Whether `path` is `root` or nested beneath it. */
@@ -104,7 +111,7 @@ export function isUnder(path: FormPath, root: FormPath): boolean {
  */
 export function toString(path: FormPath): string {
   return Arr.reduce(path, "", (out, segment) =>
-    Predicate.isNumber(segment) ? `${out}[${segment}]` : out === "" ? segment : `${out}.${segment}`,
+    P.isNumber(segment) ? `${out}[${segment}]` : out === "" ? segment : `${out}.${segment}`,
   );
 }
 
@@ -242,7 +249,7 @@ export const clearAll: IndexMap = () => null;
 export function remapIndex(path: FormPath, arrayPath: FormPath, map: IndexMap): FormPath | null {
   if (!isUnder(path, arrayPath) || path.length === arrayPath.length) return path;
   const segment = path[arrayPath.length];
-  if (!Predicate.isNumber(segment)) return path;
+  if (!P.isNumber(segment)) return path;
   const mapped = map(segment);
   if (mapped === null) return null;
   if (mapped === segment) return path;
@@ -259,8 +266,8 @@ export function remapKeyedRecord<T>(
   arrayPath: FormPath,
   map: IndexMap,
 ): Record<string, T> {
-  return Rec.fromEntries(
-    Arr.flatMap(Rec.toEntries(record), ([key, value]) => {
+  return R.fromEntries(
+    Arr.flatMap(R.toEntries(record), ([key, value]) => {
       const remapped = remapIndex(fromString(key), arrayPath, map);
       return remapped === null ? [] : [[toString(remapped), value] as const];
     }),

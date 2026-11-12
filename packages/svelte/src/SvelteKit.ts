@@ -9,7 +9,7 @@
  */
 
 import type { Result, State } from "@thomasfosterau/effect-forms";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import type { FormStore } from "./FormStore.svelte.ts";
 
 type FormActionData<A = unknown, Message = unknown> = Result.FormActionData<A, Message>;
@@ -25,15 +25,15 @@ export interface ServerActionResult {
 }
 
 const isFormActionData = (data: unknown): data is FormActionData & { form: FormState<unknown> } =>
-  Predicate.isObjectOrArray(data) && Predicate.hasProperty(data, "form") && Boolean(data.form);
+  P.isObjectOrArray(data) && P.hasProperty(data, "form") && Boolean(data.form);
 
 /**
  * Apply a derived form action's result to `form`. On a validation `failure`
  * carrying `{ form }`, repopulate the store's errors + posted values and return
- * `true` (consumed). Otherwise return `false` — the caller should defer to the
- * framework for success / redirect / error: inside SvelteKit's `enhance`
- * callback that is `update`, which applies the result itself, so don't also
- * call `applyAction`.
+ * `true`; otherwise return `false`. Either way the store does not touch
+ * `page.form`: inside SvelteKit's `enhance` callback, still run `update`
+ * (which applies the result to `page.form` once, so an earlier submit's
+ * `page.form` doesn't outlive this one), and don't also call `applyAction`.
  */
 export function applyActionResult(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accepts any concrete store

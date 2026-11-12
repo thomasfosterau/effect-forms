@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { Command } from "@thomasfosterau/effect-forms";
 import * as Schema from "effect/Schema";
 import type { Component } from "svelte";
 import { defineEntityForm, type EntityFormEntry } from "../src/EntityForm.ts";
@@ -42,11 +43,8 @@ const statusOptionLabels = { draft: () => "Draft", published: () => "Published" 
 const Picker: Component<never> = () => ({});
 const RowsWidget: Component<never> = () => ({});
 
-// `createInput` / `updateInput` are typed `Schema.Top`; decode them untyped.
-const decodeInput = (input: Schema.Top) =>
-  // SAFETY: EntityForm builds both inputs with `Command.formInputFields` (plus string
-  // overrides here), a struct of string schemas that needs no decoding service.
-  Schema.decodeUnknownSync(input as Schema.Codec<unknown>);
+// `createInput` / `updateInput` need no decoding services, so they decode synchronously.
+const decodeInput = (input: Command.FormInputField) => Schema.decodeUnknownSync(input);
 
 const submit = { create: () => "Create thing", update: () => "Save changes" };
 
@@ -95,12 +93,13 @@ describe("defineEntityForm", () => {
 
   it("throws on an unknown, duplicate, or missing entry key", () => {
     expect(() =>
-      defineEntityForm({ create: CreateThing, update: UpdateThing, submit }, (f) => [
-        // SAFETY: "typo" deliberately bypasses the key type to reach the runtime
-        // unknown-key guard under test; defineEntityForm throws before using it.
-        f.text("typo" as never, { label: () => "x" }),
-      ]),
-    ).toThrow('entry "typo" is not a field');
+      defineEntityForm(
+        { create: CreateThing, update: UpdateThing, submit, omit: ["note"] },
+        // "note" stays a valid key at the type level but is omitted from the
+        // plan, which reaches the runtime unknown-key guard under test.
+        (f) => [f.text("note", { label: () => "x" })],
+      ),
+    ).toThrow('entry "note" is not a field');
     expect(() =>
       defineEntityForm({ create: CreateThing, update: UpdateThing, submit }, (f) => [
         f.text("title", { label: () => "x" }),

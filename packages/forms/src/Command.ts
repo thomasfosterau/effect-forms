@@ -33,8 +33,8 @@
 import * as Arr from "effect/Array";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import * as SchemaParser from "effect/SchemaParser";
@@ -88,6 +88,15 @@ export interface CommandPlan {
 
 /** Per-field adapter overrides — the escape hatch for genuinely irregular coercion. */
 export type AdaptOverrides = Readonly<Record<string, (raw: string | undefined) => unknown>>;
+
+/**
+ * A Form-Input schema field: any schema with no decoding or encoding service
+ * requirements, so the struct {@link formInputFields} builds decodes
+ * synchronously. The derived fields are strings (min-length or UUID checked
+ * where the plan requires it) or optional strings; an override may be any
+ * such schema.
+ */
+export type FormInputField = Schema.Codec<unknown, unknown>;
 
 /** A validated all-string multipart input, as the Form-Input schemas produce it. */
 export type FormInputRecord = Readonly<Record<string, string | undefined>>;
@@ -197,10 +206,7 @@ function optionEncodedSide(ast: SchemaAST.AST): SchemaAST.AST | undefined {
   const inner = unwrapWrapperUnion(ast);
   if (!SchemaAST.isDeclaration(inner) || inner.encoding === undefined) return undefined;
   const representation = inner.annotations?.representation;
-  if (
-    !Predicate.hasProperty(representation, "id") ||
-    representation.id !== OPTION_REPRESENTATION_ID
-  ) {
+  if (!P.hasProperty(representation, "id") || representation.id !== OPTION_REPRESENTATION_ID) {
     return undefined;
   }
   return Arr.lastNonEmpty(inner.encoding).to;
@@ -275,8 +281,8 @@ export const plan = (create: StructLike, update: StructLike): CommandPlan => {
   const createFields = create.fields;
   const updateFields = update.fields;
   const keys = [
-    ...Arr.filter(Rec.keys(updateFields), (key) => key !== "id"),
-    ...Arr.filter(Rec.keys(createFields), (key) => key !== "id" && !(key in updateFields)),
+    ...Arr.filter(R.keys(updateFields), (key) => key !== "id"),
+    ...Arr.filter(R.keys(createFields), (key) => key !== "id" && !(key in updateFields)),
   ];
 
   const fields = Arr.map(keys, (key): FieldPlan => {
@@ -309,9 +315,9 @@ export const plan = (create: StructLike, update: StructLike): CommandPlan => {
 export const formInputFields = (
   commandPlan: CommandPlan,
   mode: "create" | "update",
-  overrides: Readonly<Record<string, Schema.Top>> = {},
-): Record<string, Schema.Top> => {
-  const idField: Array<readonly [string, Schema.Top]> =
+  overrides: Readonly<Record<string, FormInputField>> = {},
+): Readonly<Record<string, FormInputField>> => {
+  const idField: Array<readonly [string, FormInputField]> =
     mode === "update"
       ? [["id", Schema.String.check(Schema.isUUID())]]
       : commandPlan.clientId
@@ -319,7 +325,7 @@ export const formInputFields = (
         : [];
   const planFields = Arr.flatMap(
     commandPlan.fields,
-    (field): Array<readonly [string, Schema.Top]> => {
+    (field): Array<readonly [string, FormInputField]> => {
       if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
       return [
         [
@@ -332,7 +338,7 @@ export const formInputFields = (
     },
   );
   // Overrides come last, so an override replaces a derived field in place.
-  return Rec.fromEntries([...idField, ...planFields, ...Rec.toEntries(overrides)]);
+  return R.fromEntries([...idField, ...planFields, ...R.toEntries(overrides)]);
 };
 
 /**
@@ -350,7 +356,7 @@ export const blankDefaults = (
       (mode === "create" ? field.inCreate : field.inUpdate) ? [field.key] : [],
     ),
   ];
-  return Rec.fromEntries(Arr.map(keys, (key) => [key, ""] as const));
+  return R.fromEntries(Arr.map(keys, (key) => [key, ""] as const));
 };
 
 // ── adapters ──────────────────────────────────────────────────────────
@@ -384,14 +390,13 @@ export const jsonRowsFromField = (
     throw new InvalidJsonRowsError({ message: `Invalid ${label} payload — expected array` });
   }
   return Arr.map(parsed, (row, index) => {
-    if (!Predicate.isObjectOrArray(row)) {
+    if (!P.isObjectOrArray(row)) {
       throw new InvalidJsonRowsError({ message: `Invalid ${label} entry at index ${index}` });
     }
     // `row[key]`, `undefined` when absent — what a plain property read gives.
-    const propertyOf = (key: string): unknown =>
-      Predicate.hasProperty(row, key) ? row[key] : undefined;
+    const propertyOf = (key: string): unknown => (P.hasProperty(row, key) ? row[key] : undefined);
     const agentId = propertyOf("agentId");
-    if (!Predicate.isString(agentId)) {
+    if (!P.isString(agentId)) {
       throw new InvalidJsonRowsError({
         message: `${label} entry at index ${index} missing agentId`,
       });
@@ -400,10 +405,10 @@ export const jsonRowsFromField = (
     const creditedName = propertyOf("creditedName");
     const orderingPosition = propertyOf("orderingPosition");
     return {
-      id: Predicate.isString(id) ? id : undefined,
+      id: P.isString(id) ? id : undefined,
       agentId,
-      creditedName: Predicate.isString(creditedName) ? creditedName : undefined,
-      orderingPosition: Predicate.isNumber(orderingPosition) ? orderingPosition : index,
+      creditedName: P.isString(creditedName) ? creditedName : undefined,
+      orderingPosition: P.isNumber(orderingPosition) ? orderingPosition : index,
     };
   });
 };
@@ -521,7 +526,7 @@ const adaptFields = (
 export const createAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
   (input: FormInputRecord): Record<string, unknown> =>
-    Rec.fromEntries([
+    R.fromEntries([
       ...(commandPlan.clientId ? [["id", trimToUndefined(input.id)] as const] : []),
       ...adaptFields(commandPlan, overrides, "create", input),
     ]);
@@ -535,7 +540,7 @@ export const createAdapter =
 export const updateAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
   (input: FormInputRecord): Record<string, unknown> =>
-    Rec.fromEntries([
+    R.fromEntries([
       ["id", input.id] as const,
       ...adaptFields(commandPlan, overrides, "update", input),
     ]);

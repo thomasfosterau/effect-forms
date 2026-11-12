@@ -11,6 +11,7 @@
  * The error-object schema mirrors effect-jsonapi's `Document.ErrorObject`;
  * `tests/kit/CommandFailure.types.test.ts` pins that the two stay assignable.
  */
+import type { RequestEvent } from "@sveltejs/kit";
 import * as Schema from "effect/Schema";
 
 const ErrorObject = Schema.Struct({
@@ -73,3 +74,48 @@ export const post = (body: Record<string, string>): Request =>
     body: new URLSearchParams(body),
     headers: { "content-type": "application/x-www-form-urlencoded" },
   });
+
+class UnusedMember extends Schema.TaggedError<UnusedMember, { readonly brand: unique symbol }>()(
+  "UnusedMember",
+  { member: Schema.String },
+) {}
+
+const unused = (member: string) => (): never => {
+  throw new UnusedMember({ member });
+};
+
+/**
+ * A complete SvelteKit `RequestEvent` around `request` and `locals`. The
+ * members `formAction` never reads throw if a test reaches for them.
+ */
+export const requestEvent = (request: Request, locals: App.Locals): RequestEvent => ({
+  cookies: {
+    get: unused("cookies.get"),
+    getAll: unused("cookies.getAll"),
+    set: unused("cookies.set"),
+    delete: unused("cookies.delete"),
+    serialize: unused("cookies.serialize"),
+    parse: unused("cookies.parse"),
+  },
+  fetch: unused("fetch"),
+  getClientAddress: unused("getClientAddress"),
+  locals,
+  params: {},
+  platform: undefined,
+  request,
+  route: { id: null },
+  setHeaders: unused("setHeaders"),
+  url: new URL(request.url),
+  isDataRequest: false,
+  isSubRequest: false,
+  tracing: {
+    enabled: false,
+    get root(): never {
+      return unused("tracing.root")();
+    },
+    get current(): never {
+      return unused("tracing.current")();
+    },
+  },
+  isRemoteRequest: false,
+});

@@ -25,6 +25,7 @@
 
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as P from "effect/Predicate";
 import type * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
 import { constraintsFromSchema, type InputConstraints } from "./Constraints.ts";
@@ -164,9 +165,10 @@ export function make<S extends Schema.Top, Message = unknown>(
               // SAFETY: `FormState.data` on a failed decode is, by its documented
               // contract, the posted values merged over the defaults (so the form
               // re-renders what the user typed), typed as `S["Type"]` though not
-              // decoded. `defaults` is widened to `object` only so it can be
-              // spread; spreading copies its own enumerable properties either way.
-              const posted = { ...(defaults as object), ...object } as S["Type"];
+              // decoded. Only object defaults have properties to merge.
+              const posted = (
+                P.isObjectKeyword(defaults) ? { ...defaults, ...object } : { ...object }
+              ) as S["Type"];
               return Effect.succeed(
                 makeFormState<S["Type"], Message>(posted, {
                   id,

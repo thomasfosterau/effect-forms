@@ -20,7 +20,7 @@
 
 import * as Arr from "effect/Array";
 import * as Match from "effect/Match";
-import * as Predicate from "effect/Predicate";
+import * as P from "effect/Predicate";
 import type * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 
@@ -58,8 +58,8 @@ export const defaultLeafFormatter: LeafFormatter = SchemaIssue.makeFormatterDefa
  * keys become numbers (array indices), everything else becomes a string.
  */
 const normaliseSegment = (segment: PropertyKey): string | number => {
-  if (Predicate.isNumber(segment)) return segment;
-  if (Predicate.isSymbol(segment)) return segment.toString();
+  if (P.isNumber(segment)) return segment;
+  if (P.isSymbol(segment)) return segment.toString();
   return /^\d+$/.test(segment) ? Number(segment) : segment;
 };
 
@@ -126,10 +126,10 @@ const isFilterIssueList = (
 ): output is ReadonlyArray<Schema.FilterIssue> => Arr.isArray(output);
 
 function filterIssueToFormIssues(issue: Schema.FilterIssue): FormIssue[] {
-  if (Predicate.isString(issue)) return [{ path: [], message: issue }];
+  if (P.isString(issue)) return [{ path: [], message: issue }];
   if ("path" in issue && "issue" in issue) {
-    const prefix = Arr.map(issue.path, (s) => (Predicate.isSymbol(s) ? s.toString() : s));
-    const inner = Predicate.isString(issue.issue)
+    const prefix = Arr.map(issue.path, (s) => (P.isSymbol(s) ? s.toString() : s));
+    const inner = P.isString(issue.issue)
       ? [{ path: [], message: issue.issue }]
       : schemaIssuesToFormIssues(issue.issue);
     return inner.map((i) => ({ path: [...prefix, ...i.path], message: i.message }));

@@ -21,8 +21,8 @@
 
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Rec from "effect/Record";
+import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import type * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type { FormPath } from "./Issues.ts";
@@ -49,11 +49,11 @@ export type FieldsRecord = Record<string, AnyFieldDef>;
 
 /** Whether `def` is an {@link ArrayFieldDef}. */
 export const isArrayFieldDef = (def: AnyFieldDef): def is ArrayFieldDef<string, Schema.Top> =>
-  Predicate.isTagged(def, "array");
+  P.isTagged(def, "array");
 
 /** Whether `def` is a scalar {@link FieldDef}. */
 export const isFieldDef = (def: AnyFieldDef): def is FieldDef<string, Schema.Top> =>
-  Predicate.isTagged(def, "field");
+  P.isTagged(def, "field");
 
 /** Construct a scalar {@link FieldDef}. */
 export const makeField = <K extends string, S extends Schema.Top>(
@@ -122,7 +122,7 @@ interface BlankStruct {
 function fromAst(ast: SchemaAST.AST): BlankValue {
   const unwrapped = unwrapToStructured(ast);
   if (SchemaAST.isObjects(unwrapped)) {
-    return Rec.fromEntries(
+    return R.fromEntries(
       Arr.map(unwrapped.propertySignatures, (ps) => [String(ps.name), fromAst(ps.type)] as const),
     );
   }
@@ -165,7 +165,7 @@ export function schemaAt(schema: Schema.Top, path: FormPath): SchemaAST.AST | un
     (ast, segment) =>
       ast === undefined
         ? undefined
-        : Predicate.isNumber(segment)
+        : P.isNumber(segment)
           ? stepIntoArray(ast)
           : stepIntoStruct(ast, segment),
   );
@@ -184,5 +184,5 @@ export function defaultItemAt(schema: Schema.Top, path: FormPath): unknown {
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */
 export function defaultEncodedValues(fields: FieldsRecord): Record<string, unknown> {
-  return Rec.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
+  return R.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
 }
