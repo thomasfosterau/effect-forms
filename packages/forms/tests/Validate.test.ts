@@ -1,9 +1,9 @@
+import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { assert, describe, expect, it } from "vite-plus/test";
+import { assert, describe, expect } from "vite-plus/test";
 import { TestClock } from "effect/testing";
 import { getError } from "../src/Errors.ts";
 import {
@@ -16,32 +16,27 @@ import {
   validateValueSync,
 } from "../src/Validate.ts";
 
-// Local Effect test runner — `@effect/vitest` (`it.effect`, its TestClock
-// wiring) doesn't work against this repo's vitest alias.
-const runTest = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
-
-// Each test is its own entry point: a fresh `ManagedRuntime` built from
-// `TestClock.layer()` (so every test starts its clock at zero), disposed
-// once the test's program settles.
-const runWithTestClock = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
-  const runtime = ManagedRuntime.make(TestClock.layer());
-  return runtime.runPromise(effect).finally(() => runtime.dispose());
-};
+// `it.effect` runs each test as its own program with a fresh `TestClock`
+// (starting at zero), so the debounce tests below advance time explicitly.
 
 const Field = Schema.String.check(Schema.isMinLength(3));
 
 describe("validateValue", () => {
-  it("succeeds with the decoded value", async () => {
-    const result = await Effect.runPromise(validateValue(Field, "hello"));
-    expect(result).toEqual({ isValid: true, data: "hello" });
-  });
+  it.effect("succeeds with the decoded value", () =>
+    Effect.gen(function* () {
+      const result = yield* validateValue(Field, "hello");
+      expect(result).toEqual({ isValid: true, data: "hello" });
+    }),
+  );
 
-  it("fails with errors and issues", async () => {
-    const result = await Effect.runPromise(validateValue(Field, "hi"));
-    expect(result.isValid).toBe(false);
-    assert(!result.isValid);
-    expect(result.issues.length).toBeGreaterThan(0);
-  });
+  it.effect("fails with errors and issues", () =>
+    Effect.gen(function* () {
+      const result = yield* validateValue(Field, "hi");
+      expect(result.isValid).toBe(false);
+      assert(!result.isValid);
+      expect(result.issues.length).toBeGreaterThan(0);
+    }),
+  );
 });
 
 describe("validateValueSync", () => {
@@ -63,12 +58,14 @@ describe("validateValueSync", () => {
 });
 
 describe("validateValue with a custom leaf formatter", () => {
-  it("routes leaf issues through the provided formatter", async () => {
-    const result = await Effect.runPromise(validateValue(Field, "x", () => "custom message"));
-    expect(result.isValid).toBe(false);
-    assert(!result.isValid);
-    expect(result.issues[0]?.message).toBe("custom message");
-  });
+  it.effect("routes leaf issues through the provided formatter", () =>
+    Effect.gen(function* () {
+      const result = yield* validateValue(Field, "x", () => "custom message");
+      expect(result.isValid).toBe(false);
+      assert(!result.isValid);
+      expect(result.issues[0]?.message).toBe("custom message");
+    }),
+  );
 });
 
 const passing: SyncFieldValidator<string> = () => undefined;
@@ -105,54 +102,52 @@ describe("runSyncFieldValidator", () => {
 });
 
 describe("runAsyncFieldValidator", () => {
-  it("runs immediately with no debounce (default)", () =>
-    runTest(
-      Effect.gen(function* () {
-        const issues = yield* runAsyncFieldValidator(takenValidator, "taken");
-        expect(issues).toEqual([{ path: [], message: "Username taken" }]);
-      }),
-    ));
+  it.effect("runs immediately with no debounce (default)", () =>
+    Effect.gen(function* () {
+      const issues = yield* runAsyncFieldValidator(takenValidator, "taken");
+      expect(issues).toEqual([{ path: [], message: "Username taken" }]);
+    }),
+  );
 
-  it("waits the full debounce before running the validator", () =>
-    runWithTestClock(
-      Effect.gen(function* () {
-        let calls = 0;
-        const validator: AsyncFieldValidator<string> = (value) => {
-          calls++;
-          return Effect.succeed(value === "taken" ? "Taken" : undefined);
-        };
+  it.effect("waits the full debounce before running the validator", () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const validator: AsyncFieldValidator<string> = (value) => {
+        calls++;
+        return Effect.succeed(value === "taken" ? "Taken" : undefined);
+      };
 
-        const fiber = yield* runAsyncFieldValidator(validator, "taken", 300).pipe(Effect.forkChild);
+      const fiber = yield* runAsyncFieldValidator(validator, "taken", 300).pipe(Effect.forkChild);
 
-        yield* TestClock.adjust("299 millis");
-        expect(calls).toBe(0);
+      yield* TestClock.adjust("299 millis");
+      expect(calls).toBe(0);
 
-        yield* TestClock.adjust("1 millis");
-        const issues = yield* Fiber.join(fiber);
-        expect(calls).toBe(1);
-        expect(issues).toEqual([{ path: [], message: "Taken" }]);
-      }),
-    ));
+      yield* TestClock.adjust("1 millis");
+      const issues = yield* Fiber.join(fiber);
+      expect(calls).toBe(1);
+      expect(issues).toEqual([{ path: [], message: "Taken" }]);
+    }),
+  );
 
-  it("interrupting mid-debounce skips the validator entirely (true debounce)", () =>
-    runWithTestClock(
-      Effect.gen(function* () {
-        let calls = 0;
-        const validator: AsyncFieldValidator<string> = () => {
-          calls++;
-          return Effect.succeed(true);
-        };
+  it.effect("interrupting mid-debounce skips the validator entirely (true debounce)", () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const validator: AsyncFieldValidator<string> = () => {
+        calls++;
+        return Effect.succeed(true);
+      };
 
-        const fiber = yield* runAsyncFieldValidator(validator, "x", 300).pipe(Effect.forkChild);
-        yield* TestClock.adjust("100 millis");
-        yield* Fiber.interrupt(fiber);
+      const fiber = yield* runAsyncFieldValidator(validator, "x", 300).pipe(Effect.forkChild);
+      yield* TestClock.adjust("100 millis");
+      yield* Fiber.interrupt(fiber);
 
-        expect(calls).toBe(0);
-      }),
-    ));
+      expect(calls).toBe(0);
+    }),
+  );
 
-  it("latest-wins: interrupting an in-flight run before forking the next only keeps the last result", () =>
-    runWithTestClock(
+  it.effect(
+    "latest-wins: interrupting an in-flight run before forking the next only keeps the last result",
+    () =>
       Effect.gen(function* () {
         const started: string[] = [];
         const completed: string[] = [];
@@ -175,10 +170,11 @@ describe("runAsyncFieldValidator", () => {
         expect(started).toEqual(["a", "b"]);
         expect(completed).toEqual(["b"]);
       }),
-    ));
+  );
 
-  it("interrupting mid-sleep-inside-validator aborts the validator (not just the debounce)", () =>
-    runWithTestClock(
+  it.effect(
+    "interrupting mid-sleep-inside-validator aborts the validator (not just the debounce)",
+    () =>
       Effect.gen(function* () {
         let sawCompletion = false;
         const validator: AsyncFieldValidator<string> = () =>
@@ -195,18 +191,17 @@ describe("runAsyncFieldValidator", () => {
 
         expect(sawCompletion).toBe(false);
       }),
-    ));
+  );
 
-  it("propagates the value's FilterOutput array into multiple FormIssues", () =>
-    runTest(
-      Effect.gen(function* () {
-        const issues = yield* runAsyncFieldValidator(multiIssueValidator, "x");
-        expect(issues).toEqual([
-          { path: [], message: "First problem" },
-          { path: [], message: "Second problem" },
-        ]);
-      }),
-    ));
+  it.effect("propagates the value's FilterOutput array into multiple FormIssues", () =>
+    Effect.gen(function* () {
+      const issues = yield* runAsyncFieldValidator(multiIssueValidator, "x");
+      expect(issues).toEqual([
+        { path: [], message: "First problem" },
+        { path: [], message: "Second problem" },
+      ]);
+    }),
+  );
 });
 
 describe("resolveFieldTrigger", () => {

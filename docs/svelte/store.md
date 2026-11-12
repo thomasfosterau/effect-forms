@@ -4,7 +4,7 @@ Guide to `@thomasfosterau/effect-forms-svelte`. Related: [Field handles](field-h
 
 The root entry depends only on `svelte` and the framework-neutral core, not SvelteKit, so it works in any Svelte 5 app. The [`/kit` entry](kit.md) (`@thomasfosterau/effect-forms-svelte/kit`) is the SvelteKit-only half: derived form actions, JSON:API error routing and `$app/forms` glue.
 
-`effect` and `svelte` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`; `@thomasfosterau/effect-jsonapi` is an optional, type-only peer of `/kit`.
+`effect`, `svelte` and `@thomasfosterau/effect-ext` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`; `@thomasfosterau/effect-jsonapi` is an optional, type-only peer of `/kit`.
 
 ## Usage
 
@@ -54,4 +54,4 @@ The bound schema must be service-free with `FormValue` decoded and encoded sides
 
 **Field arrays** — `append(path, value?)`, `insertItem(path, i, value?)`, `replaceItem(path, i, value)`, `removeItem(path, i)`, `clearItems(path)`, `swap(path, a, b)`, `move(path, from, to)` mutate the array at `path` immutably. `append` / `insertItem` derive a blank item by walking the bound schema's AST at `path` (any nesting depth, e.g. `authors[0].emails`), falling back to the top-level `FormBuilder` field when no schema is bound. Every index-shifting mutation (`insertItem` / `removeItem` / `swap` / `move` / `clearItems`) remaps per-index touched flags and errors so they keep following their row — `replaceItem` drops only the replaced index's own touched flag / errors.
 
-**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to `fetch` to the form's action, parsing a JSON [`FormActionResult`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Result.ts) or a bare `FormState`).
+**Lifecycle options** — `onSubmit` (with `cancel()`), `onResult`, `onUpdate`, `onUpdated`, `onError`, `onRedirect`, plus `resetForm`, `taintedMessage`, `delayMs`, and a `submit` transport override (defaults to a POST to the form's action through Effect's `HttpClient` on the platform `fetch`, run on a store-owned `ManagedRuntime` so a custom `layer` does not reroute it; a response body that is not JSON yields an `Error` result with the message `"Request failed"`; the body is parsed as a JSON [`FormActionResult`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Result.ts) or a bare `FormState`).

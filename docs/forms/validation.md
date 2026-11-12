@@ -33,6 +33,6 @@ Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`, `Erro
 ## Notes
 
 - **Coercion is the schema's job.** An HTML body is all strings; build the schema from coercing leaves (`Schema.FiniteFromString`, `Schema.BooleanFromString`, the `Coerce` helpers) so the parsed object decodes cleanly. The parser never guesses types.
-- **Update semantics.** The `Coerce` helpers honour the value / `null` / `undefined` contract (set / clear / carry-forward) for partial updates.
+- **Update semantics.** A partial update says, per field, one of three things: set, clear or carry forward. The `Coerce` helpers and the `Command` coercions return it as a `TriState` (`Assign` / `Clear` / `CarryForward`); the `Command` adapters encode it onto the wire as the value, `null`, or an absent key, which is what an `optional(NullOr(...))` (effect-ext's `TriState.clearableNullOr`) update field decodes. `AdaptOverrides` return a `TriState` too.
 
 See also [Errors](errors.md) and [Constraints](constraints.md).

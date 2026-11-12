@@ -5,12 +5,12 @@ Svelte 5 (runes) bindings for [`@thomasfosterau/effect-forms`](https://www.npmjs
 ## Install
 
 ```sh
-pnpm add @thomasfosterau/effect-forms-svelte @thomasfosterau/effect-forms effect svelte
+pnpm add @thomasfosterau/effect-forms-svelte @thomasfosterau/effect-forms @thomasfosterau/effect-ext effect svelte
 # for the /kit entry
 pnpm add @sveltejs/kit
 ```
 
-`effect` and `svelte` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`.
+`effect`, `svelte` and `@thomasfosterau/effect-ext` are required peers. `@sveltejs/kit` is an optional peer, required by `/kit`.
 
 ## Example
 

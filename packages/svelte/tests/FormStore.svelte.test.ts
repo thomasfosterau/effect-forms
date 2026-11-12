@@ -26,7 +26,7 @@ import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { flushSync } from "svelte";
-import { assert, describe, expect, it } from "vite-plus/test";
+import { afterEach, assert, describe, expect, it, vi } from "vite-plus/test";
 import { createForm } from "../src/FormStore.svelte.ts";
 
 const { success } = Result;
@@ -189,6 +189,150 @@ describe("auto-submit — no submitter", () => {
     expect(bodies[0]?.get("intent")).toBeNull();
     expect(bodies[0]?.get("title")).toBe("changed");
     expect(submitters).toEqual([Option.none()]);
+  });
+});
+
+describe("default submit — POST through HttpClient on the platform fetch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  type Outcome =
+    | { readonly kind: "result"; readonly result: Result.FormActionResult<{ title: string }> }
+    | { readonly kind: "error"; readonly error: string };
+
+  /** Submit a one-field form at `action` against `fetch`; resolves with what the store reported. */
+  const submitWith = async (fetch: typeof globalThis.fetch) => {
+    vi.stubGlobal("fetch", fetch);
+    const { node, saveButton } = buildMultiButtonForm();
+    node.action = "https://example.test/save";
+    let report!: (outcome: Outcome) => void;
+    const outcome = new Promise<Outcome>((resolve) => {
+      report = resolve;
+    });
+    const store = createForm(
+      { schema: ActionForm, defaults: { title: "" } },
+      {
+        onResult: ({ result }) => report({ kind: "result", result }),
+        onError: ({ error }) => report({ kind: "error", error }),
+      },
+    );
+    store.enhance(node);
+    node.requestSubmit(saveButton);
+    const reported = await outcome;
+    await vi.waitFor(() => {
+      expect(store.submitting).toBe(false);
+    });
+    expect(store.delayed).toBe(false);
+    return reported;
+  };
+
+  it("posts the form body to the action, accepting JSON, and applies the action result", async () => {
+    const requests: Request[] = [];
+    const outcome = await submitWith(async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(success(makeFormState({ title: "Saved" })));
+    });
+
+    expect(outcome).toMatchObject({ kind: "result", result: { _tag: "Success", status: 200 } });
+    expect(requests).toHaveLength(1);
+    const [request] = requests;
+    assert(request !== undefined);
+    expect(request.url).toBe("https://example.test/save");
+    expect(request.method).toBe("POST");
+    expect(request.headers.get("accept")).toBe("application/json");
+    expect(titleOf(await request.formData())).toBe("Hello");
+  });
+
+  it("sends no trace-propagation headers (a cross-origin action must not preflight)", async () => {
+    const requests: Request[] = [];
+    await submitWith(async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(success(makeFormState({ title: "Saved" })));
+    });
+
+    expect(requests[0]?.headers.has("traceparent")).toBe(false);
+    expect(requests[0]?.headers.has("b3")).toBe(false);
+  });
+
+  it("turns a body that isn't JSON into an Error result carrying the status", async () => {
+    const outcome = await submitWith(
+      async () => new Response("<h1>Bad gateway</h1>", { status: 502 }),
+    );
+
+    expect(outcome).toEqual({
+      kind: "result",
+      result: { _tag: "Error", status: 502, message: "Request failed" },
+    });
+  });
+
+  it("turns JSON that isn't an action response into an Error result", async () => {
+    const outcome = await submitWith(async () => Response.json({ hello: "world" }));
+
+    expect(outcome).toEqual({
+      kind: "result",
+      result: { _tag: "Error", status: 200, message: "Unrecognised form response" },
+    });
+  });
+
+  it("reports fetch's own rejection message on a transport failure", async () => {
+    const outcome = await submitWith(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+
+    expect(outcome).toEqual({ kind: "error", error: "Failed to fetch" });
+  });
+});
+
+/** What the failing `handler` below throws: an `Error`, so its message is what `onError` reports. */
+class HandlerExploded extends Schema.TaggedError<
+  HandlerExploded,
+  { readonly brand: unique symbol }
+>()("HandlerExploded", { message: Schema.String }) {}
+
+describe("submission failures", () => {
+  it("reports a throwing handler's message through onError and clears submitting", async () => {
+    const { node, saveButton } = buildMultiButtonForm();
+    let reportError!: (error: string) => void;
+    const reported = new Promise<string>((resolve) => {
+      reportError = resolve;
+    });
+    const store = createForm(
+      { schema: ActionForm, defaults: { title: "" } },
+      {
+        handler: () => {
+          throw new HandlerExploded({ message: "handler exploded" });
+        },
+        onError: ({ error }) => reportError(error),
+      },
+    );
+    store.enhance(node);
+    node.requestSubmit(saveButton);
+
+    expect(await reported).toBe("handler exploded");
+    await vi.waitFor(() => {
+      expect(store.submitting).toBe(false);
+    });
+    expect(store.isSubmitSuccessful).toBe(false);
+  });
+
+  it("falls back to a generic message when the submit rejects with a non-Error", async () => {
+    const { node, saveButton } = buildMultiButtonForm();
+    let reportError!: (error: string) => void;
+    const reported = new Promise<string>((resolve) => {
+      reportError = resolve;
+    });
+    const store = createForm(
+      { schema: ActionForm, defaults: { title: "" } },
+      {
+        submit: () => Promise.reject("nope"),
+        onError: ({ error }) => reportError(error),
+      },
+    );
+    store.enhance(node);
+    node.requestSubmit(saveButton);
+
+    expect(await reported).toBe("Submission failed");
   });
 });
 

@@ -5,12 +5,11 @@ import * as Order from "effect/Order";
 import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaParser from "effect/SchemaParser";
-import { describe, expect, it } from "vite-plus/test";
+import { it } from "@effect/vitest";
+import { describe, expect } from "vite-plus/test";
 import { getError } from "../src/Errors.ts";
 import { fromBuilder } from "../src/Form.ts";
 import { buildSchema, empty, isFormBuilder } from "../src/FormBuilder.ts";
-
-const run = <A, E>(eff: Effect.Effect<A, E>) => Effect.runSync(eff);
 
 describe("FormBuilder composition", () => {
   it("accumulates fields via addField (key+schema, def, array) and merge", () => {
@@ -36,13 +35,17 @@ describe("FormBuilder.buildSchema", () => {
     .addField("age", Schema.FiniteFromString)
     .addArrayField("tags", Schema.String);
 
-  it("collapses to a schema that decodes fields and array items", () => {
-    const schema = buildSchema(builder);
-    const decoded = run(
-      SchemaParser.decodeEffect(schema)({ name: "Ada", age: "31", tags: ["x", "y"] }),
-    );
-    expect(decoded).toEqual({ name: "Ada", age: 31, tags: ["x", "y"] });
-  });
+  it.effect("collapses to a schema that decodes fields and array items", () =>
+    Effect.gen(function* () {
+      const schema = buildSchema(builder);
+      const decoded = yield* SchemaParser.decodeEffect(schema)({
+        name: "Ada",
+        age: "31",
+        tags: ["x", "y"],
+      });
+      expect(decoded).toEqual({ name: "Ada", age: 31, tags: ["x", "y"] });
+    }),
+  );
 });
 
 describe("FormBuilder sync refine (cross-field)", () => {
@@ -51,40 +54,25 @@ describe("FormBuilder sync refine (cross-field)", () => {
     .addField("confirm", Schema.String)
     .refine((v) =>
       v.password === v.confirm ? undefined : { path: ["confirm"], issue: "must match" },
-    );
-  const form = fromBuilder(builder);
-
-  it("passes when the cross-field rule holds", () => {
-    const state = run(form.validate({ password: "secret", confirm: "secret" }));
-    expect(state.isValid).toBe(true);
-  });
-
-  it("routes a cross-field failure to the targeted field", () => {
-    const state = run(form.validate({ password: "secret", confirm: "nope" }));
-    expect(state.isValid).toBe(false);
-    expect(getError(state.errors, ["confirm"])).toEqual(Option.some(["must match"]));
-  });
-});
-
-describe("FormBuilder refinements attached before later fields", () => {
-  const builder = empty
-    .addField("password", Schema.String)
-    .refine((v) => (v.password.length >= 3 ? undefined : { path: ["password"], issue: "short" }))
-    .refineEffect((v) =>
-      Effect.succeed(v.password === "taken" ? { path: ["password"], issue: "taken" } : undefined),
     )
-    .addField("confirm", Schema.String);
+    // A field added after the refinement: it still runs against the wider values.
+    .addField("hint", Schema.optional(Schema.String));
   const form = fromBuilder(builder);
 
-  it("still run against the wider values", () => {
-    expect(
-      getError(run(form.validate({ password: "ab", confirm: "" })).errors, ["password"]),
-    ).toEqual(Option.some(["short"]));
-    expect(
-      getError(run(form.validate({ password: "taken", confirm: "" })).errors, ["password"]),
-    ).toEqual(Option.some(["taken"]));
-    expect(run(form.validate({ password: "fine", confirm: "" })).isValid).toBe(true);
-  });
+  it.effect("passes when the cross-field rule holds", () =>
+    Effect.gen(function* () {
+      const state = yield* form.validate({ password: "secret", confirm: "secret" });
+      expect(state.isValid).toBe(true);
+    }),
+  );
+
+  it.effect("routes a cross-field failure to the targeted field", () =>
+    Effect.gen(function* () {
+      const state = yield* form.validate({ password: "secret", confirm: "nope" });
+      expect(state.isValid).toBe(false);
+      expect(getError(state.errors, ["confirm"])).toEqual(Option.some(["must match"]));
+    }),
+  );
 });
 
 describe("FormBuilder refine annotations", () => {
@@ -108,12 +96,14 @@ describe("Form.fromBuilder", () => {
     expect(form.empty().data).toEqual({ name: "", tags: [] });
   });
 
-  it("retains posted values on a field failure", () => {
-    const state = run(form.validate({ name: "A", tags: ["x"] }));
-    expect(state.isValid).toBe(false);
-    expect(state.data.name).toBe("A");
-    expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
-  });
+  it.effect("retains posted values on a field failure", () =>
+    Effect.gen(function* () {
+      const state = yield* form.validate({ name: "A", tags: ["x"] });
+      expect(state.isValid).toBe(false);
+      expect(state.data.name).toBe("A");
+      expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
+    }),
+  );
 });
 
 describe("FormBuilder async refineEffect", () => {
@@ -121,17 +111,23 @@ describe("FormBuilder async refineEffect", () => {
     .addField("name", Schema.String)
     .refineEffect((v) =>
       Effect.succeed(v.name === "taken" ? { path: ["name"], issue: "already taken" } : undefined),
-    );
+    )
+    // A field added after the refinement: it still runs against the wider values.
+    .addField("nickname", Schema.optional(Schema.String));
   const form = fromBuilder(builder);
 
-  it("passes when the async rule holds", () => {
-    const state = run(form.validate({ name: "free" }));
-    expect(state.isValid).toBe(true);
-  });
+  it.effect("passes when the async rule holds", () =>
+    Effect.gen(function* () {
+      const state = yield* form.validate({ name: "free" });
+      expect(state.isValid).toBe(true);
+    }),
+  );
 
-  it("folds an async failure into the error tree", () => {
-    const state = run(form.validate({ name: "taken" }));
-    expect(state.isValid).toBe(false);
-    expect(getError(state.errors, ["name"])).toEqual(Option.some(["already taken"]));
-  });
+  it.effect("folds an async failure into the error tree", () =>
+    Effect.gen(function* () {
+      const state = yield* form.validate({ name: "taken" });
+      expect(state.isValid).toBe(false);
+      expect(getError(state.errors, ["name"])).toEqual(Option.some(["already taken"]));
+    }),
+  );
 });

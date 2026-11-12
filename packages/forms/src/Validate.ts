@@ -81,7 +81,9 @@ export function validateValue<S extends Schema.Top>(
  * Synchronous {@link validateValue} for a {@link ServiceFreeSchema} — the
  * common case for plain form schemas. A schema that needs a decoding service
  * is a type error here; validate it with the Effect-returning
- * {@link validateValue}.
+ * {@link validateValue}. It decodes through `SchemaParser.decodeResult`,
+ * Schema's own synchronous adapter: a decode failure becomes `isValid: false`,
+ * and a defect or async decoding work throws.
  */
 export function validateValueSync<S extends ServiceFreeSchema>(
   schema: S,
