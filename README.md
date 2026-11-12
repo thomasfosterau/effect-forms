@@ -44,18 +44,7 @@ In a Svelte 5 component, `createForm(state, { schema: Signup })` from `@thomasfo
 
 ## Development
 
-This repository is a pnpm workspace managed by [Vite+](https://viteplus.dev) (the `vp` CLI).
-
-```sh
-pnpm install          # dependencies, git hooks, and the @effect/tsgo patch
-vp check              # format (Oxfmt) + lint (Oxlint, with the Effect rules)
-vp run check          # the type gate: native tsc (Effect-patched) + svelte-check
-vp run -r test:unit   # every package's Vitest suite
-vp run -r build       # build every package with tsdown (vp pack)
-vp run docgen         # compile and run the core's doc examples
-```
-
-The full gate list is in [AGENTS.md](AGENTS.md#verification); [CONTRIBUTING.md](CONTRIBUTING.md) covers setup and single checks. Releases are automated with [Changesets](https://github.com/changesets/changesets) — see [PUBLISHING.md](PUBLISHING.md). Security reports: [SECURITY.md](SECURITY.md).
+This repository is a pnpm workspace managed by [Vite+](https://viteplus.dev) (the `vp` CLI). [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, and [AGENTS.md](AGENTS.md) lists the commands and the verification gates. Releases are automated with [Changesets](https://github.com/changesets/changesets): see [PUBLISHING.md](PUBLISHING.md). Security reports go through [SECURITY.md](SECURITY.md).
 
 ## License
 

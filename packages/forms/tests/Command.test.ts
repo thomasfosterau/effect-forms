@@ -67,6 +67,7 @@ const UpdateThing = Schema.Struct({
 
 const thing = plan(CreateThing, UpdateThing);
 const byKey = R.fromEntries(Arr.map(thing.fields, (field) => [field.key, field] as const));
+const isoString = (date: Date) => date.toISOString();
 
 describe("Command.plan", () => {
   it("detects the client-generated create id", () => {
@@ -245,7 +246,6 @@ describe("Command.plan — OptionFrom* fields", () => {
   });
   const entry = plan(CreateEntry, UpdateEntry);
   const id = "9f8c1c2e-4b3a-4c5d-8e6f-0a1b2c3d4e5f";
-  const isoString = (date: Date) => date.toISOString();
   const filled = {
     startedAt: "2024-01-02",
     content: '{"type":"doc","text":"hi"}',

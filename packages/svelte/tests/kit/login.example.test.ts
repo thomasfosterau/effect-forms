@@ -10,7 +10,7 @@ const event = (body: Record<string, string>, session: SessionTransport) =>
   requestEvent(post(body), { session });
 
 const transport = (signIn: SessionTransport["signIn"]): SessionTransport => ({
-  signIn: vi.fn(signIn),
+  signIn: vi.fn<SessionTransport["signIn"]>(signIn),
 });
 
 describe("the login example", () => {
