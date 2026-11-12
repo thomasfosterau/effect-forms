@@ -33,13 +33,13 @@ const Field = Schema.String.check(Schema.isMinLength(3));
 describe("validateValue", () => {
   it("succeeds with the decoded value", async () => {
     const result = await Effect.runPromise(validateValue(Field, "hello"));
-    expect(result).toEqual({ valid: true, data: "hello" });
+    expect(result).toEqual({ isValid: true, data: "hello" });
   });
 
   it("fails with errors and issues", async () => {
     const result = await Effect.runPromise(validateValue(Field, "hi"));
-    expect(result.valid).toBe(false);
-    assert(!result.valid);
+    expect(result.isValid).toBe(false);
+    assert(!result.isValid);
     expect(result.issues.length).toBeGreaterThan(0);
   });
 });
@@ -49,15 +49,15 @@ describe("validateValueSync", () => {
 
   it("validates synchronously", () => {
     expect(validateValueSync(Struct, { email: "a@b.co" })).toEqual({
-      valid: true,
+      isValid: true,
       data: { email: "a@b.co" },
     });
   });
 
   it("reports field errors synchronously", () => {
     const result = validateValueSync(Struct, { email: "x" });
-    expect(result.valid).toBe(false);
-    assert(!result.valid);
+    expect(result.isValid).toBe(false);
+    assert(!result.isValid);
     expect(Option.isSome(getError(result.errors, ["email"]))).toBe(true);
   });
 });
@@ -65,8 +65,8 @@ describe("validateValueSync", () => {
 describe("validateValue with a custom leaf formatter", () => {
   it("routes leaf issues through the provided formatter", async () => {
     const result = await Effect.runPromise(validateValue(Field, "x", () => "custom message"));
-    expect(result.valid).toBe(false);
-    assert(!result.valid);
+    expect(result.isValid).toBe(false);
+    assert(!result.isValid);
     expect(result.issues[0]?.message).toBe("custom message");
   });
 });

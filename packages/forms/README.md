@@ -1,6 +1,6 @@
 # @thomasfosterau/effect-forms
 
-Framework-neutral, **Effect-native** form validation and state — schema-driven validation, nested errors, posted-value retention, status messages, and native input constraints, built on **Effect Schema** with no framework dependency. The Svelte 5 bindings live in [`@thomasfosterau/effect-forms-svelte`](https://www.npmjs.com/package/@thomasfosterau/effect-forms-svelte).
+Framework-neutral, **Effect-native** form validation and state: schema-driven validation, nested errors, posted-value retention and native input constraints, built on **Effect Schema** with no framework dependency. The Svelte 5 bindings live in [`@thomasfosterau/effect-forms-svelte`](https://www.npmjs.com/package/@thomasfosterau/effect-forms-svelte).
 
 ## Install
 
@@ -10,7 +10,7 @@ pnpm add @thomasfosterau/effect-forms effect
 
 `effect` is a peer dependency; the package never bundles its own copy.
 
-## Usage
+## Example
 
 ```ts
 import * as Schema from "effect/Schema";
@@ -30,68 +30,20 @@ const signupForm = Form.make(Signup, {
 // In a server action / load:
 declare const request: Request;
 const state = await Effect.runPromise(signupForm.validate(request));
-// state: { id, valid, posted, data, errors, constraints, message? }
+// state: { id, isValid, isPosted, data, errors, constraints, message? }
 ```
 
-### Building a form incrementally
+## Entries
 
-`Form.make` binds a hand-written `Schema.Struct`. When you'd rather compose a form field by field — reusing field groups, merging them, and attaching whole-form (cross-field) rules — reach for `FormBuilder`:
+| Entry                          | Purpose                                                                                                                                                                        | Guides                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@thomasfosterau/effect-forms` | The only entry. Namespaces: `Form`, `FormBuilder`, `Field`, `State`, `Errors`, `Issues`, `FormData`, `Path`, `Coerce`, `Command`, `Constraints`, `Mode`, `Result`, `Validate`. | [Validation](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/validation.md), [Builder](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/builder.md), [Errors](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/errors.md), [Constraints](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/constraints.md), [Modules](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/forms/modules.md) |
 
-```ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import { Form, FormBuilder } from "@thomasfosterau/effect-forms";
+## Links
 
-const signup = FormBuilder.empty
-  .addField("email", Schema.String.check(Schema.isMinLength(3)))
-  .addField("password", Schema.String.check(Schema.isMinLength(8)))
-  .addField("confirm", Schema.String)
-  .addArrayField("tags", Schema.String) // an array field
-  .refine((v) =>
-    v.password === v.confirm ? undefined : { path: ["confirm"], issue: "Passwords must match" },
-  );
-
-// Bind it exactly like a schema (defaults are derived when omitted):
-const form = Form.fromBuilder(signup, { id: "signup" });
-declare const request: Request; // the incoming submission
-const state = await Effect.runPromise(form.validate(request));
-```
-
-`FormBuilder.buildSchema` collapses the builder into an ordinary `Schema.Struct` (array fields become `Schema.Array(item)`) with each synchronous `refine` applied as a struct-level check — so it decodes, derives constraints, and validates like any schema. `refineEffect` attaches an **asynchronous** whole-form rule (a uniqueness check against a service, say); Effect Schema has no effectful filter, so `Form.fromBuilder` runs those on the Effect validate path and folds their failures into the same error tree.
-
-A builder is typed by its `Schema.Struct` fields, `FormBuilder<F, RefineR>`: `buildSchema` returns `Schema.Struct<F>` itself (its decoding services are the fields' own), and `RefineR` collects only the services the `refineEffect` rules need. Without `defaults`, `Form.fromBuilder` seeds a schema-derived blank per field and types it as what it is, `Field.Blanks<F>` (`""`, `[]` or a struct of blanks, which need not be a valid encoded value); pass `defaults` (the encoded values) to type the blank form as `FormBuilder.Encoded<F>`.
-
-Modules are exposed as Effect-style namespaces (`Form`, `State`, `Result`, `Errors`, …). `Form.make(schema, { defaults })` is the server-side validate-and-seed entry point:
-
-- **`validate(input)`** accepts a `FormData`, `URLSearchParams`, `Request`, or a plain object. It parses the body (nested `author.name` / `tags[0]` / `tags[]` notation), decodes it through the schema collecting **every** field error (`errors: "all"`), and returns a serialisable [`FormState`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/State.ts) — valid with the decoded data, or invalid with the nested [`FormErrors`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Errors.ts) tree and the **posted values preserved** so the form re-renders what the user typed. It is an `Effect`, so a schema that requires decoding services composes naturally; it never fails on the error channel (validation failures live in the returned state). A `Request` whose body can't be read as a form dies with `Form.UnreadableBody`, carrying the platform's rejection in `cause`.
-- **`empty()`** seeds a blank, unposted form from the defaults — what a `load` returns to render a create form.
-
-## API
-
-| Module                                                                                                       | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Form`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Form.ts)               | `make` — bind a schema to a form (validate + empty); `fromBuilder` — bind a `FormBuilder`.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| [`FormBuilder`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/FormBuilder.ts) | Compose a form field by field: `addField` / `addArrayField` / `merge` / `refine` / `refineEffect` / `buildSchema`.                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| [`Field`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Field.ts)             | `makeField` / `makeArrayField` field defs + guards, and blank-default derivation from a schema — `defaultValue` / `defaultEncodedValues` / `blankValues` (typed `BlankValue` / `Blanks<F>`) for a builder field, `schemaAt` / `defaultItemAt` for any nested path.                                                                                                                                                                                                                                                                 |
-| [`State`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/State.ts)             | `FormState`, `make`, `withMessage`, `withError`, `isValid`, `FormStateSchema` (transport).                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| [`Errors`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Errors.ts)           | The nested `FormErrors` tree + `issuesToErrors` / `flattenErrors` / `getError` / `setError` / `mergeErrors` / `remapIndices`; `SourcedErrors` per-source tracking via `replaceAt` / `setSourceAt` / `clearSourceAt` / `mergeSourced`.                                                                                                                                                                                                                                                                                              |
-| [`Issues`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Issues.ts)           | `FormIssue` + the Effect Schema issue-tree walker.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| [`FormData`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/FormData.ts)       | `formDataToObject` / `parseFieldPath` — structured parsing of an HTML body.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| [`Path`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Path.ts)               | `getAt` / `setAt` (immutable) along a `FormPath` over a `FormValue` tree (the form-data domain type: `FormLeaf` scalars, `Date`s, `Blob`s, arrays and records), `toString` / `fromString` notation conversion, the type-level `FieldPath<T>` / `PathValue<T, P>` deep-key projections a typed field handle is built on, and the `IndexMap` constructors (`removeAt` / `insertAt` / `swapAt` / `moveAt` / `replaceAt` / `clearAll`) + `remapIndex` / `remapKeyedRecord` for keeping per-index state in sync with an array mutation. |
-| [`Coerce`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Coerce.ts)           | Tri-state (value / `null` / `undefined`) coercers for the form boundary.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| [`Command`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Command.ts)         | Derive form-input schemas, blank defaults and tri-state create / update adapters from a command-struct pair: `plan`, `formInputFields`, `blankDefaults`, `createAdapter`, `updateAdapter`, `jsonRowsFromField`.                                                                                                                                                                                                                                                                                                                    |
-| [`Constraints`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Constraints.ts) | `constraintsFromSchema` — native input attributes (`required`, `minlength`/`maxlength`, `min`/`max`, `pattern`, `step`) derived from the schema AST, including into array items; `constraintAt` reads one field's leaf out of the derived tree.                                                                                                                                                                                                                                                                                    |
-| [`Mode`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Mode.ts)               | `FormMode` + `parse` — when a form validates (`onSubmit` / `onBlur` / `onChange`), whether it auto-submits, and when a posted form revalidates (`revalidate`).                                                                                                                                                                                                                                                                                                                                                                     |
-| [`Result`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Result.ts)           | `FormActionResult` — the framework-neutral submission outcome (success / failure / redirect / error).                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| [`Validate`](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/src/Validate.ts)       | `validateValue` / `validateValueSync` — ad-hoc value/field validation (the sync one takes a `ServiceFreeSchema`); `FieldValidators` + `runSyncFieldValidator` / `runAsyncFieldValidator` — per-field sync/async validators (debounced, fiber-cancellable).                                                                                                                                                                                                                                                                         |
-
-## Notes
-
-- **Coercion is the schema's job.** An HTML body is all strings; build the schema from coercing leaves (`Schema.FiniteFromString`, `Schema.BooleanFromString`, the `Coerce` helpers) so the parsed object decodes cleanly. The parser never guesses types.
-- **Errors nest by field.** Leaf fields are `string[]`; nested objects / array indices nest; a branch's own (cross-field) message lives under `_errors`. The tree is plain JSON — it crosses the SSR boundary unchanged.
-- **Update semantics.** The `Coerce` helpers honour the value / `null` / `undefined` contract (set / clear / carry-forward) for partial updates.
-- **Constraint derivation reads schema checks, not just optionality.** `constraintsFromSchema` walks each property's `.check()`s for the `meta` annotation Effect Schema's built-in checks carry (`isMinLength`, `isBetweenLength`, `isPattern`, `isGreaterThanOrEqualTo`, `isBetween`, `isMultipleOf`, `isInt`, …), unwraps `optional` / `NullOr` unions, and descends into struct and array-item shapes. A check with no recognised `meta` tag (a bare `Schema.filter` predicate) derives nothing — there's no attribute to guess at. Anything the walk can't (or shouldn't) infer goes through the `overrides` argument, which always wins on conflict.
-- **Errors have a source.** `Errors.SourcedErrors` keeps a `client` tree (browser-side validation) parallel to a `server` tree (the last submission), merged for display by `mergeSourced`. `Errors.replaceAt` / `setSourceAt` / `clearSourceAt` update one path in one source without disturbing the rest — what a reactive store needs so a server-reported failure survives a client revalidation of some _other_ field, but clears once its own field changes.
+- [Documentation index](https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/README.md)
+- [Changelog](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/CHANGELOG.md)
+- The per-export API reference is the doc comment on each export.
 
 ## License
 

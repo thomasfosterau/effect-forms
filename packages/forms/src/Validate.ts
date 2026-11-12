@@ -37,9 +37,9 @@ import {
 
 /** The outcome of validating a value against a schema. */
 export type ValidationResult<A> =
-  | { readonly valid: true; readonly data: A }
+  | { readonly isValid: true; readonly data: A }
   | {
-      readonly valid: false;
+      readonly isValid: false;
       readonly errors: FormErrors;
       readonly issues: ReadonlyArray<FormIssue>;
     };
@@ -55,13 +55,13 @@ export type ServiceFreeSchema = Schema.Top & Schema.ConstraintDecoder<unknown>;
 /** The {@link ValidationResult} a decode failure folds into. */
 const invalid = <A>(issue: SchemaIssue.Issue, format?: LeafFormatter): ValidationResult<A> => {
   const issues = schemaIssuesToFormIssues(issue, format);
-  return { valid: false, errors: issuesToErrors(issues), issues };
+  return { isValid: false, errors: issuesToErrors(issues), issues };
 };
 
 /**
  * Decode the form data tree `input` through `schema`, returning a
  * {@link ValidationResult} on the success channel (decode failures become
- * `valid: false`, not an Effect failure). Decoding-service requirements
+ * `isValid: false`, not an Effect failure). Decoding-service requirements
  * propagate on the `R` channel.
  */
 export function validateValue<S extends Schema.Top>(
@@ -71,7 +71,7 @@ export function validateValue<S extends Schema.Top>(
 ): Effect.Effect<ValidationResult<S["Type"]>, never, S["DecodingServices"]> {
   return SchemaParser.decodeEffect(schema, { errors: "all" })(input).pipe(
     Effect.match({
-      onSuccess: (data): ValidationResult<S["Type"]> => ({ valid: true, data }),
+      onSuccess: (data): ValidationResult<S["Type"]> => ({ isValid: true, data }),
       onFailure: (issue) => invalid<S["Type"]>(issue, format),
     }),
   );
@@ -89,7 +89,7 @@ export function validateValueSync<S extends ServiceFreeSchema>(
   format?: LeafFormatter,
 ): ValidationResult<S["Type"]> {
   return Result.match(SchemaParser.decodeResult(schema, { errors: "all" })(input), {
-    onSuccess: (data): ValidationResult<S["Type"]> => ({ valid: true, data }),
+    onSuccess: (data): ValidationResult<S["Type"]> => ({ isValid: true, data }),
     onFailure: (issue) => invalid<S["Type"]>(issue, format),
   });
 }

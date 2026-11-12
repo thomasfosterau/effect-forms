@@ -89,7 +89,7 @@ export interface CommandPlan {
 }
 
 /** Per-field adapter overrides — the escape hatch for genuinely irregular coercion. */
-export type AdaptOverrides = Readonly<Record<string, (raw: FormInputValue) => unknown>>;
+export type AdaptOverrides = Readonly<Record<string, (raw: FormInputValue) => CommandPayloadValue>>;
 
 /**
  * A Form-Input schema field: any schema with no decoding or encoding service
@@ -115,6 +115,28 @@ const FormInputRecord = Schema.Record(Schema.String, FormInputValue);
 
 /** A validated all-string multipart input, as the Form-Input schemas produce it. */
 export type FormInputRecord = typeof FormInputRecord.Type;
+
+/**
+ * The wire shape of one encoded command field, as an adapter emits it: a JSON
+ * value (a set value, or `null` to clear), a {@link JsonRow} list, or
+ * `undefined` to skip (carry the stored value forward).
+ */
+const CommandPayloadValue = Schema.Union([
+  Schema.UndefinedOr(Schema.Json),
+  Schema.Array(Schema.suspend(() => JsonRow)),
+]);
+
+/** One encoded command field's value: a JSON value, a row list, or `undefined` to skip. */
+export type CommandPayloadValue = typeof CommandPayloadValue.Type;
+
+/** The wire shape of an encoded command payload, keyed by command field. */
+const CommandPayload = Schema.Record(Schema.String, CommandPayloadValue);
+
+/**
+ * An encoded command payload, as {@link createAdapter} / {@link updateAdapter}
+ * build it — ready for the command's own decode.
+ */
+export type CommandPayload = typeof CommandPayload.Type;
 
 // ── errors ────────────────────────────────────────────────────────────
 
@@ -450,7 +472,7 @@ export const jsonRowsFromField = (
 };
 
 /** Parse a JSON text (`JSON.parse` semantics) to a success or a failed `Exit`. */
-const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
+const decodeJson = SchemaParser.decodeUnknownExit(Schema.fromJsonString(Schema.Json));
 
 /** Coercion context for one field in one mode. */
 interface CoerceContext {
@@ -463,21 +485,21 @@ interface CoerceContext {
 }
 
 /** Text fields: trim always; required create fields never skip. */
-const coerceText = (ctx: CoerceContext, raw: FormInputValue): unknown =>
+const coerceText = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue =>
   ctx.required ? (raw ?? "").trim() : ctx.clearable ? trimToNull(raw) : trimToUndefined(raw);
 
 /** Id fields: no trimming (pickers emit `""` or a UUID); required create FKs pass through raw. */
-const coerceId = (ctx: CoerceContext, raw: FormInputValue): unknown =>
+const coerceId = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue =>
   ctx.required ? raw : ctx.clearable ? emptyToNull(raw) : emptyToUndefined(raw);
 
 /** Numeric text fields: blank clears on the clearable path, skips otherwise. */
-const coerceNumber = (ctx: CoerceContext, raw: FormInputValue): unknown =>
+const coerceNumber = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue =>
   ctx.clearable
     ? numberFromField(raw, { nullable: true })
     : numberFromField(raw, { nullable: false });
 
 /** Date fields stay encoded (`YYYY-MM-DD` strings); create trims, update passes through. */
-const coerceDate = (ctx: CoerceContext, raw: FormInputValue): unknown => {
+const coerceDate = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue => {
   const value = ctx.trimCreate ? raw?.trim() : raw;
   return ctx.clearable ? emptyToNull(value) : emptyToUndefined(value);
 };
@@ -490,7 +512,7 @@ const coerceDate = (ctx: CoerceContext, raw: FormInputValue): unknown => {
  * case it clears (`null`) instead — the create-defaults / update-skips
  * asymmetry the Content family already hand-writes.
  */
-const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): unknown => {
+const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): CommandPayloadValue => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") {
     return ctx.required ? false : ctx.clearable ? null : undefined;
@@ -509,7 +531,11 @@ const coerceBoolean = (ctx: CoerceContext, raw: FormInputValue): unknown => {
  * on a malformed row list — mapping that onto a framework response is the
  * caller's concern.
  */
-const structuredFromField = (raw: FormInputValue, clearable: boolean, label: string): unknown => {
+const structuredFromField = (
+  raw: FormInputValue,
+  clearable: boolean,
+  label: string,
+): Schema.Json | undefined => {
   const trimmed = raw?.trim();
   if (trimmed === undefined || trimmed === "") return clearable ? null : undefined;
   const decoded = decodeJson(trimmed);
@@ -527,7 +553,11 @@ const coerceContextFor = (field: FieldPlan, mode: "create" | "update"): CoerceCo
 });
 
 /** The default coercion for one field in one mode. */
-const coerce = (field: FieldPlan, mode: "create" | "update", raw: FormInputValue): unknown => {
+const coerce = (
+  field: FieldPlan,
+  mode: "create" | "update",
+  raw: FormInputValue,
+): CommandPayloadValue => {
   const ctx = coerceContextFor(field, mode);
   return Match.value(field.kind).pipe(
     Match.when(Match.is("text", "enum"), () => coerceText(ctx, raw)),
@@ -551,8 +581,8 @@ const adaptFields = (
   overrides: AdaptOverrides,
   mode: "create" | "update",
   input: FormInputRecord,
-): Array<readonly [string, unknown]> =>
-  Arr.flatMap(commandPlan.fields, (field): Array<readonly [string, unknown]> => {
+): Array<readonly [string, CommandPayloadValue]> =>
+  Arr.flatMap(commandPlan.fields, (field): Array<readonly [string, CommandPayloadValue]> => {
     if (mode === "create" ? !field.inCreate : !field.inUpdate) return [];
     const override = overrides[field.key];
     const raw = input[field.key];
@@ -566,7 +596,7 @@ const adaptFields = (
  */
 export const createAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
-  (input: FormInputRecord): Record<string, unknown> =>
+  (input: FormInputRecord): CommandPayload =>
     R.fromEntries([
       ...(commandPlan.clientId ? [["id", trimToUndefined(input.id)] as const] : []),
       ...adaptFields(commandPlan, overrides, "create", input),
@@ -580,7 +610,7 @@ export const createAdapter =
  */
 export const updateAdapter =
   (commandPlan: CommandPlan, overrides: AdaptOverrides = {}) =>
-  (input: FormInputRecord): Record<string, unknown> =>
+  (input: FormInputRecord): CommandPayload =>
     R.fromEntries([
       ["id", input.id] as const,
       ...adaptFields(commandPlan, overrides, "update", input),

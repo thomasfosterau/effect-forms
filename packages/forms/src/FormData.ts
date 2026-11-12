@@ -30,10 +30,10 @@ export type FormBodySource =
   | Iterable<readonly [string, FormDataEntryValue | string]>;
 
 /** A value in a parsed form body: a posted entry, or a container the path notation built. */
-type FormBodyValue = FormDataEntryValue | FormBodyRecord | Array<FormBodyValue>;
+export type FormBodyValue = FormDataEntryValue | FormBodyRecord | Array<FormBodyValue>;
 
-/** An object node of a parsed form body, keyed by path token. */
-interface FormBodyRecord {
+/** An object node of a parsed form body, keyed by path token — what {@link formDataToObject} returns. */
+export interface FormBodyRecord {
   [token: string]: FormBodyValue;
 }
 
@@ -148,7 +148,7 @@ function entriesOf(source: FormBodySource): Iterable<readonly [string, FormDataE
  * // { author: { name: "Ada" }, tags: ["math", "engines"] }
  * ```
  */
-export function formDataToObject(source: FormBodySource): Record<string, unknown> {
+export function formDataToObject(source: FormBodySource): FormBodyRecord {
   return Arr.reduce(entriesOf(source), R.empty<string, FormBodyValue>(), (root, [name, value]) => {
     const tokens = parseFieldPath(name);
     if (Arr.isReadonlyArrayNonEmpty(tokens)) assign(root, tokens, value);
@@ -157,7 +157,7 @@ export function formDataToObject(source: FormBodySource): Record<string, unknown
 }
 
 /** Read and parse a `Request`'s form body. Errors (e.g. wrong content-type) reject. */
-export async function requestToObject(request: Request): Promise<Record<string, unknown>> {
+export async function requestToObject(request: Request): Promise<FormBodyRecord> {
   const formData = await request.formData();
   return formDataToObject(formData);
 }

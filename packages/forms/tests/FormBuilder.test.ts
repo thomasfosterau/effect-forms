@@ -56,12 +56,12 @@ describe("FormBuilder sync refine (cross-field)", () => {
 
   it("passes when the cross-field rule holds", () => {
     const state = run(form.validate({ password: "secret", confirm: "secret" }));
-    expect(state.valid).toBe(true);
+    expect(state.isValid).toBe(true);
   });
 
   it("routes a cross-field failure to the targeted field", () => {
     const state = run(form.validate({ password: "secret", confirm: "nope" }));
-    expect(state.valid).toBe(false);
+    expect(state.isValid).toBe(false);
     expect(getError(state.errors, ["confirm"])).toEqual(Option.some(["must match"]));
   });
 });
@@ -83,7 +83,7 @@ describe("FormBuilder refinements attached before later fields", () => {
     expect(
       getError(run(form.validate({ password: "taken", confirm: "" })).errors, ["password"]),
     ).toEqual(Option.some(["taken"]));
-    expect(run(form.validate({ password: "fine", confirm: "" })).valid).toBe(true);
+    expect(run(form.validate({ password: "fine", confirm: "" })).isValid).toBe(true);
   });
 });
 
@@ -110,7 +110,7 @@ describe("Form.fromBuilder", () => {
 
   it("retains posted values on a field failure", () => {
     const state = run(form.validate({ name: "A", tags: ["x"] }));
-    expect(state.valid).toBe(false);
+    expect(state.isValid).toBe(false);
     expect(state.data.name).toBe("A");
     expect(Option.isSome(getError(state.errors, ["name"]))).toBe(true);
   });
@@ -126,12 +126,12 @@ describe("FormBuilder async refineEffect", () => {
 
   it("passes when the async rule holds", () => {
     const state = run(form.validate({ name: "free" }));
-    expect(state.valid).toBe(true);
+    expect(state.isValid).toBe(true);
   });
 
   it("folds an async failure into the error tree", () => {
     const state = run(form.validate({ name: "taken" }));
-    expect(state.valid).toBe(false);
+    expect(state.isValid).toBe(false);
     expect(getError(state.errors, ["name"])).toEqual(Option.some(["already taken"]));
   });
 });

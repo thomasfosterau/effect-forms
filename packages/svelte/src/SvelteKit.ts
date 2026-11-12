@@ -16,12 +16,16 @@ type FormState<A, Message = unknown> = State.FormState<A, Message>;
 
 /**
  * The minimal view of SvelteKit's `ActionResult` that {@link applyActionResult}
- * inspects — a failure carries the derived action's {@link FormActionData},
- * whose form data `A` is the caller's declared expectation of the action.
+ * inspects — a failure carries the derived action's {@link FormActionData}.
  */
-export interface ServerActionResult<A = unknown> {
+export interface ServerActionResult {
   readonly type: "success" | "failure" | "redirect" | "error";
-  readonly data?: FormActionData<A> | Record<string, unknown> | undefined;
+  /**
+   * The result's payload, unparsed: SvelteKit types it as an open record, and
+   * {@link applyActionResult} checks it for a carried {@link FormActionData}
+   * before reading it.
+   */
+  readonly data?: unknown;
 }
 
 /**
@@ -33,9 +37,12 @@ export interface ServerStateTarget<A> {
   setServerState(data: A, errors: Errors.FormErrors): void;
 }
 
-const isFormActionData = <A>(
-  data: ServerActionResult<A>["data"],
-): data is FormActionData<A> & { form: FormState<A> } =>
+/**
+ * Whether a result payload carries a {@link FormActionData} `form`. Only the
+ * key is checked: `A` is the caller's declared expectation of the action's
+ * form data, as with `EnhanceCore.isActionResponse`.
+ */
+const isFormActionData = <A>(data: unknown): data is FormActionData<A> & { form: FormState<A> } =>
   P.isObjectOrArray(data) && P.hasProperty(data, "form") && Boolean(data.form);
 
 /**
@@ -48,9 +55,9 @@ const isFormActionData = <A>(
  */
 export function applyActionResult<A>(
   form: ServerStateTarget<A>,
-  result: ServerActionResult<A>,
+  result: ServerActionResult,
 ): boolean {
-  if (result.type !== "failure" || !isFormActionData(result.data)) return false;
+  if (result.type !== "failure" || !isFormActionData<A>(result.data)) return false;
   const state = result.data.form;
   form.setServerState(state.data, state.errors);
   return true;

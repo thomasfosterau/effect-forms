@@ -114,7 +114,7 @@ function unwrapToStructured(ast: SchemaAST.AST): SchemaAST.AST {
 /** A seeded blank value: `""` for a leaf, `[]` for an array, a struct of blanks for a struct. */
 export type BlankValue = "" | Array<never> | BlankStruct;
 
-/** A struct of {@link BlankValue}s, one per property. */
+/** A struct of {@link BlankValue}s, one per property — what {@link defaultEncodedValues} seeds. */
 export interface BlankStruct {
   readonly [key: string]: BlankValue;
 }
@@ -180,7 +180,7 @@ export function defaultItemAt(schema: Schema.Top, path: FormPath): BlankValue {
 }
 
 /** Seed a blank encoded value for every field: `[]` for arrays, `""` otherwise. */
-export function defaultEncodedValues(fields: FieldsRecord): Record<string, BlankValue> {
+export function defaultEncodedValues(fields: FieldsRecord): BlankStruct {
   return R.map(fields, (def) => (isArrayFieldDef(def) ? [] : defaultValue(def.schema)));
 }
 

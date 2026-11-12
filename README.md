@@ -17,7 +17,7 @@ pnpm add @thomasfosterau/effect-forms-svelte svelte
 pnpm add @sveltejs/kit
 ```
 
-`effect` (and `svelte`, for the bindings) are peer dependencies — the packages never bundle their own copy. Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so a single resolved version matters. Each package's README is its API reference.
+`effect` (and `svelte`, for the bindings) are peer dependencies; the packages never bundle their own copy, and a single resolved `effect` version matters.
 
 ## Example
 
@@ -36,11 +36,11 @@ const signupForm = Form.make(Signup, { id: "signup", defaults: { name: "", age: 
 // On the server: decode a submission (FormData, URLSearchParams, Request or a plain object).
 const body = new URLSearchParams({ name: "A", age: "forty" });
 const state = await Effect.runPromise(signupForm.validate(body));
-// state.valid === false; state.errors.name and state.errors.age hold the messages;
+// state.isValid === false; state.errors.name and state.errors.age hold the messages;
 // state.data keeps what was posted, so the form re-renders it.
 ```
 
-In a Svelte 5 component, `createForm(state, { schema: Signup })` from `@thomasfosterau/effect-forms-svelte` turns that state into a reactive store with progressive-enhancement submission and client-side validation against the same schema. See each package's README for the full API.
+In a Svelte 5 component, `createForm(state, { schema: Signup })` from `@thomasfosterau/effect-forms-svelte` turns that state into a reactive store with progressive-enhancement submission and client-side validation against the same schema. The guides in [`docs/`](docs/README.md) cover the full API; the per-export reference is the doc comment on each export.
 
 ## Development
 

@@ -34,17 +34,22 @@ import { blankValues, type Blanks } from "./Field.ts";
 import { issuesToErrors } from "./Errors.ts";
 import {
   buildSchema,
-  type Encoded,
+  type Encoded as BuilderEncoded,
   type FormBuilder,
   runAsyncRefinements,
   type Values,
 } from "./FormBuilder.ts";
-import { formDataToObject, requestToObject } from "./FormData.ts";
+import { type FormBodyRecord, formDataToObject, requestToObject } from "./FormData.ts";
 import { type LeafFormatter, schemaIssuesToFormIssues } from "./Issues.ts";
 import { type FormState, make as makeFormState, type MakeFormStateOptions } from "./State.ts";
 
-/** Everything {@link Form.validate} accepts. Omitting the input means "no submission". */
-export type FormInput = FormData | URLSearchParams | Request | Record<string, unknown>;
+/**
+ * Everything {@link Form.validate} accepts: a posted body (`FormData`,
+ * `URLSearchParams`, or a `Request` carrying one), or an already-structured
+ * object of the schema's `Encoded` type. Omitting the input means "no
+ * submission".
+ */
+export type FormInput<Encoded> = FormData | URLSearchParams | Request | Encoded;
 
 /** Options for {@link make}. */
 export interface MakeFormOptions<S extends Schema.Top> {
@@ -78,8 +83,11 @@ export interface Form<
   readonly constraints: InputConstraints;
   /** Seed a blank, unposted form from the defaults. */
   empty(overrides?: MakeFormStateOptions<Message>): FormState<Blank, Message>;
-  /** Parse a form body (no decode) into a structured object. */
-  parse(input: FormData | URLSearchParams | Record<string, unknown>): Record<string, unknown>;
+  /**
+   * Parse a form body (no decode) into a structured object; an
+   * already-structured object passes through.
+   */
+  parse(input: FormData | URLSearchParams | S["Encoded"]): FormBodyRecord | S["Encoded"];
   /**
    * Validate a submission into a {@link FormState}. Never fails on the error
    * channel — schema failures become `errors` on the returned (invalid) state.
@@ -87,7 +95,9 @@ export interface Form<
    * A `Request` whose body can't be read as a form dies with
    * {@link UnreadableBody}.
    */
-  validate(input?: FormInput): Effect.Effect<FormState<S["Type"] | Blank, Message>, never, R>;
+  validate(
+    input?: FormInput<S["Encoded"]>,
+  ): Effect.Effect<FormState<S["Type"] | Blank, Message>, never, R>;
 }
 
 /** {@link Form.parse}: flatten a posted body, pass a plain record through. */
@@ -110,7 +120,9 @@ export class UnreadableBody extends Schema.TaggedError<
 }) {}
 
 /** The submission as a structured object, or `None` for no submission. */
-const toStructured = (input?: FormInput): Effect.Effect<Option.Option<Record<string, unknown>>> => {
+const toStructured = <Encoded>(
+  input?: FormInput<Encoded>,
+): Effect.Effect<Option.Option<FormBodyRecord | Encoded>> => {
   if (input === undefined) return Effect.succeedNone;
   if (input instanceof Request) {
     return Effect.tryPromise({
@@ -143,7 +155,7 @@ const toStructured = (input?: FormInput): Effect.Effect<Option.Option<Record<str
  * )
  *
  * const state = Effect.runSync(signup.validate(new URLSearchParams({ name: "A" })))
- * console.log(state.valid) // false
+ * console.log(state.isValid) // false
  * console.log(state.data) // { name: "A" } — the posted value, kept for re-render
  * ```
  */
@@ -173,8 +185,8 @@ function bind<S extends Schema.Top, Message, Blank>(
   const empty: Form<S, Message, Blank>["empty"] = (overrides = {}) =>
     makeFormState<Blank, Message>(defaults, {
       id,
-      valid: false,
-      posted: false,
+      isValid: false,
+      isPosted: false,
       constraints,
       ...overrides,
     });
@@ -193,24 +205,28 @@ function bind<S extends Schema.Top, Message, Blank>(
                   Effect.succeed(
                     makeFormState<S["Type"], Message>(data, {
                       id,
-                      valid: true,
-                      posted: true,
+                      isValid: true,
+                      isPosted: true,
                       constraints,
                     }),
                   ),
                 onFailure: (issue) => {
+                  // Only an object submission has properties to merge.
+                  const postedFields = P.isObjectOrArray(object) ? object : {};
                   // SAFETY: `FormState.data` on a failed decode is, by its documented
                   // contract, the posted values merged over the defaults (so the form
                   // re-renders what the user typed), typed as `S["Type"]` though not
                   // decoded. Only object defaults have properties to merge.
                   const posted = (
-                    P.isObjectKeyword(defaults) ? { ...defaults, ...object } : { ...object }
+                    P.isObjectKeyword(defaults)
+                      ? { ...defaults, ...postedFields }
+                      : { ...postedFields }
                   ) as S["Type"];
                   return Effect.succeed(
                     makeFormState<S["Type"], Message>(posted, {
                       id,
-                      valid: false,
-                      posted: true,
+                      isValid: false,
+                      isPosted: true,
                       constraints,
                       errors: issuesToErrors(schemaIssuesToFormIssues(issue, leafFormatter)),
                     }),
@@ -230,7 +246,7 @@ export interface FromBuilderOptions<F extends Schema.Struct.Fields> {
   /** Distinguishes multiple forms on a page. Defaults to `"default"`. */
   readonly id?: string;
   /** Blank-form values. Defaults to a schema-derived blank per field ({@link Blanks}). */
-  readonly defaults?: Encoded<F>;
+  readonly defaults?: BuilderEncoded<F>;
   /** Override the per-leaf message rendering. */
   readonly leafFormatter?: LeafFormatter;
   /** Constraint overrides deep-merged over the AST-derived tree. */
@@ -265,8 +281,8 @@ export type BuilderForm<F extends Schema.Struct.Fields, RefineR, Message, Blank>
  */
 export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = unknown>(
   builder: FormBuilder<F, RefineR>,
-  options: FromBuilderOptions<F> & { readonly defaults: Encoded<F> },
-): BuilderForm<F, RefineR, Message, Encoded<F>>;
+  options: FromBuilderOptions<F> & { readonly defaults: BuilderEncoded<F> },
+): BuilderForm<F, RefineR, Message, BuilderEncoded<F>>;
 export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = unknown>(
   builder: FormBuilder<F, RefineR>,
   options?: FromBuilderOptions<F> & { readonly defaults?: never },
@@ -274,19 +290,28 @@ export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = u
 export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = unknown>(
   builder: FormBuilder<F, RefineR>,
   options: FromBuilderOptions<F> = {},
-): BuilderForm<F, RefineR, Message, Encoded<F> | Blanks<F>> {
+): BuilderForm<F, RefineR, Message, BuilderEncoded<F> | Blanks<F>> {
   const schema = buildSchema(builder);
-  const defaults: Encoded<F> | Blanks<F> = options.defaults ?? blankValues(builder.structFields);
-  const base = bind<Schema.Struct<F>, Message, Encoded<F> | Blanks<F>>(schema, options, defaults);
+  const defaults: BuilderEncoded<F> | Blanks<F> =
+    options.defaults ?? blankValues(builder.structFields);
+  const base = bind<Schema.Struct<F>, Message, BuilderEncoded<F> | Blanks<F>>(
+    schema,
+    options,
+    defaults,
+  );
 
   const decode = SchemaParser.decodeUnknownEffect(schema, { errors: "all" });
 
-  const validate: BuilderForm<F, RefineR, Message, Encoded<F> | Blanks<F>>["validate"] = (input) =>
+  const validate: BuilderForm<F, RefineR, Message, BuilderEncoded<F> | Blanks<F>>["validate"] = (
+    input,
+  ) =>
     toStructured(input).pipe(
       Effect.flatMap((submitted) =>
         Option.match(submitted, {
           onNone: () =>
-            Effect.succeed<FormState<Values<F> | Encoded<F> | Blanks<F>, Message>>(base.empty()),
+            Effect.succeed<FormState<Values<F> | BuilderEncoded<F> | Blanks<F>, Message>>(
+              base.empty(),
+            ),
           onSome: (object) => {
             // On a failed validation the state carries the posted values merged
             // over the blank, so the form re-renders what the user typed.
@@ -300,15 +325,15 @@ export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = u
                         onEmpty: () =>
                           makeFormState<Values<F>, Message>(data, {
                             id: base.id,
-                            valid: true,
-                            posted: true,
+                            isValid: true,
+                            isPosted: true,
                             constraints: base.constraints,
                           }),
                         onNonEmpty: (failures) =>
-                          makeFormState<Encoded<F> | Blanks<F>, Message>(posted, {
+                          makeFormState<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
                             id: base.id,
-                            valid: false,
-                            posted: true,
+                            isValid: false,
+                            isPosted: true,
                             constraints: base.constraints,
                             errors: issuesToErrors(failures),
                           }),
@@ -317,10 +342,10 @@ export function fromBuilder<F extends Schema.Struct.Fields, RefineR, Message = u
                   ),
                 onFailure: (issue) =>
                   Effect.succeed(
-                    makeFormState<Encoded<F> | Blanks<F>, Message>(posted, {
+                    makeFormState<BuilderEncoded<F> | Blanks<F>, Message>(posted, {
                       id: base.id,
-                      valid: false,
-                      posted: true,
+                      isValid: false,
+                      isPosted: true,
                       constraints: base.constraints,
                       errors: issuesToErrors(
                         schemaIssuesToFormIssues(issue, options.leafFormatter),

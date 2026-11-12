@@ -37,7 +37,8 @@ export type FormLeaf = string | number | boolean | bigint | null | undefined | D
  * A form data tree: a {@link FormLeaf}, an array of trees, or a record of
  * trees. Every value a form holds, posts or validates is one, so it is what
  * {@link getAt} / {@link setAt} walk and what the reactive bindings serialise
- * into a form body.
+ * into a form body. A parsed body (`FormData.FormBodyValue`: strings, `File`s,
+ * arrays and records) is one; so is a `Field.BlankValue`.
  */
 export type FormValue = FormLeaf | ReadonlyArray<FormValue> | { readonly [key: string]: FormValue };
 

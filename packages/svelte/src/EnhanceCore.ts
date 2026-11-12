@@ -148,7 +148,7 @@ function isActionResult<A, Message>(value: unknown): value is FormActionResult<A
  * checked: `A` / `Message` are the caller's declared expectation, not verified.
  */
 function isFormState<A, Message>(value: unknown): value is FormState<A, Message> {
-  return P.isObjectOrArray(value) && "valid" in value && "data" in value && "errors" in value;
+  return P.isObjectOrArray(value) && "isValid" in value && "data" in value && "errors" in value;
 }
 
 /**
@@ -171,7 +171,7 @@ export function isActionResponse<A, Message>(body: unknown): body is ActionRespo
 /**
  * Normalise an {@link ActionResponse} into a {@link FormActionResult}. A full
  * action result passes through; a bare {@link FormState} maps to `Success` /
- * `Failure` by its `valid` flag, using `status` for the failure code. Check a
+ * `Failure` by its `isValid` flag, using `status` for the failure code. Check a
  * raw body with {@link isActionResponse} first.
  */
 export function parseActionResult<A, Message>(
@@ -179,7 +179,7 @@ export function parseActionResult<A, Message>(
   status = 200,
 ): FormActionResult<A, Message> {
   if ("_tag" in body) return body;
-  return body.valid ? success(body, status) : failure(body, status);
+  return body.isValid ? success(body, status) : failure(body, status);
 }
 
 /** The mutation a {@link FormActionResult} implies for the store. */
@@ -189,18 +189,18 @@ export interface FormUpdate<A, Message> {
   readonly message?: Message;
   readonly redirect?: string;
   readonly error?: string;
-  readonly valid?: boolean;
+  readonly isValid?: boolean;
 }
 
 /** The update a submitted {@link FormState} implies: its data, errors and (when set) message. */
 const stateUpdate = <A, Message>(
   state: FormState<A, Message>,
-  valid: boolean,
+  isValid: boolean,
 ): FormUpdate<A, Message> => {
   const update: Types.Mutable<FormUpdate<A, Message>> = {
     data: state.data,
     errors: state.errors,
-    valid,
+    isValid,
   };
   if (state.message !== undefined) update.message = state.message;
   return update;
@@ -218,7 +218,7 @@ export function resultToUpdate<A, Message>(
     Success: ({ state }) => stateUpdate(state, true),
     Failure: ({ state }) => stateUpdate(state, false),
     Redirect: ({ location }): FormUpdate<A, Message> => ({ redirect: location }),
-    Error: ({ message }): FormUpdate<A, Message> => ({ error: message, valid: false }),
+    Error: ({ message }): FormUpdate<A, Message> => ({ error: message, isValid: false }),
   });
 }
 

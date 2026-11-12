@@ -29,7 +29,7 @@ export function validateData(
   format?: LeafFormatter,
 ): FormErrors {
   const result = validateValueSync(schema, data, format);
-  return result.valid ? noErrors : result.errors;
+  return result.isValid ? noErrors : result.errors;
 }
 
 /**
