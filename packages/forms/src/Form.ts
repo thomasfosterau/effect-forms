@@ -223,17 +223,15 @@ function bind<S extends Schema.Top, Message, Blank>(
                 onFailure: (issue) => {
                   // Only an object submission has properties to merge.
                   const postedFields = P.isObjectOrArray(object) ? object : {};
-                  // SAFETY: `FormState.data` on a failed decode is, by its documented
-                  // contract, the posted values merged over the defaults (so the form
-                  // re-renders what the user typed), typed as `S["Type"]` though not
-                  // decoded. Only object defaults have properties to merge.
-                  const posted = (
-                    P.isObjectKeyword(defaults)
-                      ? { ...defaults, ...postedFields }
-                      : { ...postedFields }
-                  ) as S["Type"];
+                  // A failed decode holds the posted values merged over the blank (so
+                  // the form re-renders what the user typed), typed as the blank. Only
+                  // an object blank has properties to merge; any other blank is held
+                  // as it is.
+                  const posted: Blank = P.isObjectKeyword(defaults)
+                    ? { ...defaults, ...postedFields }
+                    : defaults;
                   return Effect.succeed(
-                    invalid<S["Type"], Message>(posted, {
+                    invalid<Blank, Message>(posted, {
                       id,
                       isPosted: true,
                       constraints,

@@ -27,8 +27,8 @@ A command is `(input, event) => Promise<O> | Effect<O, E>`. An Effect command mu
 
 `jsonapiFailure`, the default classifier, recognises:
 
-- `{ _tag: "JsonapiError", status, errors }`: effect-jsonapi's `ServerErrors.JsonapiError`, or any error of the same shape. Each error object goes to the field its `source.pointer` names (the whole attribute path: `/data/attributes/address/street` lands on `address.street`, `/data/attributes/tags/0` on `tags[0]`; see `pathFromPointer`), or to the root (the store's `formErrors`, `_errors` in the tree), at the cause's own status.
-- `{ _tag: "ErrorResponse", status, message, document }`: effect-jsonapi's client-side decoded error. The document's error objects are routed as above. With no document, the message goes to the root.
+- `{ _tag: "JsonapiError", status, errors }`: effect-jsonapi's `ServerErrors.JsonapiError`, or any error of the same shape. Each error object goes to the field its `source.pointer` names (the whole attribute path: `/data/attributes/address/street` lands on `address.street`, `/data/attributes/tags/0` on `tags[0]`; see `pathFromPointer`), or to the root (the store's `formErrors`, `_errors` in the tree), at the cause's own status. `errors` must be an array of well-formed JSON:API error objects (checked against `Document.ErrorObject`'s shape); otherwise the failure is not recognised.
+- `{ _tag: "ErrorResponse", status, message, document }`: effect-jsonapi's client-side decoded error. The document's error objects are routed as above. With no document (or one without well-formed error objects), the message goes to the root.
 - An `Error` with a numeric `status`, such as a transport's 413: its message goes to the root.
 - A `CommandRejected`: its `cause`, by the rules above.
 

@@ -98,6 +98,52 @@ export const detailOf = (error: ErrorObject, fallback = DEFAULT_MESSAGE): string
 
 const isStatus = (u: unknown): u is number => P.isNumber(u) && Number.isInteger(u);
 
+/** A JSON:API link: a URL (decoded) or its string form. */
+const Link = Schema.Union([Schema.URL, Schema.String]);
+
+/** A JSON:API link object. */
+const LinkObject = Schema.Struct({
+  href: Link,
+  rel: Schema.optionalKey(Schema.String),
+  describedby: Schema.optionalKey(Link),
+  title: Schema.optionalKey(Schema.String),
+  type: Schema.optionalKey(Schema.String),
+  hreflang: Schema.optionalKey(Schema.String),
+  meta: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+});
+
+/**
+ * The schema of a decoded JSON:API error object, mirroring effect-jsonapi's
+ * `Document.ErrorObject` (a type-only peer here, so its schema can't be
+ * imported): what a cause's `errors` are checked against before routing.
+ */
+const WireErrorObject = Schema.Struct({
+  id: Schema.optionalKey(Schema.String),
+  links: Schema.optionalKey(
+    Schema.Struct({
+      about: Schema.optionalKey(Schema.Union([Link, LinkObject])),
+      type: Schema.optionalKey(Schema.Union([Link, LinkObject])),
+    }),
+  ),
+  status: Schema.optionalKey(Schema.String),
+  code: Schema.optionalKey(Schema.String),
+  title: Schema.optionalKey(Schema.String),
+  detail: Schema.optionalKey(Schema.String),
+  source: Schema.optionalKey(
+    Schema.Union([
+      Schema.Struct({ pointer: Schema.String }),
+      Schema.Struct({ parameter: Schema.String }),
+      Schema.Struct({ header: Schema.String }),
+    ]),
+  ),
+  meta: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+});
+
+/** Whether `u` is an array of JSON:API error objects. */
+const isErrorObjects: (u: unknown) => u is ReadonlyArray<ErrorObject> = Schema.is(
+  Schema.Array(WireErrorObject),
+);
+
 /** A cause recognised by its `_tag` as effect-jsonapi's (or an application's) `JsonapiError`. */
 interface JsonapiErrorLike {
   readonly _tag: "JsonapiError";
@@ -118,11 +164,8 @@ const statusOf = (cause: JsonapiErrorLike | ErrorResponseLike | Error): Option.O
 // `JsonapiError`: `{ _tag: "JsonapiError", status, errors }`.
 const fromJsonapiError = (cause: JsonapiErrorLike): Option.Option<CommandFailure> =>
   Option.flatMap(statusOf(cause), (status) =>
-    P.hasProperty(cause, "errors") && Array.isArray(cause.errors)
-      ? // SAFETY: a `JsonapiError`-tagged cause carries JSON:API error objects in
-        // `errors` by that tag's contract (effect-jsonapi's `ServerErrors.JsonapiError`
-        // and the applications' own); causes are recognised structurally, not decoded.
-        Option.some(routed(status, cause.errors as ReadonlyArray<ErrorObject>))
+    P.hasProperty(cause, "errors") && isErrorObjects(cause.errors)
+      ? Option.some(routed(status, cause.errors))
       : Option.none(),
   );
 
@@ -135,11 +178,9 @@ const fromErrorResponse = (cause: ErrorResponseLike): Option.Option<CommandFailu
       P.hasProperty(cause, "document") && Option.isOption(cause.document)
         ? Option.flatMap(cause.document, (document) =>
             P.hasProperty(document, "errors") &&
-            Array.isArray(document.errors) &&
+            isErrorObjects(document.errors) &&
             Arr.isReadonlyArrayNonEmpty(document.errors)
-              ? // SAFETY: an `ErrorResponse`'s `document` is effect-jsonapi's decoded
-                // `ErrorDocument`, whose `errors` are JSON:API error objects.
-                Option.some(document.errors as ReadonlyArray<ErrorObject>)
+              ? Option.some(document.errors)
               : Option.none(),
           )
         : Option.none<ReadonlyArray<ErrorObject>>();
@@ -159,10 +200,11 @@ const fromErrorResponse = (cause: ErrorResponseLike): Option.Option<CommandFailu
  * The default classifier:
  *
  * - a `JsonapiError`-tagged cause (`{ status, errors }`) → its error objects,
- *   at its own status;
+ *   at its own status (`None` when `errors` is not an array of JSON:API error
+ *   objects);
  * - an `ErrorResponse`-tagged cause (effect-jsonapi's client-side decoded
  *   error) → its document's error objects, or its message when the response
- *   carried no document;
+ *   carried no document (or no well-formed error objects);
  * - an `Error` carrying a numeric `status` (a transport's status error, e.g.
  *   a 413 oversize upload the transport did not map to a document) → its
  *   message, at its own status;
