@@ -19,6 +19,7 @@
  */
 
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 
@@ -28,7 +29,23 @@ export type FormBodySource =
   | URLSearchParams
   | Iterable<readonly [string, FormDataEntryValue | string]>;
 
-type Container = Record<string, unknown> | unknown[];
+/** A value in a parsed form body: a posted entry, or a container the path notation built. */
+type FormBodyValue = FormDataEntryValue | FormBodyRecord | Array<FormBodyValue>;
+
+/** An object node of a parsed form body, keyed by path token. */
+interface FormBodyRecord {
+  [token: string]: FormBodyValue;
+}
+
+/** A node the path notation descends into: an object or an array. */
+type Container = FormBodyRecord | Array<FormBodyValue>;
+
+/**
+ * Whether a parsed value is a container to descend into. A posted `File` is a
+ * leaf, like a string: a later path that runs through it replaces it.
+ */
+const isContainer = (value: FormBodyValue): value is Container =>
+  Arr.isArray(value) || (P.isObject(value) && !(value instanceof File));
 
 /** A pending path token, dropped when empty. */
 const nonEmpty = (buffer: string): ReadonlyArray<string> => (buffer === "" ? [] : [buffer]);
@@ -64,7 +81,7 @@ const isIndexToken = (token: string): boolean => token === "" || /^\d+$/.test(to
 /** Create the container a token should live in: array for index/append tokens. */
 const makeContainer = (nextToken: string): Container => (isIndexToken(nextToken) ? [] : {});
 
-const setOnContainer = (container: Container, token: string, value: unknown): void => {
+const setOnContainer = (container: Container, token: string, value: FormBodyValue): void => {
   if (Arr.isArray(container)) {
     if (token === "") container.push(value);
     else container[Number(token)] = value;
@@ -73,17 +90,22 @@ const setOnContainer = (container: Container, token: string, value: unknown): vo
   }
 };
 
-const getFromContainer = (container: Container, token: string): unknown =>
-  Arr.isArray(container) ? container[Number(token)] : container[token];
+/** The value already at `token` in `container`, if any. */
+const getFromContainer = (container: Container, token: string): Option.Option<FormBodyValue> =>
+  Option.fromUndefinedOr(Arr.isArray(container) ? container[Number(token)] : container[token]);
 
 /** Assign `value` deep into `root` along `tokens`, creating containers as needed. */
-function assign(root: Container, tokens: Arr.NonEmptyReadonlyArray<string>, value: unknown): void {
+function assign(
+  root: Container,
+  tokens: Arr.NonEmptyReadonlyArray<string>,
+  value: FormDataEntryValue,
+): void {
   const last = Arr.lastNonEmpty(tokens);
   // Walk every token but the last, descending into (or creating) the
   // container each one names; `tokens[i + 1]` is the token after `token`.
   const node = Arr.reduce(Arr.initNonEmpty(tokens), root, (parent, token, i): Container => {
-    const child = token === "" ? undefined : getFromContainer(parent, token);
-    if (P.isObjectOrArray(child)) return child;
+    const child = token === "" ? Option.none() : getFromContainer(parent, token);
+    if (Option.isSome(child) && isContainer(child.value)) return child.value;
     const created = makeContainer(tokens[i + 1]);
     setOnContainer(parent, token, created);
     return created;
@@ -91,8 +113,8 @@ function assign(root: Container, tokens: Arr.NonEmptyReadonlyArray<string>, valu
   // A repeated bare key (no brackets) collapses into an array.
   if (last !== "" && !Array.isArray(node)) {
     const existing = getFromContainer(node, last);
-    if (existing !== undefined) {
-      const arr = Array.isArray(existing) ? existing : [existing];
+    if (Option.isSome(existing)) {
+      const arr = Array.isArray(existing.value) ? existing.value : [existing.value];
       arr.push(value);
       setOnContainer(node, last, arr);
       return;
@@ -102,7 +124,7 @@ function assign(root: Container, tokens: Arr.NonEmptyReadonlyArray<string>, valu
 }
 
 /** Normalise a source into `[name, value]` entries. */
-function entriesOf(source: FormBodySource): Iterable<readonly [string, unknown]> {
+function entriesOf(source: FormBodySource): Iterable<readonly [string, FormDataEntryValue]> {
   if (source instanceof FormData || source instanceof URLSearchParams) return source.entries();
   return source;
 }
@@ -127,7 +149,7 @@ function entriesOf(source: FormBodySource): Iterable<readonly [string, unknown]>
  * ```
  */
 export function formDataToObject(source: FormBodySource): Record<string, unknown> {
-  return Arr.reduce(entriesOf(source), R.empty<string, unknown>(), (root, [name, value]) => {
+  return Arr.reduce(entriesOf(source), R.empty<string, FormBodyValue>(), (root, [name, value]) => {
     const tokens = parseFieldPath(name);
     if (Arr.isReadonlyArrayNonEmpty(tokens)) assign(root, tokens, value);
     return root;

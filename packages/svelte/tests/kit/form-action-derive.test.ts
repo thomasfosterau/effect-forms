@@ -87,7 +87,7 @@ describe("formAction: locationFor must return a same-origin path", () => {
     );
     const thrown = await action(event({ name: "Acme" })).then(
       () => undefined,
-      (error: unknown) => error,
+      (cause: unknown) => cause,
     );
     expect(isRedirect(thrown)).toBe(true);
     expect(thrown).toMatchObject({ status: 303, location: "/organisations/org-1?tab=members" });
@@ -108,7 +108,7 @@ describe("formAction: locationFor must return a same-origin path", () => {
     );
     const thrown = await action(event({ name: "Acme" })).then(
       () => undefined,
-      (error: unknown) => error,
+      (cause: unknown) => cause,
     );
     expect(ran).toBe(true);
     expect(isRedirect(thrown)).toBe(false);
