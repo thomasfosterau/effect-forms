@@ -129,18 +129,16 @@ export function objectToFormData(data: unknown): FormData {
   return formData;
 }
 
+/** The `_tag`s of the four {@link FormActionResult} variants. */
+const ACTION_RESULT_TAGS = ["Success", "Failure", "Redirect", "Error"] as const;
+
 /**
  * Whether a value looks like a {@link FormActionResult} (carries a known
  * `_tag`). Only the tag is checked: `A` / `Message` are the caller's declared
  * expectation of the server's response, not verified here.
  */
 function isActionResult<A, Message>(value: unknown): value is FormActionResult<A, Message> {
-  return (
-    P.isObjectOrArray(value) &&
-    P.hasProperty(value, "_tag") &&
-    P.isString(value._tag) &&
-    ["Success", "Failure", "Redirect", "Error"].includes(value._tag)
-  );
+  return P.isObjectOrArray(value) && Arr.some(ACTION_RESULT_TAGS, (tag) => P.isTagged(value, tag));
 }
 
 /**

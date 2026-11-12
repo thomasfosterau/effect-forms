@@ -18,7 +18,7 @@ describe("the login example", () => {
     const session = transport(async () => {});
     await expect(
       actions.default(
-        event({ email: "a@example.test", _password: "hunter2", redirectTo: "/drafts" }, session),
+        event({ email: "a@example.test", password: "hunter2", redirectTo: "/drafts" }, session),
       ),
     ).rejects.toMatchObject({ status: 303, location: "/drafts" });
     expect(session.signIn).toHaveBeenCalledWith({
@@ -32,7 +32,7 @@ describe("the login example", () => {
     const session = transport(async () => {});
     await expect(
       actions.default(
-        event({ email: "a@example.test", _password: "x", redirectTo: "//evil.test" }, session),
+        event({ email: "a@example.test", password: "x", redirectTo: "//evil.test" }, session),
       ),
     ).rejects.toMatchObject({ location: "/" });
   });
@@ -42,13 +42,13 @@ describe("the login example", () => {
       throw new SessionCallError({ status: 401, message: "Unauthorized" });
     });
     const result = await actions.default(
-      event({ email: "a@example.test", _password: "wrong" }, session),
+      event({ email: "a@example.test", password: "wrong" }, session),
     );
     expect(result).toMatchObject({
       status: 401,
       data: {
         form: {
-          data: { email: "a@example.test", _password: "" },
+          data: { email: "a@example.test", password: "" },
           errors: { _errors: ["Invalid email or password"] },
         },
       },
@@ -61,7 +61,7 @@ describe("the login example", () => {
       throw outage;
     });
     await expect(
-      actions.default(event({ email: "a@example.test", _password: "x" }, session)),
+      actions.default(event({ email: "a@example.test", password: "x" }, session)),
     ).rejects.toBe(outage);
   });
 });
