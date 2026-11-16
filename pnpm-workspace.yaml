@@ -38,7 +38,7 @@ catalog:
   # version, failing `pnpm install` itself. Read the `components` table in
   # node_modules/@effect/tsgo/dist/effect-tsgo.cjs before bumping any of the
   # three.
-  "@effect/tsgo": 0.67.7
+  "@effect/tsgo": 0.69.0
   # `it.effect` / `it.layer` / `layer` for the Effect-running tests (owner
   # decision, #161): each test runs on @effect/vitest's harness, with the
   # TestClock and friends provided, instead of `Effect.run*` in a test body.
