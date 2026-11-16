@@ -65,7 +65,7 @@ catalog:
   # The tagged `TriState` (Assign / Clear / CarryForward) that effect-forms'
   # `Coerce` and `Command` return for partial-update fields, imported from its
   # `/TriState` subpath (a required peer of both packages, see `catalogs.peers`).
-  "@thomasfosterau/effect-ext": ^0.3.0
+  "@thomasfosterau/effect-ext": ^0.3.1
   "@types/node": ^26.6.6
   # Must equal the vitest that vite-plus bundles (see `vitest` below); vite-plus
   # refuses to run coverage on a mismatch.
