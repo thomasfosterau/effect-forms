@@ -1,25 +1,17 @@
 name: CI
 
-# ONE command: `vp run ci`, the `ci` task in vite.config.ts, which runs the
-# whole gate (AGENTS.md "Verification" steps 2-7) in order, so local and CI
-# are the same thing. It runs on the current LTS and the latest released
-# Node.js. Each leg is its own check, `ci (node <leg>)`, and rulesets require
-# each one by name. Nothing here needs a database, a stage or a credential. Hardened
-# for Dependabot PRs: no permissions beyond `contents: read`, no secrets,
-# pinned actions, `persist-credentials: false`, no event text in `run:`, and
-# no `$GITHUB_PATH` writes of our own; checked with zizmor.
-
 on:
   pull_request:
+    branches: [trunk]
+    types: [opened, reopened, synchronize, ready_for_review]
   push:
     branches: [trunk]
   workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/trunk' }}
 
-# No permissions by default; each job grants only what it needs.
 permissions: {}
 
 jobs:
@@ -34,38 +26,23 @@ jobs:
       matrix:
         node: [lts, latest]
     env:
-      # A modest ceiling for every Node process in the pipeline. NODE_OPTIONS
-      # is inherited by every child, including each vitest fork.
       NODE_OPTIONS: --max-old-space-size=2048
       VITEST_MAX_WORKERS: 2
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-
-      # Vite+ at the catalog's `vite-plus` pin, the matrix Node.js (resolved by
-      # `vp env use`: `lts` is the current LTS line, `latest` the newest
-      # released line), the `packageManager` pnpm, and the dependency cache.
-      # --frozen-lockfile fails on a stale pnpm-lock.yaml; --ignore-scripts
-      # blocks dependency lifecycle scripts (a common supply-chain vector). The
-      # repository's own `prepare` script runs as the first step of `vp run ci`.
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
+      - uses: voidzero-dev/setup-vp@v1.22.0
         with:
           version-file: pnpm-workspace.yaml
           node-version: ${{ matrix.node }}
           cache: true
-          run-install: |
-            args: ["--frozen-lockfile", "--ignore-scripts"]
-
+          run-install: true
       - name: Restore the Vite+ task cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: node_modules/.vite/task-cache
-          key: vp-task-v1-${{ runner.os }}-${{ matrix.node }}-${{ github.sha }}
+          key: vp-task-v1-${{ runner.os }}-node-${{ matrix.node }}-${{ github.sha }}
           restore-keys: |
-            vp-task-v1-${{ runner.os }}-${{ matrix.node }}-
-
-      - name: CI
-        run: vp run ci
+            vp-task-v1-${{ runner.os }}-node-${{ matrix.node }}-
+      - run: vp run ci

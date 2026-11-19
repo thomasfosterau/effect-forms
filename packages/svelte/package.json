@@ -27,7 +27,7 @@
     "dist",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE.md"
   ],
   "type": "module",
   "sideEffects": false,
@@ -48,9 +48,6 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "scripts": {
-    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@thomasfosterau/effect-forms": "workspace:^"

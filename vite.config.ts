@@ -1,28 +1,10 @@
-/**
- * Workspace-root Vite+ configuration. Owns the repo-wide format / lint /
- * staged passes (read statically by `vp fmt` / `vp lint` / `vp staged`) and
- * the root aggregate tasks (`check`, `docgen`, `test:coverage`). Each
- * package's own tasks and `pack` / `test` config live in its own
- * `vite.config.ts` (`packages/forms`, `packages/svelte`).
- *
- * The shape is the library standard's (effect-web's root config); the
- * comments that explain a load-bearing decision travel with it.
- *
- * @copyright Thomas Foster
- */
-
 import { recommended } from "@effect/tsgo/oxlint-presets";
 import effect from "@enfect/oxlint";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
-  // Staged-file checks run by `vp staged` (the pre-commit hook).
-  // Format with fixes, lint WITHOUT them: `vp check --fix` would also apply
-  // the autofixes of type-aware rules (such as
-  // `no-unnecessary-type-assertion`) to staged files at commit time, so the
-  // commit would differ from the tree that was verified.
-  // `--no-error-on-unmatched-pattern`: a commit that stages only CSS / JSON /
-  // Markdown leaves the lint step no file to lint.
+  // Format with fixes, lint without: a type-aware autofix at commit time would
+  // make the commit differ from the tree that was verified.
   staged: {
     "*.{js,ts,css,json,md}": [
       "vp check --fix --no-lint",
@@ -45,9 +27,6 @@ export default defineConfig({
       suspicious: "error",
       perf: "error",
     },
-    // Every rule is at `error`, and nothing is disabled inline. The only
-    // exceptions are the scoped `off` overrides below: sites where a rule
-    // cannot apply, each with its reason. A new override needs the same.
     rules: {
       "effect/prefer-namespace-imports": "error",
       "effect/casting-awareness": "error",
@@ -58,7 +37,7 @@ export default defineConfig({
 
       "vite-plus/prefer-vite-plus-imports": "error",
 
-      // ---- @effect/tsgo preset rules the preset leaves at `warn` (#116) ----
+      // @effect/tsgo preset rules the preset leaves at `warn`.
       "effecttsgo/schema-class-missing-brand": "error",
       "effecttsgo/schema-number": "error",
       "effecttsgo/effect-succeed-with-void": "error",
@@ -67,28 +46,22 @@ export default defineConfig({
       "effecttsgo/prefer-typed-schema-decoder": "error",
       "effecttsgo/unstable-api-usage": "error",
 
-      // ---- Type-aware rules (tsgolint, #91) --------------------------------
       "typescript/no-unsafe-type-assertion": "error",
       "effecttsgo/any-unknown-in-error-context": "error",
       "effecttsgo/unsafe-effect-type-assertion": "error",
       "typescript/no-unnecessary-type-parameters": "error",
       "typescript/no-generated-empty-object-type": "error",
 
-      // ---- Oxlint's own plugins ---------------------------------------------
       "eslint/no-underscore-dangle": "error",
       "vitest/require-mock-type-parameters": "error",
-      // `@effect/vitest`'s `it.effect` / `it.live` (and the `it` a `layer`
-      // block hands its callback) register a test like `it` does, so an
-      // `expect` in their body is inside a test, not standalone (#161).
+      // `@effect/vitest`'s testers are test blocks too.
       "vitest/no-standalone-expect": [
         "error",
         { additionalTestBlockFunctions: ["it.effect", "it.live"] },
       ],
     },
-    // ---- Can't-apply sites ----------------------------------------------------
     overrides: [
-      // `@effect/vitest` marks `it` / `layer` unstable, and every suite that
-      // runs an Effect uses them (the test convention in AGENTS.md).
+      // `@effect/vitest` marks `it` / `layer` unstable.
       {
         files: ["**/tests/**"],
         rules: {
@@ -98,8 +71,7 @@ export default defineConfig({
       // The store's default submit is an Effect `HttpClient` over
       // `FetchHttpClient.layer`, and `effect/http/*` is marked unstable.
       // `message` mirrors the wire `FormState.message?` and is rendered
-      // directly in markup (family decision: Svelte-rendered / wire-mirroring
-      // values stay native). `#detachedData` claims `A` back from
+      // directly in markup. `#detachedData` claims `A` back from
       // `$state.snapshot`, whose `Snapshot<A>` can't be related to a generic
       // `A` (`// SAFETY:` at the site).
       {
@@ -130,16 +102,8 @@ export default defineConfig({
         },
       },
     ],
-    // Type-aware linting through oxlint-tsgolint (bundled with Vite+; patched
-    // by `effect-tsgo patch --oxlint`, so the `effecttsgo/*` rules run too).
-    // `typeCheck` also reports TypeScript errors in `vp check`; it overlaps the
-    // `check` tasks (native Effect-patched `tsc` plus svelte-check) without
-    // conflicting, and gives the pre-commit hook a type check. tsgolint reads
-    // each file's nearest `tsconfig.json`, so `packages/svelte/tsconfig.json`
-    // maps the core to its `src/`: `vp check` runs on a clean checkout, before
-    // any `dist/` exists (as CI runs it), while the `check` task still types
-    // the svelte package against the core's built declarations
-    // (`packages/svelte/tsconfig.check.json`).
+    // tsgolint reads each file's nearest tsconfig.json; packages/svelte's maps
+    // the core to `src/`, so `vp check` needs no `dist/`.
     options: {
       typeAware: true,
       typeCheck: true,
@@ -155,12 +119,8 @@ export default defineConfig({
   run: {
     cache: true,
     tasks: {
-      // The type gate (`vp run check`): this root config under the native
-      // `tsc`, after every package's `check` (`tsc` over `src` + tests, plus
-      // svelte-check over `packages/svelte`). A `from: "dependencies"` edge
-      // does not traverse the workspace root's own devDependencies, so the
-      // packages are named one by one: a new package adds itself to EVERY
-      // list here (`check`, `docgen` where it has one, `test:coverage`).
+      // A `from: "dependencies"` edge does not traverse the root's own
+      // devDependencies, so a new package adds itself to each list here.
       check: {
         command: "tsc -p tsconfig.json",
         dependsOn: [
@@ -169,38 +129,18 @@ export default defineConfig({
         ],
         cache: false,
       },
-      // Compiles AND RUNS every JSDoc `@example` against the built `dist/`,
-      // then writes the (git-ignored) API reference under `packages/forms/docs/`.
-      // Only the core has a docgen: the Svelte bindings' examples are Svelte
-      // components and SvelteKit route modules, which need the Svelte compiler
-      // and SvelteKit's virtual modules to run.
+      // Only the core has docgen: the Svelte examples need the Svelte compiler.
       docgen: {
         command: "echo 'docgen: every example compiled and ran'",
         dependsOn: ["@thomasfosterau/effect-forms#docgen"],
         cache: false,
       },
-      // The whole CI gate, in AGENTS.md "Verification" order (steps 2-7), as
-      // ONE command so local and CI are the same thing: `vp run ci` is the only
-      // command the CI workflow runs after install. `pnpm run prepare` comes
-      // first because CI installs with `--ignore-scripts`, and the `prepare`
-      // step (Vite+ hooks plus the @effect/tsgo patch of `tsc` / `oxlint`) is
-      // what the type-aware lint and the type gate run on. It is fail-fast: the
-      // first failing gate stops the rest.
       ci: {
         command:
-          "pnpm run prepare && vp check && vp run check && vp run -r test:unit && vp run -r build && vp run docgen && pnpm audit --audit-level high",
+          "vp check && vp run check && vp run -r test:unit && vp run -r build && vp run docgen && pnpm audit --audit-level high",
         cache: false,
       },
-      // Every package's unit suite under one Istanbul coverage map
-      // (`coverage/coverage-final.json`), which `fallow audit` reads for exact
-      // per-function CRAP scores (`health.coverage` in .fallowrc.json).
-      // Without it fallow estimates every function as uncovered, and any
-      // function with cyclomatic complexity ≥ 5 fails the gate on its own.
-      // Run this before `fallow audit` (the Claude Code PreToolUse fallow gate
-      // runs the audit on `git commit` / `git push` but never refreshes this
-      // map). One vitest process runs every project, so each package's
-      // `build` is named explicitly: the svelte suite imports the core
-      // through its `exports` (→ `dist/`).
+      // One Istanbul map over every package, which `fallow audit` reads.
       "test:coverage": {
         command: "vp test run --coverage",
         dependsOn: [
@@ -209,12 +149,24 @@ export default defineConfig({
         ],
         cache: false,
       },
+      fallow: {
+        command: "vp exec fallow --summary",
+        cache: false,
+      },
+      // Run by the pre-commit hook.
+      "fallow:audit": {
+        command: "vp exec fallow audit --base origin/trunk --quiet",
+        dependsOn: ["test:coverage"],
+        cache: false,
+      },
+      "changeset:version": {
+        command: "changeset version && vp fmt && pnpm install --lockfile-only",
+        cache: false,
+      },
     },
   },
 
   test: {
-    // One entry per package: each package's own vite.config.ts is a vitest
-    // project, so the root run and the root coverage map cover them all.
     projects: ["packages/*/vite.config.ts"],
     coverage: {
       provider: "istanbul",
