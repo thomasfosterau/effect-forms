@@ -14,7 +14,6 @@
  * framework's `error()` helper (validation failures belong on the schema, not
  * in a coercer).
  *
- * @copyright Thomas Foster
  * @module effect-forms/Coerce
  */
 

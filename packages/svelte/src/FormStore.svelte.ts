@@ -1,46 +1,10 @@
 /**
- * The reactive Svelte 5 form store.
+ * The reactive Svelte 5 form store. {@link createForm} binds a schema to a
+ * rune-backed {@link FormStore}, seeded from defaults or hydrated from a
+ * server {@link FormState}. `errors` merges server and client error trees
+ * ({@link Errors.SourcedErrors}): a field's change clears only its own server
+ * error. Async validators run as interruptible fibers, latest wins.
  *
- * {@link createForm} binds a schema to a reactive, rune-backed {@link FormStore}.
- * Give it either `{ schema, defaults }` (it wraps the core's `Form.make` to seed
- * an empty form) or a server-produced {@link FormState} to hydrate from. The
- * store exposes mutable `data` (bind inputs to it), typed field access
- * through {@link Focus} focuses (`form.field((o) => o.key("name"))`,
- * `form.errorsAt((o) => o.key("name"))`), the plain `errors` tree,
- * `submitting` / `delayed` / `message` / `isValid`, tainted
- * tracking, and a spreadable {@link FormStore.props} for `<form {...form.props}>`
- * that wires progressive-enhancement submission (a Svelte attachment).
- *
- * Submission is handled one of two ways: an `onSubmit` handler the page
- * provides (full client-side / JS handling, with `cancel()` and an optional
- * returned result), or — by default — a POST to the form's action (e.g. a
- * derived SvelteKit action) whose result is applied back to the store.
- *
- * ## Validation engine v2
- *
- * `errors` merges two parallel trees (see {@link Errors.SourcedErrors}):
- * `server` (the last submission's response) and `client` (browser-side
- * validation — the schema, per-field validators, a builder's `refineEffect`
- * refinements). A field's value changing clears *only that field's* server
- * error — a `State.withError` uniqueness failure the user hasn't touched
- * survives a client revalidation of some other field. `clientErrors` /
- * `serverErrors` expose the per-source trees for a UI that wants to style
- * them differently.
- *
- * `validators` (each bound to its field's focus with `Validate.on`) attach
- * per-field sync/async validators (the `FieldValidators` shape — TanStack Form's `onChange(Async)`
- * / `onBlur(Async)` vocabulary). Async validators run as Effect fibers: a new
- * value interrupts the field's in-flight fiber before forking the next run —
- * debounce + "latest wins" cancellation fall out of that alone (see
- * {@link Validate.runAsyncFieldValidator}). `isValidating` /
- * {@link FormStore.isValidatingAt} reflect any fiber still running; supply
- * `layer` when a validator (or a builder's `refineEffect`) needs services.
- *
- * `Mode.RevalidateMode` (`options.mode.revalidate`, default `"onChange"`)
- * governs what happens *after* a failed post in `onSubmit` mode: fixing a
- * field re-validates it (clearing its error) without a resubmit.
- *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/FormStore
  */
 

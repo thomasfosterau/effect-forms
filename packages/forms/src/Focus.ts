@@ -1,28 +1,10 @@
 /**
  * Typed focuses into a form's data: Effect `Optic`s that also know their
- * {@link FormPath}.
+ * {@link FormPath}. Build one from {@link root} with `.key`, `.at` and
+ * `.defined()`. A {@link Lens} always finds its value; an {@link Optional} may
+ * not, so reads answer an `Option`. Runtime paths stay untyped
+ * {@link FormPath}s.
  *
- * A focus names one place in a form data tree twice over. Its `optic` (an
- * `effect/Optic` lens or optional) reads and writes the value there with the
- * value's static type, so a write needs no assertion. Its `path` is the
- * {@link FormPath} the error tree, the field `name` attribute
- * (`author.name`, `tags[0]`) and the touched / dirty bookkeeping use. Build
- * one from {@link root} with the same names `Optic` uses: `.key("author")`
- * for a property, `.at(0)` for an array item, `.defined()` to step through
- * an optional (`X | undefined`) value.
- *
- * A {@link Lens} always finds its value; an {@link Optional} may not (an
- * array index out of range, an absent optional branch): reading it answers an
- * `Option`, and writing where it finds nothing leaves the data unchanged.
- * {@link Optional.orElse} turns one into a lens with a fallback, for an input
- * that needs a value to render.
- *
- * Paths that arrive at runtime (a server error's pointer, a `FormData` key)
- * carry no static type, so they stay {@link FormPath}s and go through the
- * untyped {@link module:effect-forms/Path} and {@link
- * module:effect-forms/Errors} functions instead.
- *
- * @copyright Thomas Foster
  * @module effect-forms/Focus
  */
 

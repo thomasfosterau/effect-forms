@@ -8,7 +8,6 @@
  * have no decoding-service requirements (the common case for form schemas) so
  * validation can run synchronously in an event handler.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/ClientValidate
  */
 

@@ -15,7 +15,6 @@
  * decoded type is the schema's job at validate time (see
  * {@link module:effect-forms/Coerce}).
  *
- * @copyright Thomas Foster
  * @module effect-forms/Field
  */
 

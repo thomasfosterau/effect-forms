@@ -19,7 +19,6 @@
  * {@link module:effect-forms/Coerce} helpers, …) so a multipart body decodes
  * cleanly.
  *
- * @copyright Thomas Foster
  * @module effect-forms/Form
  */
 

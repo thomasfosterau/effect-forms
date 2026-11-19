@@ -8,7 +8,6 @@
  * boolean tree mirroring the data's shape. The reactive store
  * (`superForm.svelte.ts`) re-derives it as the data changes.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/Tainted
  */
 

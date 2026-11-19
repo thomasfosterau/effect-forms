@@ -17,7 +17,6 @@
  * and the operations here ({@link issuesToErrors}, {@link flattenErrors},
  * {@link setError}, {@link mergeErrors}, …) are pure and return new trees.
  *
- * @copyright Thomas Foster
  * @module effect-forms/Errors
  */
 

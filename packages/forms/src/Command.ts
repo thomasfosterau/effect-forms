@@ -1,37 +1,10 @@
 /**
- * Command-struct introspection and form derivation.
+ * Derives form artefacts (Form-Input schema fields, blank defaults, tri-state
+ * adapters) from a host app's create / update command structs. Fields are
+ * classified by decode probes, since branded ids and date codecs erase to
+ * strings; enums and nested structs by AST. Adapters emit the encoded command
+ * payload.
  *
- * A host app's write surface is a pair of flat command `Schema.Struct`s per
- * entity — a create struct (required fields bare, the rest `optional`) and an
- * update struct (keyed by a required `id`, every field `optional`, clearable
- * fields `optional(NullOr(...))` — `TriState.clearableNullOr` — whose wire
- * value / `null` / absent means set / clear / carry forward). This module
- * reads that pair into a plain-data {@link CommandPlan} and derives the three
- * per-entity form artefacts that were previously hand-written per entity: the
- * all-string Form-Input schema fields, the blank defaults, and the tri-state
- * adapters that map a validated multipart input onto the encoded command
- * payload. Each field coerces to a `TriState` from
- * `@thomasfosterau/effect-ext/TriState` (`Assign` / `Clear` /
- * `CarryForward`); the adapter encodes it onto the wire as the value, `null`,
- * or an omitted key, so the posted JSON is what the command's own decode
- * expects.
- *
- * Classification leads with behavioural decode probes — date codecs are
- * transformations and branded ids erase to `String`, so "what does this
- * schema accept" is the only robust signal for those (the same approach the
- * host app's model walkers use). Two kinds fall back to AST matching instead,
- * because no decode probe can name what they are: `enum`'s literal option set
- * (needed anyway for the renderer, not just the classification) and
- * `structured`'s "this is a nested object, not a scalar" shape. Neither
- * shadows a probe-classified kind — see {@link classify}.
- *
- * The derived adapters emit the **encoded** command payload (dates stay
- * `YYYY-MM-DD` strings, ids stay plain strings) — the command's canonical
- * decode downstream owns branding and validation. Genuinely irregular fields
- * (a create-time default, an asymmetric coercion) stay expressible via the
- * per-field {@link AdaptOverrides} escape hatch instead of forcing ejection.
- *
- * @copyright Thomas Foster
  * @module effect-forms/Command
  */
 

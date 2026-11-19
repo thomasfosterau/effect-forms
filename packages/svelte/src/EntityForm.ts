@@ -18,7 +18,6 @@
  * e.g. an i18n message function) resolved at render time, never at
  * module scope — module-scope resolution would freeze the import-time locale.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/EntityForm
  */
 

@@ -18,7 +18,6 @@
  * error channel as a {@link CommandRejected} carrying the original value in
  * `cause`; an `Effect` command's typed failure arrives as itself.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/CommandFailure
  */
 

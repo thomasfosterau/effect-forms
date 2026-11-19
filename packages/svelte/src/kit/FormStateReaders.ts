@@ -18,7 +18,6 @@
  * `Option`, and the readers take it and answer plain strings and arrays,
  * which is what a Svelte template renders.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/FormStateReaders
  */
 

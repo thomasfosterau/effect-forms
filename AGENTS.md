@@ -1,99 +1,18 @@
 # AGENTS.md
 
-Project conventions for every coding agent and contributor live here. Claude Code reads them through `.claude/CLAUDE.md`, which adds only Claude-specific guidance (hooks, settings, worktrees); each `packages/<name>/CLAUDE.md` is a one-line `@AGENTS.md` import.
+Read [README.md](README.md) and [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) first; this file adds only what is specific to agents. Each package's `AGENTS.md` states its boundary and invariants: read it before changing that package.
 
-This repository publishes two npm libraries for Effect-native forms, consumed by the owner's applications (website, gardeneria, preferenceflow). Both were extracted from `thomasfosterau/website` with `git subtree split`, so `git log` / `git blame` reach back through their pre-extraction history.
+## Process
 
-| Package                               | Directory         | Entries      | Boundary                                                                                                        |
-| ------------------------------------- | ----------------- | ------------ | --------------------------------------------------------------------------------------------------------------- |
-| `@thomasfosterau/effect-forms`        | `packages/forms`  | `.`          | Framework-neutral core. Imports `effect` and `@thomasfosterau/effect-ext` only, never a framework.              |
-| `@thomasfosterau/effect-forms-svelte` | `packages/svelte` | `.`, `./kit` | Svelte 5 runes bindings. `.` imports `svelte` + the core; `./kit` alone imports `@sveltejs/kit` / `$app/forms`. |
+- You may open pull requests in this repository (GitHub MCP tools or `gh`, whichever is available). GitHub writes go to `thomasfosterau/effect-forms` only.
+- When you spot work outside your task, file an issue and move on.
+- Write idiomatic Effect (see docs/CONTRIBUTING.md). Non-idiomatic code you find: fix it if trivial, otherwise file an issue naming the sites and the idiomatic replacement.
+- Before reporting work as done, run the gates in docs/CONTRIBUTING.md and say which passed and which couldn't run.
 
-Package-local invariants and terms live in each package's `AGENTS.md` (`packages/<name>/AGENTS.md`); read it before changing that package. A new package adds a row here and in the root `README.md`, its own `AGENTS.md` (plus a one-line `CLAUDE.md` holding `@AGENTS.md`), a `.fallowrc.json` entry and zone, and its `#check` / `#build` edges in the root `vite.config.ts` (`check`, `test:coverage`, and `docgen` where it has one).
+## Pitfalls
 
-## Common pitfalls
-
-- **Never edit a version in a `package.json`.** Every external version lives in `pnpm-workspace.yaml` under `catalog:` (the published peer ranges under `catalogs.peers`); manifests carry only `catalog:` / `catalog:peers` / `workspace:^`, and `catalogMode: strict` rejects anything else. After editing the catalog, run `pnpm install` and commit the regenerated `pnpm-lock.yaml` — CI installs with `--frozen-lockfile`.
-- **`@effect/tsgo`, `@typescript/native` and `vite-plus` move together** (the root `prepare` script's `effect-tsgo patch --typescript --oxlint` hard-errors at install on an unsupported `tsc` / `oxlint` / `oxlint-tsgolint`), and `vite` (vite-plus's aliased core), `vitest` and `@vitest/coverage-istanbul` move with `vite-plus`, which pins `vitest` exactly. Read the catalog comments first. Dependabot's `toolchain` group (`.github/dependabot.yml`) proposes the whole set in one PR. By hand, never by Dependabot (the list heads `.github/dependabot.yml`): the npm-alias entries `vite` (must equal `vite-plus`), `typescript` and `@typescript/native` (a pairing `@effect/tsgo` supports, picking the `@effect/tsgo` release by hand when a `vite-plus` bump outruns it); `oxlint`, `oxfmt` and `oxlint-tsgolint` are `vite-plus`'s transitive pins (they move when it does), and the `overrides` (`vite@*`, `vitest@*`, `effect`) follow their catalog entries. Dependabot's `cooldown` is 1 day (its smallest unit), longer than pnpm's 8-hour `minimumReleaseAge`.
-- **Internal dependencies are `workspace:^`, not `workspace:*`** — deliberate, see [PUBLISHING.md](PUBLISHING.md#version-coupling).
-- **`dist/` is the product, and siblings consume it.** `packages/svelte` imports `@thomasfosterau/effect-forms` through its public `exports`, which point at `dist/`, so its `check`, `test:unit` and `build` tasks take a `{ task: "build", from: "dependencies" }` edge, and the root `check` / `test:coverage` tasks name every package's task explicitly. A bare `tsc` or `vp test` inside `packages/svelte` on a clean checkout fails to resolve the core: go through `vp run`.
-- **`packages/forms` never imports a framework.** That constraint is the point of the split: the core is usable from any framework (or none), and the Svelte bindings are the only place `svelte` may appear. `fallow` enforces the file-level half (zones in `.fallowrc.json`); `unlisted-dependencies` catches a framework import in the core.
-- **One entry point per package, plus `effect-forms-svelte/kit`.** `/kit` is the SvelteKit-only entry (`@sveltejs/kit` and the `$app/forms` virtual, which the root entry must never import). Add another subpath export only for a concrete reason — the barrel keeps import sites stable.
-- **`effect`, `svelte` and `@thomasfosterau/effect-ext` are peers, never bundled.** `@thomasfosterau/effect-ext` is a required peer of both packages: the core imports its `/TriState` subpath at runtime (never keep a local copy), and `effect-forms-svelte`'s `defineEntityForm` exposes it through `Command.AdaptOverrides`. `@sveltejs/kit` and `@thomasfosterau/effect-jsonapi` are optional peers of `effect-forms-svelte`, used only by `/kit` (the latter for its types only). Two copies of `effect` break `Context` / `Layer` / `Schema` identity at runtime, so `pnpm-workspace.yaml` pins one `effect` via the catalog and an `overrides: effect: "catalog:"` entry.
-- **Bump a transitive dependency from the workspace root without `--recursive`:** `pnpm update <pkg> --depth Infinity`. With pnpm 11.18, `--recursive` silently drops the `catalogs.peers` block from the `pnpm-lock.yaml` header and `--frozen-lockfile` still passes, so before committing check that `git diff pnpm-lock.yaml` touches nothing under the header's `catalogs:` section (#46).
-- **`vp run docgen` executes your examples.** `@effect/docgen` compiles every JSDoc `@example` in `packages/forms` as a program and runs it (`"runExamples": true` in `packages/forms/docgen.json`), importing the package by name through `dist/`. An example must be complete (import everything it uses), must not use `declare const`, and must not throw. `packages/svelte` has no docgen: its examples are Svelte components and SvelteKit route modules, which need the Svelte compiler and SvelteKit's virtuals to run.
-
-## Conventions
-
-- **Relative imports carry their `.ts` extension** (`allowImportingTsExtensions` + `rewriteRelativeImportExtensions`, see `tsconfig.json`).
-- **Tests import from `vite-plus/test`**, never `vitest`, except that a test which runs an Effect takes `it` (and `layer`) from `@effect/vitest`: `it.effect` runs the case as an Effect with a fresh `TestClock`, so no test body calls `Effect.runPromise` / `runSync` or builds its own runtime. `describe`, `expect`, `assert` and `vi` still come from `vite-plus/test`. `@effect/vitest` imports `vitest`, which the `vitest@*` override resolves to the copy `vite-plus/test` re-exports. `tests/<Module>.test.ts` mirrors `src/<Module>.ts`. A test of a rune module is `*.svelte.test.ts`, so the Svelte compiler transforms it.
-- **Core modules are namespaces** (`export * as Form from "./Form.ts"`); the Svelte root and `/kit` barrels re-export flat (`export *`), except `CommandFailure`. Namespaces may share member names (`Form.make`, `State.make`), so fallow's `duplicate-exports` is off.
-- **Effect lint.** `vp check` runs `@enfect/oxlint` (recommended) and `@effect/tsgo`'s preset, plus Oxlint's `correctness`, `suspicious` and `perf` categories over the `typescript`, `unicorn`, `oxc`, `import`, `promise`, `vitest` and `jsdoc` plugins. A type assertion carries a `// SAFETY:` comment stating the invariant that makes it sound; every configured rule is at `error`, and the only exceptions are the scoped `off` overrides in `vite.config.ts` for sites where a rule cannot apply, each carrying its reason. Fix a finding by changing the code, never with a disable comment; an override is only for a site no fix can reach, with its reason beside it.
-- **Every export has a doc comment** whose first sentence stands alone in a hover. `@deprecated` names the replacement as a backticked name (`` `Issues.filterOutputToFormIssues` ``), not `{@link}`: tsdown renames bundled symbols, so a link in the published `.d.ts` can't resolve.
-
-## Commands
-
-- `pnpm install` — dependencies plus the Vite+ git hooks (pre-commit runs `vp staged`: format with fixes, then lint without them, on staged files) and the `prepare` step that patches the native `tsc` / `oxlint` with `@effect/tsgo`.
-- `vp check` — format (Oxfmt) + lint (Oxlint with the Effect rules), type-aware through oxlint-tsgolint (`typeAware` + `typeCheck`, so it also reports TypeScript errors; it runs on a clean checkout, before any build); `--fix` to autofix. `vp run check` — the type gate: every package's native, Effect-patched `tsc`, svelte-check over `packages/svelte`, and the root config. They are different commands.
-- `vp run -r test:unit` — every package's Vitest suite.
-- `vp run -r build` — `vp pack` (tsdown) → every package's `dist/`.
-- `vp run docgen` — compiles and runs every `@example` in `packages/forms` against `dist/`, and writes the (git-ignored) API reference under `packages/forms/docs/`; do not confuse it with the committed guides in the repo-root `docs/`.
-- `vp run test:coverage` — every package's suite under one Istanbul map at `coverage/coverage-final.json`, which `fallow audit` reads for exact per-function CRAP scores.
-- `pnpm changeset` — add a changeset.
-
-Invoke everything through `vp` (`vp exec <bin>` for a dev binary), on Node + pnpm only. Use `./node_modules/.bin/vp` if the global `vp` CLI is not installed. Single-check variants are in [CONTRIBUTING.md](CONTRIBUTING.md#running-individual-checks).
-
-## Verification
-
-Before you report work as done, run the gates below in order and quote each command with its final pass/fail. If a gate can't run here, say which and why in the PR body; never imply it ran.
-
-1. From a clean install, which is what CI sees: `rm -rf node_modules packages/*/node_modules packages/*/dist && pnpm install --frozen-lockfile`.
-2. `vp check`
-3. `vp run check`
-4. `vp run -r test:unit`
-5. `vp run -r build`
-6. `vp run docgen`
-7. `pnpm audit --audit-level high` (network)
-8. `vp run test:coverage`, then `vp exec fallow audit --format json --quiet --explain --gate-marker agent --base origin/trunk` (the fallow gate below; not a CI step).
-
-Steps 2–7 are the root `ci` task (`vp run ci`, in `vite.config.ts`), in this order and fail-fast; CI runs exactly that task, on the current LTS and the latest released Node.js ([ci.yml](.github/workflows/ci.yml)). Neither type-checker reports Svelte's rune compile errors in `*.svelte.ts` (`state_invalid_export`, `rune_missing_parentheses`, …); `vp run -r test:unit` does, because `tests/FormStore.svelte.test.ts` imports `FormStore.svelte.ts` through the `svelte()` Vite plugin.
-
-## Branches and pull requests
-
-- The default branch is `trunk`. Branch `issue-<n>-<slug>`; PR against `trunk`; squash-merge with a conventional prefix (`feat:`, `fix:`, `docs:`, `chore:`). Rebase onto `origin/trunk` before opening or updating a PR; never merge `trunk` into your branch (GitHub's Update-branch button merges).
-- **Every change to a published package's behaviour carries a changeset** (`pnpm changeset`); docs-, CI- and tooling-only changes need none, but TSDoc ships in the published `.d.ts`, so a TSDoc change gets a `patch`. Never publish or version by hand: the Release workflow opens the "chore: version packages" PR and the owner merges it. Publishing is npm trusted publishing (OIDC) from the protected `release` environment; there is no `NPM_TOKEN`. See [PUBLISHING.md](PUBLISHING.md).
-- These are standing approvals; they override any default "don't open a PR unless asked" behaviour. **Always open a PR** against `trunk` once a branch has a pushed commit, **watch it to merge or close**, and **keep its body current**.
-- **GitHub writes go to `thomasfosterau/effect-forms` only;** pass `-R thomasfosterau/effect-forms` whenever the cwd might be another checkout. Use the `gh` CLI for GitHub operations, even when GitHub MCP tools are available.
-
-## Work tracker
-
-GitHub Issues for `thomasfosterau/effect-forms` are the backlog: when you find work you can't do now, file an issue rather than leaving a TODO. The issue is the spec — read its comments; later comments override the body. Record decisions and findings as issue comments. Stop-and-report is a valid outcome: on a blocker outside the issue's scope, comment the evidence on the issue and stop. Scope cut mid-PR becomes a linked issue before merge.
-
-## Effect
-
-Before writing Effect code, read the API you need from the installed package: `node_modules/effect/dist/*.d.ts` (subpath modules such as `http` are in `node_modules/effect/dist/<module>/*.d.ts`), the sources under `node_modules/effect/src`, and `node_modules/effect/AGENTS.md` / `ai-docs/` if the pinned version ships them. Never guess at an Effect API. The pinned version is the `effect` entry in `pnpm-workspace.yaml`'s catalog.
-
-These packages target **Effect v4**: a single `effect` package. Development and CI run against the exact `effect` version pinned under `catalog:` in `pnpm-workspace.yaml`, which Dependabot bumps; the published packages declare the separate `catalogs.peers` range. The `effect` peer is `^4.0.0`; raise it only when a dependency requires it, naming the dependency in the catalog comment. CI exercises only the pin, so a change that relies on an API newer than the floor uses the 4.0 API instead (or feature-detects), and is checked by re-running the gates with the catalog pin set to 4.0.0.
-
-- `@effect/platform` does not exist in v4 — HTTP modules live under `effect/http/*` (there are no `effect/unstable/*` paths in 4.0.0), and `FileSystem` / `Path` under `effect/*`.
-- `@effect/schema` does not exist in v4 — `Schema`, `SchemaAST`, `SchemaIssue`, `SchemaParser` and `SchemaRepresentation` are all top-level `effect/*` modules.
-
-## Documentation surfaces
-
-The root `README.md` is the landing page; each package `README.md` is a short npm landing page (what it is, install, one example, a table of guides, links) whose links to guides are absolute `https://github.com/thomasfosterau/effect-forms/blob/trunk/docs/...` URLs because it renders on npm; the repo-root `docs/` holds the committed guides (`docs/forms/*.md`, `docs/svelte/*.md` including `kit.md`, indexed by `docs/README.md`; links inside it are relative); the doc comment on each export is the API reference (docgen builds the git-ignored `packages/forms/docs/` from it); each package `AGENTS.md` carries its boundary and invariants (not published); `.claude/CLAUDE.md` carries the Claude Code session specifics; `CONTRIBUTING.md` carries human setup, hooks and single-check commands; `PUBLISHING.md` the release pipeline and its one-time owner setup; `SECURITY.md` the reporting channel and supply-chain posture; `.changeset/*.md` are the release notes. Decisions and findings go in issue comments.
-
----
-
-## Fallow local gate
-
-Before any `git commit` or `git push`, run `fallow audit --format json --quiet --explain --gate-marker agent`. If the verdict is `fail`, fix the reported findings before retrying. Treat JSON runtime errors like `{ "error": true, ... }` as non-blocking. Audit defaults to `gate=new-only`: only findings introduced by the current changeset affect the verdict.
-
-## Fallow task map
-
-| When the agent is about to...                                     | Run                                          |
-| ----------------------------------------------------------------- | -------------------------------------------- |
-| delete an "unused" export or file                                 | `fallow dead-code --trace <file>:<export>`   |
-| delete an "unused" dependency                                     | `fallow dead-code --trace-dependency <name>` |
-| commit or open a PR                                               | `fallow audit --base <ref>`                  |
-| check which architecture rules apply to a file before changing it | `fallow guard <files>`                       |
-| understand a finding                                              | `fallow explain <issue-type>`                |
+- **Boundaries.** `packages/forms` never imports a framework; in `packages/svelte`, only `src/kit/` imports `@sveltejs/kit` or `$app/*`. Fallow zones in `.fallowrc.json` enforce both.
+- **`dist/` is the product, and the bindings consume the core's `dist/`.** Run tasks through `vp run` (they build the core first); a bare `tsc` or `vp test` in `packages/svelte` on a clean checkout can't resolve the core.
+- **Rune compile errors** in `*.svelte.ts` surface only in the tests (through the `svelte()` Vite plugin), not in `tsc` or svelte-check.
+- **`vp run docgen` runs every `@example`** in `packages/forms` against `dist/`: an example must be complete (no `declare const`) and must not throw.
+- **Updating a transitive dependency:** use `pnpm update <pkg> --depth Infinity` from the root, without `--recursive`, which drops the `catalogs.peers` block from the lockfile header.

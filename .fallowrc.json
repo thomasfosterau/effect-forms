@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
-    "packages/forms/src/index.ts",
+    "packages/forms/src/*.ts",
     "packages/svelte/src/index.ts",
     "packages/svelte/src/kit/index.ts",
     "packages/*/tests/**/*.test.ts",

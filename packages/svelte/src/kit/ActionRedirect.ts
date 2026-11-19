@@ -6,7 +6,6 @@
  * action route's nonexistent page for a no-JS submitter). Everything else —
  * auth denials, infrastructure faults — stays a hard error at the caller.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/ActionRedirect
  */
 

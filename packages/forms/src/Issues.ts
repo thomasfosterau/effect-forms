@@ -14,7 +14,6 @@
  * performs — here it stays UI-shaped (`path` + `message`) rather than
  * JSON:API-pointer-shaped.
  *
- * @copyright Thomas Foster
  * @module effect-forms/Issues
  */
 

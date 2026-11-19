@@ -1,29 +1,10 @@
 /**
- * Field- and form-level listeners — side-effecting hooks that fire as the
- * form's data changes, independent of validation. The model is TanStack
- * Form's listeners guide: a field can react to its own `onChange` / `onBlur`
- * (optionally debounced), and the form as a whole can react to `onMount` and
- * to any change, told which path triggered it. The classic use is linked
- * fields — a country field's `onChange` resetting a dependent province field.
+ * The pure half of field and form listeners (TanStack Form's model):
+ * {@link changeEvents} diffs two data snapshots into changed leaf paths, and
+ * {@link dispatchChange} fires the listeners for that diff. Diffing against the
+ * immediately prior snapshot keeps a data-mutating listener from re-triggering
+ * itself.
  *
- * This module is the pure half: {@link changeEvents} diffs two data
- * snapshots (reusing {@link module:effect-forms-svelte/Tainted}'s tree) into
- * the flat list of changed leaf paths + their new values, and
- * {@link dispatchChange} fires the configured listeners for that diff. Both
- * are synchronous and side-effect-free beyond invoking the caller's own
- * callbacks — no timers, no Svelte. The reactive store (`FormStore.svelte.ts`)
- * is the impure half: it re-derives the diff off its deep `$effect` watcher,
- * wraps each field listener in its own debounce timer, and owns `onBlur` /
- * `onMount` timing.
- *
- * Because {@link dispatchChange} only ever compares the *immediately prior*
- * snapshot against the current one (never the form's original values), a
- * listener that mutates data — like the linked-fields recipe — cannot
- * re-trigger itself: the watcher's next pass diffs against the mutation it
- * just produced, so only the fields that actually moved in *that* transition
- * fire again. See `Listeners.test.ts` for the two-pass trace.
- *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/Listeners
  */
 

@@ -1,6 +1,5 @@
 /**
- * The `PageProps["form"]` readers — ported from gardeneria's
- * `form-state.test.ts`. The property worth pinning is totality: every reader
+ * The `PageProps["form"]` readers. The property worth pinning is totality: every reader
  * is handed `PageProps["form"]`, which is `null` on the first render of every
  * create page, an unrelated shape on an `Error` action result, and only
  * sometimes the effect-forms state.

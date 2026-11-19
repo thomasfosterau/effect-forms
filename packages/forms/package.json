@@ -26,7 +26,7 @@
     "dist",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE.md"
   ],
   "type": "module",
   "sideEffects": false,
@@ -37,13 +37,70 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Coerce": {
+      "types": "./dist/Coerce.d.ts",
+      "import": "./dist/Coerce.js"
+    },
+    "./Command": {
+      "types": "./dist/Command.d.ts",
+      "import": "./dist/Command.js"
+    },
+    "./Constraints": {
+      "types": "./dist/Constraints.d.ts",
+      "import": "./dist/Constraints.js"
+    },
+    "./Errors": {
+      "types": "./dist/Errors.d.ts",
+      "import": "./dist/Errors.js"
+    },
+    "./Field": {
+      "types": "./dist/Field.d.ts",
+      "import": "./dist/Field.js"
+    },
+    "./Focus": {
+      "types": "./dist/Focus.d.ts",
+      "import": "./dist/Focus.js"
+    },
+    "./Form": {
+      "types": "./dist/Form.d.ts",
+      "import": "./dist/Form.js"
+    },
+    "./FormBuilder": {
+      "types": "./dist/FormBuilder.d.ts",
+      "import": "./dist/FormBuilder.js"
+    },
+    "./FormData": {
+      "types": "./dist/FormData.d.ts",
+      "import": "./dist/FormData.js"
+    },
+    "./Issues": {
+      "types": "./dist/Issues.d.ts",
+      "import": "./dist/Issues.js"
+    },
+    "./Mode": {
+      "types": "./dist/Mode.d.ts",
+      "import": "./dist/Mode.js"
+    },
+    "./Path": {
+      "types": "./dist/Path.d.ts",
+      "import": "./dist/Path.js"
+    },
+    "./Result": {
+      "types": "./dist/Result.d.ts",
+      "import": "./dist/Result.js"
+    },
+    "./State": {
+      "types": "./dist/State.d.ts",
+      "import": "./dist/State.js"
+    },
+    "./Validate": {
+      "types": "./dist/Validate.d.ts",
+      "import": "./dist/Validate.js"
     }
   },
   "publishConfig": {
     "access": "public"
-  },
-  "scripts": {
-    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

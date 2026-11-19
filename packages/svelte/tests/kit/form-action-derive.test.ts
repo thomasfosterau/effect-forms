@@ -76,7 +76,7 @@ describe("formAction (derived SvelteKit page action)", () => {
 
 // SvelteKit 3's `redirect` refuses an external location unless it is passed
 // `{ external }`; `formAction` passes none, so `locationFor` must answer a
-// same-origin path (#32). Outside a request there is no origin to compare
+// same-origin path. Outside a request there is no origin to compare
 // against, so here every absolute URL counts as external.
 describe("formAction: locationFor must return a same-origin path", () => {
   it("redirects to a same-origin path, query included", async () => {

@@ -1,6 +1,6 @@
 # Documentation
 
-Guides for the two packages in this repository. The per-export API reference is the doc comment on each export (shown in your editor, and generated for `@thomasfosterau/effect-forms` by `vp run docgen`). The package READMEs are the short npm landing pages; contributor docs are [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
+Guides for the two packages in this repository. The per-export API reference is the doc comment on each export (shown in your editor, and generated for `@thomasfosterau/effect-forms` by `vp run docgen`). The package READMEs are the short npm landing pages; contributor docs are [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
 
 ## `@thomasfosterau/effect-forms`
 

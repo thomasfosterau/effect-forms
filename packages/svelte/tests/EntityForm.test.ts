@@ -218,7 +218,7 @@ describe("defineEntityForm", () => {
     ).toThrow('entry "rows" is not a field');
   });
 
-  // ── f.select over the enum kind (#1459) ──────────────────────────────
+  // ── f.select over the enum kind ──────────────────────────────
 
   it("declares a select entry without deriving option values on the entry itself", () => {
     const withStatus = defineEntityForm(

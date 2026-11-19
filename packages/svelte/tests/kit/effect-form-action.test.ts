@@ -1,8 +1,4 @@
-/**
- * `runFormAction` — ported from the applications' `effect-form-action.test.ts`
- * (website's cases, plus gardeneria's decoded-input case), driven with a fake
- * command rather than an API client.
- */
+/** `runFormAction`, driven with a fake command rather than an API client. */
 import { Errors, Form, FormBuilder, State } from "@thomasfosterau/effect-forms";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";

@@ -16,7 +16,6 @@
  * classifier) and routed onto the form's fields by each JSON:API error's
  * `source.pointer`.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/FormAction
  */
 
