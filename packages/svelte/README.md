@@ -56,4 +56,4 @@ Server (`+page.server.ts` or any action) produces a `FormState` with the core's 
 
 ## License
 
-[MIT](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/LICENSE)
+[MIT](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/svelte/LICENSE.md)

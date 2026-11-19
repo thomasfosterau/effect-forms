@@ -47,4 +47,4 @@ const state = await Effect.runPromise(signupForm.validate(request));
 
 ## License
 
-[MIT](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/LICENSE)
+[MIT](https://github.com/thomasfosterau/effect-forms/blob/trunk/packages/forms/LICENSE.md)
