@@ -113,7 +113,7 @@ describe("enhanceForm", () => {
     expect(applyAction).not.toHaveBeenCalled();
   });
 
-  it("replaces a stale page.form message when a later submit fails validation (#146)", async () => {
+  it("replaces a stale page.form message when a later submit fails validation", async () => {
     const { store, setServerState } = realStore();
     const { submit, node } = attach(store);
     // SvelteKit's default `update` applies the result: `page.form` becomes its `data`.
@@ -157,7 +157,7 @@ describe("enhanceForm", () => {
     );
     expect(store.submitting).toBe(false);
     expect(update).toHaveBeenCalledWith({ reset: false });
-    // `update` already applies the result; a second `applyAction` would apply it twice (#31).
+    // `update` already applies the result; a second `applyAction` would apply it twice.
     expect(applyAction).not.toHaveBeenCalled();
     expect(setServerState).not.toHaveBeenCalled();
   });

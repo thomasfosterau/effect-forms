@@ -9,7 +9,6 @@
  * dependency), never from Node on its own. That is why this lives in the
  * `/kit` entry and nowhere the framework-neutral bindings can reach.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/kit/Enhance
  */
 

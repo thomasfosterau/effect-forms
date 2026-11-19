@@ -1,31 +1,9 @@
 /**
  * Compose a form schema one field at a time, with cross-field refinements.
+ * {@link buildSchema} yields an ordinary `Schema.Struct` with every synchronous
+ * refinement applied as a check; asynchronous `refineEffect` refinements stay
+ * on the builder and run in the Effect-returning validate path.
  *
- * {@link make} (aliased {@link empty}) starts an empty builder;
- * {@link FormBuilder.addField} adds a scalar field and {@link
- * FormBuilder.addArrayField} an array field, {@link FormBuilder.merge} folds
- * another builder in, and {@link FormBuilder.refine} /
- * {@link FormBuilder.refineEffect} attach cross-field validations. The point is
- * incremental composition — assemble a large form from small, reusable
- * field-group builders — plus a home for whole-form rules (`password ===
- * confirmPassword`) that a single field schema can't express.
- *
- * {@link buildSchema} collapses the accumulated fields into an ordinary
- * `Schema.Struct` (array fields become `Schema.Array(item)`) and applies every
- * *synchronous* refinement as a struct-level `check`, so the result decodes,
- * derives constraints, and validates exactly like a hand-written schema — hand
- * it straight to {@link module:effect-forms/Form}'s `make`. *Asynchronous*
- * refinements can't be schema checks (Effect Schema has no effectful filter),
- * so they're carried on the builder and run by the Effect-returning validate
- * path — {@link asyncRefinements} exposes them and {@link runAsyncRefinements}
- * runs them into a {@link FormIssue} list.
- *
- * A builder tracks two kinds of service separately: the decoding services of
- * its field schemas live in the built `Schema.Struct`'s own
- * `DecodingServices`, and the services its `refineEffect` refinements need
- * accumulate in its `RefineR` parameter.
- *
- * @copyright Thomas Foster
  * @module effect-forms/FormBuilder
  */
 

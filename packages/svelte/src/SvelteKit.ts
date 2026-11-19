@@ -4,7 +4,6 @@
  * imports `@sveltejs/kit` or the `$app/forms` virtual lives in the `/kit`
  * entry.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/SvelteKit
  */
 

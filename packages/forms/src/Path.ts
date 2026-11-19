@@ -17,7 +17,6 @@
  * convert to and from the flat `author.name` / `tags[0]` notation the HTML
  * body parser ({@link module:effect-forms/FormData}) uses.
  *
- * @copyright Thomas Foster
  * @module effect-forms/Path
  */
 

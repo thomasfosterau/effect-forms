@@ -1,29 +1,9 @@
 /**
- * When a form validates (and, optionally, auto-submits).
+ * When a form validates: `onSubmit` (default), `onBlur` or `onChange`, with
+ * optional debounce and auto-submit. `revalidate` sets which trigger
+ * re-validates after a failed submit. {@link parse} resolves the loose
+ * {@link FormMode} into a {@link ParsedMode}; the store owns the scheduling.
  *
- * A reactive form has to decide *when* to run validation as the user types.
- * The three modes mirror the common form-library vocabulary:
- *
- * - **`onSubmit`** (the default) — validate only when the form is submitted (or
- *   validation is triggered explicitly). The quietest mode.
- * - **`onBlur`** — validate a field when it loses focus.
- * - **`onChange`** — validate on every change, optionally `debounce`d.
- *
- * `onBlur` / `onChange` may also `autoSubmit`, turning the form into a
- * live-saving surface (a settings panel, a filter bar). This module is the
- * framework-neutral half: {@link parse} normalises the loose {@link FormMode}
- * a caller supplies into a fully-resolved {@link ParsedMode} the reactive
- * store drives from. The store owns the actual scheduling.
- *
- * A separate `revalidate` dimension governs what happens *after a submit*: an
- * `onSubmit`-mode form is otherwise silent until the next submit, which
- * leaves a failed post's errors frozen even after the user fixes the
- * offending field. `revalidate` says which trigger (`"onChange"` /
- * `"onBlur"` — independent of the primary `validation` trigger) re-validates
- * once the form has been posted at least once; `"never"` keeps the classic
- * frozen-until-resubmit behaviour.
- *
- * @copyright Thomas Foster
  * @module effect-forms/Mode
  */
 

@@ -5,7 +5,6 @@
  * effect-free so it is unit-testable in isolation; the rune store
  * (`FormStore.svelte.ts`) wires these to the DOM.
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/EnhanceCore
  */
 

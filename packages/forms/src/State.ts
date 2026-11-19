@@ -7,7 +7,6 @@
  * boundary, and {@link FormStateSchema} gives it an Effect Schema so it can be
  * decoded back on arrival.
  *
- * @copyright Thomas Foster
  * @module effect-forms/State
  */
 

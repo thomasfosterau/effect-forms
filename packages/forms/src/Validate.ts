@@ -15,7 +15,6 @@
  * and interrupting the previous fiber on every new run (see that function's
  * docs for why that alone gives debounce + "latest wins" cancellation).
  *
- * @copyright Thomas Foster
  * @module effect-forms/Validate
  */
 

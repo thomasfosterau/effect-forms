@@ -1,33 +1,9 @@
 /**
- * HTML input constraints derived from an Effect Schema.
+ * Native input attributes (`required`, `minlength`, `pattern`, …) derived from
+ * a schema's optionality and the `representation` annotations of Effect's
+ * built-in checks. A check with no recognised representation contributes
+ * nothing; `overrides` covers what the walk cannot infer.
  *
- * Native validation attributes can be read (`required`, `minlength`, …)
- * off the schema so a form can apply them to its inputs for free, layering
- * browser-native validation under the schema-driven validation. This module
- * does the framework-neutral half: walk the schema AST and emit an
- * {@link InputConstraints} tree a UI can spread onto its `<input>`s.
- *
- * `required` comes from a struct field's optionality; `minlength` /
- * `maxlength` / `min` / `max` / `pattern` / `step` are derived from the
- * `representation` annotation Effect Schema's built-in checks carry
- * (`isMinLength`, `isBetween`, `isPattern`, …), keyed by its stable
- * `effect/schema/<check>` id. A check with no recognised representation id
- * (a bare `Schema.filter` predicate, a custom `.check()`) contributes
- * nothing; there is no attribute to guess at,
- * so the derivation stays silent rather than wrong. The walk descends into
- * nested structs and into a homogeneous array's item type (folding the
- * array's own optionality into the item's `required`); a fixed-shape tuple
- * with differently-typed elements has no single item schema to represent as
- * one constraint, so it derives only `required`. Like
- * {@link module:effect-forms/Field}'s `fromAst`, an `optional` / `NullOr`
- * union is unwrapped by taking its first non-`null`/`undefined` member —
- * scoped to that wrapping pattern, not general discriminated unions, whose
- * branches can't be flattened into one constraint either. The `overrides`
- * argument to {@link constraintsFromSchema} remains the seam for anything the
- * walk cannot infer (or should not — a check that's semantically stronger
- * than any HTML attribute).
- *
- * @copyright Thomas Foster
  * @module effect-forms/Constraints
  */
 

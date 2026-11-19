@@ -10,7 +10,6 @@
  * entry). The JSON:API error shape is `@thomasfosterau/effect-jsonapi`'s
  * (an optional peer, used for its types only).
  *
- * @copyright Thomas Foster
  * @module effect-forms-svelte/kit
  */
 

@@ -159,8 +159,8 @@ describe("Command.plan", () => {
   });
 });
 
-// website#1906: the `OptionFrom*` family must classify as its inner type
-// does under the plain `optional(NullOr(X))` spelling.
+// The `OptionFrom*` family must classify as its inner type does under
+// the plain `optional(NullOr(X))` spelling.
 describe("Command.plan — OptionFrom* fields", () => {
   const inners = [
     ["String", Schema.String, "text"],

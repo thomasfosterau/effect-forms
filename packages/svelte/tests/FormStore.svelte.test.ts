@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Pins the submitter-aware enhanced submit path (issue #753): a multi-button
+ * Pins the submitter-aware enhanced submit path: a multi-button
  * form (`<button name="intent" value="save">` vs `value="publish">`) must post
  * the clicked button's name/value, matching native `new FormData(form,
  * submitter)` / no-JS POST semantics — and the button-less auto-submit path
@@ -16,8 +16,6 @@
  * `.svelte.ts` runes need the Svelte compiler, hence `.svelte.test.ts` (see
  * `vite.config.ts`'s `svelte()` plugin) and a DOM (`happy-dom`, scoped to this
  * file via the `@vitest-environment` docblock) for `HTMLFormElement`/`FormData`.
- *
- * @module tests/FormStore.svelte
  */
 
 import { Constraints, FormBuilder, Result, State, Validate } from "@thomasfosterau/effect-forms";
@@ -354,7 +352,7 @@ describe("set on the deeply-proxied store data", () => {
   });
 });
 
-describe("constraints — createForm overload symmetry (issue #1330)", () => {
+describe("constraints — createForm overload symmetry", () => {
   const Constrained = Schema.Struct({
     title: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(50)),
     subtitle: Schema.optional(Schema.String),
@@ -437,7 +435,7 @@ describe("enhance — change listeners and teardown", () => {
   });
 });
 
-describe("builder refineEffect — runs on decoded values (issue #72)", () => {
+describe("builder refineEffect — runs on decoded values", () => {
   /** Resolve once the store's in-flight validators (the refinement fiber) settle. */
   const settled = async (
     store: { readonly isValidating: boolean },
@@ -529,7 +527,7 @@ describe("move — reorders an array field, carrying per-index state", () => {
     expect(store.isDirtyAt((o) => o.key("tags"))).toBe(false);
   });
 });
-// ── Typed focuses (#140): the store's path-taking API takes `Focus`es ─────
+// ── Typed focuses: the store's path-taking API takes `Focus`es ─────
 
 const Post = Schema.Struct({
   title: Schema.String,
