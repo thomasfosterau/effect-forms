@@ -11,6 +11,7 @@ on:
 
 permissions: {}
 
+# No job restores a cache: none may consume what unprivileged CI wrote.
 env:
   # Stops `pnpm run` re-installing with lifecycle scripts after the
   # `--ignore-scripts` install.
@@ -34,7 +35,7 @@ jobs:
         with:
           version-file: pnpm-workspace.yaml
           node-version: lts
-          cache: true
+          cache: false
           run-install: |
             - args: ['--frozen-lockfile', '--ignore-scripts']
       - id: mode
@@ -61,7 +62,7 @@ jobs:
         with:
           version-file: pnpm-workspace.yaml
           node-version: lts
-          cache: true
+          cache: false
           run-install: |
             - args: ['--frozen-lockfile', '--ignore-scripts']
       - id: version
@@ -100,7 +101,6 @@ jobs:
         with:
           version-file: pnpm-workspace.yaml
           node-version: lts
-          # No restored cache in the job that can publish.
           cache: false
           run-install: |
             - args: ['--frozen-lockfile', '--ignore-scripts']
