@@ -37,7 +37,8 @@ export default defineConfig({
   },
 
   pack: {
-    entry: ["src/index.ts"],
+    entry: ["src/*.ts"],
+    unbundle: true,
     format: ["esm"],
     platform: "neutral",
     dts: true,
