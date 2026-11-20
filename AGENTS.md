@@ -15,4 +15,9 @@ Read [README.md](README.md) and [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) fir
 - **`dist/` is the product, and the bindings consume the core's `dist/`.** Run tasks through `vp run` (they build the core first); a bare `tsc` or `vp test` in `packages/svelte` on a clean checkout can't resolve the core.
 - **Rune compile errors** in `*.svelte.ts` surface only in the tests (through the `svelte()` Vite plugin), not in `tsc` or svelte-check.
 - **`vp run docgen` runs every `@example`** in `packages/forms` against `dist/`: an example must be complete (no `declare const`) and must not throw.
+- **Publish only through the Release workflow** (`vp run release`: `vp pm publish -r`, then `changeset git-tag`). Release-path registry calls go through `vp pm`, never `npm` / `pnpm` directly; keep `release` uncached so it sees the OIDC variables.
 - **Updating a transitive dependency:** use `pnpm update <pkg> --depth Infinity` from the root, without `--recursive`, which drops the `catalogs.peers` block from the lockfile header.
+
+## Fallow
+
+The `fallow` agent skill is linked into `.claude/skills/` from the installed `fallow` package after `vp install`; repository-specific rules (the pre-commit audit, tracing before deleting) are in docs/CONTRIBUTING.md.
