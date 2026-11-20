@@ -159,6 +159,34 @@ export default defineConfig({
         dependsOn: ["test:coverage"],
         cache: false,
       },
+      // The publish job's script (.github/workflows/release.yml): pnpm
+      // publishes each public package whose version isn't on npm yet, in
+      // dependency order, under OIDC trusted publishing; then `changeset
+      // git-tag` tags each untagged version and reports the tags to
+      // `changesets/action` through `CHANGESETS_OUTPUT`, which pushes them and
+      // creates the GitHub releases. A failed publish stops before tagging; a
+      // re-run publishes only what is missing. Uncached, so it sees the job's
+      // full environment, OIDC request variables included.
+      release: {
+        command: [
+          "vp pm publish -r --access public --no-git-checks -- --ignore-scripts",
+          "changeset git-tag",
+        ],
+        dependsOn: [
+          "@thomasfosterau/effect-forms#build",
+          "@thomasfosterau/effect-forms-svelte#build",
+        ],
+        cache: false,
+      },
+      // What `release` would publish, without publishing or tagging.
+      "release:dry-run": {
+        command: "vp pm publish -r --access public --dry-run --no-git-checks -- --ignore-scripts",
+        dependsOn: [
+          "@thomasfosterau/effect-forms#build",
+          "@thomasfosterau/effect-forms-svelte#build",
+        ],
+        cache: false,
+      },
       "changeset:version": {
         command: "changeset version && vp fmt && pnpm install --lockfile-only",
         cache: false,

@@ -122,9 +122,11 @@ jobs:
           cache: false
           run-install: |
             - args: ['--frozen-lockfile', '--ignore-scripts']
-      # `pnpm run`, not `vp run`: `vp run` drops the OIDC request variables.
+      # `vp run release` (vite.config.ts): builds, publishes each unpublished
+      # version with `vp pm publish -r` (pnpm does the OIDC exchange; the task
+      # is uncached, so it keeps the OIDC request variables), then `changeset
+      # git-tag` reports the new tags through CHANGESETS_OUTPUT, and the action
+      # pushes them and creates the releases.
       - uses: changesets/action/publish@v2.1.2
         with:
-          script: pnpm run release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: vp run release
