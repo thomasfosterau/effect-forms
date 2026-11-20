@@ -102,7 +102,7 @@ export default defineConfig({
         },
       },
     ],
-    // tsgolint reads each file's nearest tsconfig.json; packages/svelte's maps
+    // tsrs reads each file's nearest tsconfig.json; packages/svelte's maps
     // the core to `src/`, so `vp check` needs no `dist/`.
     options: {
       typeAware: true,

@@ -36,7 +36,15 @@
         // output, but a "warning" fails the patched tsc by default; this flag
         // keeps them non-blocking in the type gate, as across the library
         // family. Errors still fail it.
-        "ignoreEffectWarningsInTscExitCode": true
+        "ignoreEffectWarningsInTscExitCode": true,
+        "diagnosticSeverity": {
+          // The type-aware lint (tsrs) reports every Effect warning as an
+          // error, file overrides can't scope it, and Effect marks
+          // `@effect/vitest` and `effect/http/*` unstable. Oxlint's
+          // `effecttsgo/unstable-api-usage` enforces this rule instead, with
+          // its exceptions in vite.config.ts; a suggestion keeps the editor hint.
+          "unstableApiUsage": "suggestion"
+        }
       }
     ]
   },
