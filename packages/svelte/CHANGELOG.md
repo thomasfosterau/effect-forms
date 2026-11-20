@@ -1,5 +1,14 @@
 # @thomasfosterau/effect-forms-svelte
 
+## 0.4.2
+
+### Patch Changes
+
+- 589698c: Ship the licence as `LICENSE.md` and shorten module doc comments.
+- Updated dependencies [076333b]
+- Updated dependencies [589698c]
+  - @thomasfosterau/effect-forms@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

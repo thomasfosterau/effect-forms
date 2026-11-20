@@ -1,5 +1,15 @@
 # @thomasfosterau/effect-forms
 
+## 0.5.0
+
+### Minor Changes
+
+- 076333b: Each module is also importable from its own subpath (`@thomasfosterau/effect-forms/Form`, `/State`, …).
+
+### Patch Changes
+
+- 589698c: Ship the licence as `LICENSE.md` and shorten module doc comments.
+
 ## 0.4.1
 
 ### Patch Changes
