@@ -49,7 +49,13 @@ export default defineConfig(({ mode }) => ({
     entry: ["src/index.ts", "src/kit/index.ts"],
     // SvelteKit's virtual modules resolve only inside the consumer's
     // SvelteKit build; they are never bundled or resolved here.
-    deps: { neverBundle: [/^\$app\//] },
+    deps: {
+      // tsdown <0.23 compatibility: resolve external dependency subpaths.
+      // Remove to preserve subpath imports as written (the new default).
+      // https://tsdown.dev/options/dependencies#deps-resolvedepsubpath
+      resolveDepSubpath: true,
+      neverBundle: [/^\$app\//],
+    },
     format: ["esm"],
     platform: "neutral",
     unbundle: true,

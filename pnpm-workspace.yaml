@@ -11,11 +11,11 @@ catalog:
   "@changesets/cli": ^3.0.3
   "@effect/docgen": ^4.1.4
   "@effect/language-service": ^0.87.5
-  # `effect-tsgo patch` (the `prepare` script) supports only the TypeScript and
-  # oxlint versions in its `components` table
+  # `effect-tsgo patch` (the `prepare` script) supports only the TypeScript,
+  # oxlint and tsrs versions in its `components` table
   # (node_modules/@effect/tsgo/dist/effect-tsgo.cjs) and fails `pnpm install`
   # on any other: it moves with `@typescript/native` and `vite-plus`.
-  "@effect/tsgo": 0.69.0
+  "@effect/tsgo": 0.73.2
   "@effect/vitest": 4.1.4
   "@enfect/oxlint": 0.10.0
   "@sveltejs/kit": 3.4.0
@@ -38,10 +38,11 @@ catalog:
   typescript: "npm:@typescript/typescript6@6.0.2"
   # Only because `@effect/docgen` spawns it to run examples.
   tsx: ^4.23.15
-  # `vite` (vite-plus's aliased core) and `vitest` must match vite-plus; see
-  # docs/CONTRIBUTING.md for the by-hand toolchain update.
-  vite-plus: 1.6.0
-  vite: npm:@voidzero-dev/vite-plus-core@1.6.0
+  # `vite` (vite-plus's aliased core) and `vitest` must equal what vite-plus
+  # itself depends on (`npm view vite-plus@<v> dependencies`); `vite` no longer
+  # equals vite-plus. See docs/CONTRIBUTING.md for the by-hand toolchain update.
+  vite-plus: 1.7.0
+  vite: npm:@voidzero-dev/vite-plus-core@8.3.8000
   vitest: 5.1.0
 
 # Peer ranges the published packages declare.
@@ -77,14 +78,6 @@ permissions:
 
 skills:
   dirs: [.claude/skills]
-
-peerDependencyRules:
-  allowAny:
-    - vite
-    - vitest
-  allowedVersions:
-    vite: "*"
-    vitest: "*"
 
 # Hold new versions for 24 hours (minutes), matching Dependabot's 1-day cooldown.
 minimumReleaseAge: 1440
