@@ -129,10 +129,14 @@ export default defineConfig({
         ],
         cache: false,
       },
-      // Only the core has docgen: the Svelte examples need the Svelte compiler.
+      // The core's examples compile and run; the bindings' are SvelteKit
+      // sketches, so their docgen only parses them for the API reference.
       docgen: {
         command: "echo 'docgen: every example compiled and ran'",
-        dependsOn: ["@thomasfosterau/effect-forms#docgen"],
+        dependsOn: [
+          "@thomasfosterau/effect-forms#docgen",
+          "@thomasfosterau/effect-forms-svelte#docgen",
+        ],
         cache: false,
       },
       ci: {

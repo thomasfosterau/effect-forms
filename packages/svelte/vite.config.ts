@@ -34,6 +34,12 @@ export default defineConfig(({ mode }) => ({
         dependsOn: [siblingBuild],
         cache: { input: cacheInputs, output: [] },
       },
+      // The API reference for GitHub Pages; examples are parsed, not compiled.
+      docgen: {
+        command: "docgen",
+        dependsOn: [siblingBuild],
+        cache: { input: [...cacheInputs, "!docs/**"], output: ["docs/**"] },
+      },
     },
   },
 

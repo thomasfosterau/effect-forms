@@ -53,6 +53,7 @@
     "@thomasfosterau/effect-forms": "workspace:^"
   },
   "devDependencies": {
+    "@effect/docgen": "catalog:",
     "@sveltejs/kit": "catalog:",
     "@thomasfosterau/effect-ext": "catalog:",
     "@thomasfosterau/effect-jsonapi": "catalog:"
