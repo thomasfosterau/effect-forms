@@ -29,7 +29,7 @@ catalog:
   # TypeScript 7 (native, bin `tsc`), the type checker of record.
   "@typescript/native": "npm:typescript@7.0.2"
   effect: 4.1.4
-  fallow: 3.43.2
+  fallow: 3.46.0
   happy-dom: ^21.0.4
   svelte: ^5.58.0
   svelte-check: ^4.7.8
