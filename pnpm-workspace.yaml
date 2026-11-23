@@ -25,7 +25,7 @@ catalog:
   "@thomasfosterau/effect-ext": ^0.3.1
   "@types/node": ^26.6.6
   # Must equal vite-plus's `vitest` pin.
-  "@vitest/coverage-istanbul": 5.1.0
+  "@vitest/coverage-istanbul": 5.1.1
   # TypeScript 7 (native, bin `tsc`), the type checker of record.
   "@typescript/native": "npm:typescript@7.0.2"
   effect: 4.1.4
@@ -43,7 +43,7 @@ catalog:
   # equals vite-plus. See docs/CONTRIBUTING.md for the by-hand toolchain update.
   vite-plus: 1.7.0
   vite: npm:@voidzero-dev/vite-plus-core@8.3.8000
-  vitest: 5.1.0
+  vitest: 5.1.1
 
 # Peer ranges the published packages declare.
 # - effect-jsonapi: `>=0.18.0`, the first release exporting `Document.ErrorObject`.
