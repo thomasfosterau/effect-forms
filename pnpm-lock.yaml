@@ -201,8 +201,8 @@ catalogs:
       specifier: ^0.3.1
       version: 0.3.1
     '@thomasfosterau/effect-jsonapi':
-      specifier: ^0.22.1
-      version: 0.22.1
+      specifier: ^0.22.2
+      version: 0.22.2
     '@types/node':
       specifier: ^26.6.6
       version: 26.6.6
@@ -344,7 +344,7 @@ importers:
         version: 0.3.1(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0))(effect@4.1.4)
       '@thomasfosterau/effect-jsonapi':
         specifier: 'catalog:'
-        version: 0.22.1(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0))(effect@4.1.4)
+        version: 0.22.2(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0))(effect@4.1.4)
 
 packages:
 
@@ -1253,9 +1253,9 @@ packages:
       '@thomasfosterau/effect-parse':
         optional: true
 
-  '@thomasfosterau/effect-jsonapi@0.22.1':
-    resolution: {integrity: sha512-9Jaua/w1tYcSsslhim03VHGSRkzDz3qU0SrEd4e2m1KUXc2SL+xzeBBeldRXNRDW1dPYuV6czD3gdKjTSWjocQ==}
-    engines: {node: '>=22', pnpm: '>=11'}
+  '@thomasfosterau/effect-jsonapi@0.22.2':
+    resolution: {integrity: sha512-UiijACmRIHRjZrEx/rkaYsGAPsKVWI3Iy3wvsRcwjQxzVRjLqS9tPtTF2Ep8bUeql/xwEz+88o4KwGEWr3WNAw==}
+    engines: {node: '>=22'}
     peerDependencies:
       effect: 4.1.4
 
@@ -2557,10 +2557,12 @@ packages:
   yuku-core@0.19.0:
     resolution: {integrity: sha512-kYK9e1XdfirNhkipzW0wmMcSWcVF/CWnuugodfVYRCUwvoBefweL9HzB96OiKEhsx78V5WbUxbJqlizMX869Qg==}
     engines: {node: '>=14.18.0'}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   yuku-parser@0.19.0:
     resolution: {integrity: sha512-XrBh9ZiQK5mJVRxZBAvD6LwRyAYrK3MFtH3+onyuxFL5hFD44EC3QOmIC1FjTj6H2MMwq46/NAI+NZxLZPZgxg==}
     engines: {node: '>=14.18.0'}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   zimmerframe@1.1.4:
     resolution: {integrity: sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ==}
@@ -3237,7 +3239,7 @@ snapshots:
     optionalDependencies:
       '@effect/platform-node': 4.1.4(effect@4.1.4)(redis@6.3.0)
 
-  '@thomasfosterau/effect-jsonapi@0.22.1(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0))(effect@4.1.4)':
+  '@thomasfosterau/effect-jsonapi@0.22.2(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0))(effect@4.1.4)':
     dependencies:
       '@thomasfosterau/effect-ext': 0.3.1(@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0))(effect@4.1.4)
       effect: 4.1.4
