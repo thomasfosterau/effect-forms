@@ -19,7 +19,7 @@ catalog:
   "@effect/vitest": 4.1.5
   "@enfect/oxlint": 0.10.0
   "@sveltejs/kit": 3.4.0
-  "@sveltejs/vite-plugin-svelte": ^7.3.1
+  "@sveltejs/vite-plugin-svelte": ^7.3.2
   # Type-only, for `/kit`'s `CommandFailure.ErrorObject`.
   "@thomasfosterau/effect-jsonapi": ^0.22.2
   "@thomasfosterau/effect-ext": ^0.4.0
@@ -31,7 +31,7 @@ catalog:
   effect: 4.1.5
   fallow: 3.48.0
   happy-dom: ^21.0.4
-  svelte: ^5.58.0
+  svelte: ^5.59.1
   svelte-check: ^4.7.8
   # TypeScript 6 under the `typescript` name: svelte-check, the language
   # service, docgen and `vp pack`'s declaration emit need its JS API.
