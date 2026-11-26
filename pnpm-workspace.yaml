@@ -25,7 +25,7 @@ catalog:
   "@thomasfosterau/effect-ext": ^0.4.0
   "@types/node": ^26.6.7
   # Must equal vite-plus's `vitest` pin.
-  "@vitest/coverage-istanbul": 5.1.1
+  "@vitest/coverage-istanbul": 5.1.2
   # TypeScript 7 (native, bin `tsc`), the type checker of record.
   "@typescript/native": "npm:typescript@7.0.2"
   effect: 4.1.5
