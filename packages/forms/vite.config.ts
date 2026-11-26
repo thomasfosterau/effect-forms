@@ -29,7 +29,7 @@ export default defineConfig({
       // Compiles and runs every `@example`, importing the package by name
       // through `dist/`.
       docgen: {
-        command: "docgen",
+        command: 'PATH="$(cd ../../scripts/bin && pwd):$PATH" docgen',
         dependsOn: ["build"],
         cache: { input: cacheInputs, output: ["docs/**"] },
       },
